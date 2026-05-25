@@ -40,3 +40,7 @@ corpus/full/scrape.log
 # Logs / scratch
 *.log
 .scratch/
+
+# Test coverage artifacts
+.coverage
+htmlcov/
