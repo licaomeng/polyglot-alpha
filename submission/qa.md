@@ -1,0 +1,105 @@
+# Anticipated Q&A
+
+Twenty-five questions evaluators are likely to ask, ordered roughly by frequency (Q1–Q20 = core, Q21–Q25 = Phase 1 ship-state additions). Each answer ≤5 sentences. Section anchors reference the project `README.md` and the full thesis at `/Users/messili/codebase/agora-agents-hackathon/README.md`.
+
+---
+
+### Q1. What problem are you actually solving?
+
+Polymarket only operates well in English because translating a Mandarin macro headline into a well-formed, resolvable prediction question is hard, expensive, and doesn't scale with paid human curators. Sixty percent of the world's news is non-English; that's where the unpriced alpha lives. LLM agents can do the translation for pennies, but you need a mechanism that (a) pays them per-fill so they have skin in the game, (b) gates output quality so bad questions don't reach the market, and (c) attributes builder fees back to the specific agent on every downstream trade. PolyglotAlpha is that mechanism. See repo `README.md` §"Architecture" and thesis §5.0.
+
+### Q2. How do you prevent agents from gaming the BLEU score?
+
+BLEU is one of three translation judges, and the panel triangulates: BLEU-weighted MQM (strict), COMET reference-free (permissive, no reference text to game), and an LLM-MQM judge with binary-resolvability check. To pass, the question must clear MQM ≥ 80 *and* the hard style gates D1 (structural), D5 (resolution clarity), and D8 (duplicate). An agent that overfits BLEU still has to clear COMET and a separate LLM judge with a different model, and still has to pass eight style-alignment dimensions on top. The closed evaluator IP (private weights, private corpus, periodic threshold retuning per thesis §5.27) makes brute-force grid search expensive: rejected submissions cost USDC stake. So gaming one judge doesn't win the auction; gaming all eleven simultaneously is the real bar, and that requires building genuine translation capability rather than memorizing one metric.
+
+### Q3. What if 4 agents all bid the same amount?
+
+Tie-break order: highest reputation wins; if still tied, earliest sealed-bid commit timestamp wins; if still tied (vanishingly rare on Arc's sub-second blocks), a deterministic per-event hash chooses. The auction is a sealed-bid lowest-qualified-bid-above-reputation-gate mechanism, so identical bids are economically valid — the reputation gate (≥ 0.70, or ≥ 0.80 if the event has only one corroborating source) does most of the filtering before the tie even happens. In practice the four mock agents have genuinely different bid strategies coded into them, so the demo never sees a tie; in production the tacit-knowledge differentiation per thesis §5.28 (LLM choice, prompt depth, cost-per-question, event-selection skill) means agents converge on the same price only after they've already converged on output quality, which is the desired equilibrium.
+
+### Q4. What's your traction?
+
+Five deployed Arc-testnet contracts at the addresses listed in the repo `README.md` "Deployed contracts" section, all transacted within the 2026-05-11 → 2026-05-25 window. Four translator agents with distinct LLM bindings (DeepSeek, Gemini, Llama 3.3 70B via OpenRouter, Qwen) competing in a working auction end-to-end. Eleven-judge attestation pipeline running through every event the orchestrator processes; UI dashboard with seven routes and live SSE updates. Polymarket corpus indexed (5K+ questions scraped from gamma-api, FAISS index, distilled style guide, few-shot exemplars). This is a solo build in fourteen days on a zero-dollar budget — judge for runtime evidence, not for user count.
+
+### Q5. Why not open the evaluator weights?
+
+Because of the convergence paradox — see thesis §5.27. If the eleven-judge weights, the corpus snapshot, the D1-D8 thresholds, and the few-shot library are all public, every rational bidder reverse-engineers the scoring function and outputs the exact same answer. The auction then collapses into a Bertrand price war and translator margin goes to zero. Only subsidized platforms survive that, and we don't have a subsidy. The fix — selective disclosure — is exactly how Moody's, S&P, FICO, Google, and ETS all run: publish the rubric concept, keep the exact weights and corpus private. Open infrastructure + closed evaluator IP is the only configuration where both trust and margin survive.
+
+### Q6. How does the CCTP V2 bridge work in this design?
+
+Polymarket fills happen on Polygon; per-fill builder fees are paid in USDC there. To stream those fees back to a translator wallet on Arc, the off-chain `OrderFilled` indexer reads Polygon, calls Circle's CCTP V2 to burn USDC on the Polygon side and mint on Arc, and `BuilderFeeRouter.sol` on Arc receives the minted USDC and forwards it to the per-translator wallet bound to that question's builder code. CCTP V2 is the canonical Circle primitive for this — same asset, no wrapped token, no third-party bridge risk. The current submission has `BuilderFeeRouter.sol` deployed on Arc testnet and the indexer scaffolded; live Polygon → Arc CCTP V2 transfer is roadmap (thesis §5.30 explicitly lists "real Polymarket production volume" as out of scope for the hackathon ship).
+
+### Q7. What's the realistic TAM?
+
+Polymarket's 2025 annualized fee volume is in the eight-figure USD range and growing; non-English markets are roughly zero of that today. If PolyglotAlpha captures even 5% of Polymarket's total fee volume through non-English market expansion over a 3-year horizon, that's a low-to-mid seven-figure annual run-rate flowing through `BuilderFeeRouter.sol`, of which 40 bps × taker volume routes to translator wallets. Three-scenario projection is in thesis §5.0.2 (sub-section 5). The honest answer: TAM is dominated by Polymarket's own growth curve, not by how many languages we support — we're a fee-share infrastructure on top of someone else's market, not a market of our own.
+
+### Q8. Why Arc and not Ethereum L1?
+
+Three reasons. First, sub-cent settlement: per-fill builder fees are tiny (40 bps of a Polymarket taker fee on a $50 trade is ~$0.20), and L1 gas would eat the fee outright. Second, USDC-native gas: on Arc, the same asset is the bid, the slash, the judge stake, and the gas — one denomination across the loop, no wrapped-ETH dance. Third, Canteen and Circle's published thesis explicitly positions Arc for this kind of high-frequency low-margin fee-streaming use case, and the hackathon brief asks for Arc-specific work. Arc testnet (chain ID `5042002`) is the deploy target; `https://testnet.arcscan.app` is the explorer.
+
+### Q9. What are the unit economics per translation?
+
+Per-event off-chain cost: roughly $0.02–$0.30 in LLM calls depending on the winning agent's backbone and prompt depth (cheapest agent uses Qwen + tight prompt; most expensive uses GPT-4o with multi-source cross-reference). On-chain cost: sub-cent gas in USDC on Arc for the auction-settle + question-commit + attestation transactions. Revenue per translation: 40 bps of taker fee on every Polymarket fill that originates from that question, streamed for the question's lifetime. Break-even on a single translation is a few hundred dollars of cumulative fill volume — for a Mandarin macro market with real liquidity that's reachable within hours of listing. Detailed flow in thesis §5.15.
+
+### Q10. How is this different from Numerai?
+
+Numerai is a tournament where data scientists submit signal predictions on encrypted financial data, get scored by holdout-set performance, and earn NMR for outperforming. PolyglotAlpha is an auction where translator agents bid USDC for the right to translate a specific news event into a specific Polymarket question, get scored by an eleven-judge panel, and earn streaming builder fees on every downstream fill. Three structural differences: (1) the unit of work is one specific translation, not a portfolio of signal predictions; (2) revenue is fee-streamed per-fill in perpetuity, not paid in a tournament cycle; (3) the moat is closed evaluator IP — the eleven-judge weights — not a holdout set that leaks over time. We took the right lessons (incentivize quality, slash bad actors, use crypto rails) without inheriting Numerai's holdout-leakage problem.
+
+### Q11. Why four agents and not forty?
+
+Four is the demo cohort: DeepSeek, Gemini, Llama 3.3 70B (via OpenRouter), and Qwen — four genuinely different LLM backbones with four different prompt/bid strategies so the dashboard shows real differentiation. The auction contract itself is unbounded; it's a sealed-bid mechanism that scales to N agents with no code change. The product question isn't "can we run forty agents" (we can) but "can we recruit forty independent third-party operators to run them," and that's a 6-12 month bootstrap problem listed explicitly in the honest scope (thesis §5.30). Hackathon scope is proof-of-mechanism with four; production scope is the SDK + cohort recruitment to grow beyond.
+
+### Q12. Why a sealed-bid auction and not an open ascending one?
+
+Sealed-bid lowest-qualified-bid-wins protects the auction from sniping and from reputation-poisoning. An open ascending auction lets a low-reputation agent watch the high-reputation agent's bid, undercut by one wei, and force the high-rep agent to keep dropping until they're below their own break-even. Sealed-bid combined with the ≥ 0.70 reputation gate means low-rep agents can't grief high-rep agents on bid; they have to actually translate well to build the reputation that lets them participate. We considered four alternative mechanisms (time/speed, event-selection, quality-bonded, English-ascending) — analysis in thesis §5.29 — and sealed-bid + reputation gate is the only one that survives Bertrand collapse and grief attacks simultaneously.
+
+### Q13. What happens if a judge collides with a translator?
+
+Each judge has its own wallet and USDC stake (2 USDC for translation judges, 1 USDC for style judges). `JudgePanel.sol` (source in `contracts/src/JudgePanel.sol`, deploy pending) supports a slashing flow: if a judge is proved to systematically agree with one translator agent across many events (statistical test on attestation history vs aggregate panel), their stake gets slashed. Additionally, the judge ensemble randomizes which three of five candidate judges score any given question, weighted by reputation (thesis §5.27 anti-reverse-engineering defenses). So persistent collusion requires both the judge and the translator to consistently win randomized selection together, which is detectable in the attestation transcript.
+
+### Q14. Is this regulated? Securities? Gambling?
+
+PolyglotAlpha itself is translation infrastructure — it doesn't custody user funds, doesn't operate a prediction market, doesn't take retail orders. It submits well-formed candidate questions to Polymarket V2 via the Builder spec; Polymarket handles all the user-facing market mechanics under whatever jurisdictions they already operate in. The builder-fee stream is a B2B revenue share between PolyglotAlpha translator agents and Polymarket's builder program. We point at the regulated venues where the *market itself* lands (thesis §5.0.4) but explicitly leave regulatory clearance for the question-listing layer out of scope (thesis §5.30 item 4). Frame the project as "translation infrastructure," not "I built a prediction market" — see thesis §5.12.
+
+### Q15. What's the Arc OSS reusable primitive?
+
+Three. First, the submit API spec — a stable JSON schema for "this is a Polymarket-shaped question with attribution metadata" that any third-party translator (human or agent) can target. Second, the reputation update rule — `0.7 × MQM/100 + 0.3 × revenue_percentile` with EWMA α=0.85 — implemented in `ReputationRegistry.sol`, forkable for any agent-quality reputation system on Arc. Third, `BuilderFeeRouter.sol` — a generic per-attribution USDC fan-out contract that any Polymarket builder on Arc can fork to split fees among contributors. All three are MIT-licensed in the repo, with `examples/` and a documented README. Field 14 + 15 on the Agora form are both filled (see `submission/README.md` quick-fill section).
+
+### Q16. What's the failure mode if the corpus drifts?
+
+The Polymarket corpus is a snapshot of 5K+ historical public questions scraped from gamma-api at build time. If Polymarket's house style shifts (new categories, new framing conventions, new resolution sources), the corpus ages out and the D2 stylistic-embedding judge and D4 granularity judge slowly mis-score. Mitigations are baked in: quarterly corpus rotation (private, on the closed-IP side per thesis §5.27), periodic D1-D8 threshold retuning, and the few-shot library is hand-curated and replaceable without redeploying contracts. The corpus rebuild scripts (`scripts/scrape_polymarket_corpus.py`, `scripts/build_corpus_index.py`) are in the repo; a fresh rebuild takes ~30 minutes and is a normal operational task, not a redeploy event.
+
+### Q17. How do you handle low-quality source news?
+
+D6 — Source Reliability is one of the eight style judges. It uses an allowlist of vetted sources (Caixin, Xinhua, Reuters-CN, Nikkei-CN, etc. for the Mandarin demo cohort) plus an LLM fallback for unknown publishers. If only one source corroborates an event, the reputation gate rises from 0.70 to 0.80 — meaning only the highest-reputation agents can bid on weakly-sourced events, and a slash on a low-confidence translation costs them more. Multi-source cross-reference in Component 1 (`polyglot_alpha/ingestion/`) deduplicates and triangulates before the auction even opens. Bad sources don't get filtered to zero; they get filtered to "only the most-trusted agents will touch this."
+
+### Q18. What's the cold-start problem for new agents?
+
+New agents start with reputation 0, which is below the ≥ 0.70 gate, so they can't bid on real events. The cold-start path: register on `ReputationRegistry.sol`, run on a *qualifying* track — synthetic events with known-good ground-truth translations, scored by the same eleven-judge panel — until reputation crosses 0.70. The qualifying track is gated and slow (intentionally) so spam agents can't farm reputation in bulk. The Hayek argument in thesis §5.28 is the long-tail answer: real differentiation is tacit knowledge accumulated over hundreds of bids, and the cold-start path is designed to make sure the agents that *finish* it actually have the operational skill, not just the patience.
+
+### Q19. Why is the UI a first-class component (#10) and not just documentation?
+
+Because the UI *is* the verifier surface for the on-chain claims. The point of putting eleven judges and a reputation registry on-chain is so a third party can independently check that the published quality numbers match what the contracts actually emit. Without a UI, that check requires reading block explorer events directly — which 99% of evaluators won't do, and the 1% who do will discover discrepancies after the fact. The seven UI routes (workflow DAG, events list, per-event 7-phase timeline, per-agent profile, leaderboard, history, about) cover the entire verifier path. This is also why the UI defaults to dark mode with `🔒 weights private` callouts when displaying judge results — the UX has to make the closed-IP boundary visible, not hidden.
+
+### Q20. What happens after May 25 if you don't win?
+
+The repo stays public, MIT-licensed, and operational. Three things continue regardless of hackathon outcome. First, the Arc testnet deployment stays live — anyone can poke the contracts. Second, the bidder SDK gets shipped (it's the next track in thesis §5.19) so independent translator operators can wire their own agents in. Third, if Canteen or any other prediction-market scout reaches out (see `submission/contact.md`), the conversation is "let's productionize this against a real testnet market on Polymarket V2" — which is the natural next step the hackathon's honest scope statement points to. Winning is upside, not a prerequisite.
+
+### Q21. Why doesn't the demo show real Polymarket fills?
+
+Honest scope (§5.30): production fill volume on a freshly-submitted market requires external trader interest, which materializes 2+ weeks post-listing — well outside the hackathon recording window. What the demo *does* show is a real builder-code attribution (`0xa93402...beb1`, registered against the `polyglot-alpha` builder name on Polymarket) and a real Gamma API submission payload constructed end-to-end; the call is in `dry_run` mode by default so we don't spam Polymarket curators during dev. The real fills, when they happen, accrue automatically via the Polygon `OrderFilled` listener that's scaffolded in `polyglot_alpha/polymarket/` and routes through `BuilderFeeRouter.sol` on Arc. Field 13's three-minute demo can demonstrate mechanism, not market liquidity, and we don't pretend otherwise.
+
+### Q22. What if Polymarket bans your builder code for spam?
+
+Three-tier safety net documented in §5.43. Tier one — rate limit: max 5 real submissions per day per builder code, enforced in the orchestrator before the Gamma API call. Tier two — idempotency: every submission is keyed by `content_hash(canonical_event + final_question)`, so retries collapse and replayed events never double-submit. Tier three — quality gate: the 11-judge panel hard-blocks submissions scoring below 0.80 aggregate from ever reaching `real` mode (only `dry_run`). On top of that, the demo runs `dry_run` by default and only flips to real submission when a user explicitly toggles "Submit Real" in the UI. Net effect: a curator looking at our submission queue should see ≤5 markets per day, all clearing the same MQM bar, with stable content hashes.
+
+### Q23. How is this different from running Polymarket markets manually?
+
+The Numerai / Renaissance analogy from §5.42: anyone *can* run a quant strategy, but Renaissance Technologies runs $130B AUM not because they have a secret formula but because they have the infrastructure to operate 24/7 across thousands of signals with sub-second decision latency. Same here. A human curator can absolutely translate one Caixin headline into one Polymarket question — but the production cycle is 1–3 days per question, capped by attention. Our pipeline is 60 seconds per event, runs across 8 languages in parallel, scores every output through 11 independent judges, and operates 24/7 with zero human in the loop. The translation is the easy part; the infrastructure that makes the translation *cheap and scalable* is the moat.
+
+### Q24. Why 4 different LLM providers, not one with 4 prompts?
+
+Anti-collusion via provider diversity (§5.46 + §5.21.X). If all four agents used GPT-4 with four different prompts, an OpenAI rate limit, an API outage, or a model retraining ripple would knock out all four agents simultaneously — the entire bidder pool would go dark on the same wall-clock minute. Independent providers (DeepSeek-V3, Gemini-1.5-pro, Llama-3.3-70B via OpenRouter, Qwen-2.5) give us structural failure isolation: any single provider failing leaves three other agents still competing. The same logic applies to *prompt collusion*: four different LLM families have different RLHF dataset overlaps, so their outputs diverge naturally rather than converging on a common stylistic bias. This matters more in production than at hackathon scale, but the architecture is set up correctly from day one.
+
+### Q25. How can you afford 4 LLM providers + Arc gas at production scale?
+
+Cost math from §5.46. Per-event compute cost: free-tier coverage handles ~50 events/day per provider, so the four-agent ensemble can run ~200 events/day at zero marginal cost; beyond that, paid tier runs ~$4.50 per 100 events. Arc gas is sub-cent per transaction in USDC. Break-even on a single submitted market: one fill per market on the 0.4% builder fee — i.e. a single $100 fill recovers $0.40, which covers the all-in cost of running that market through the pipeline plus headroom. Self-hosted inference for Qwen and Llama (the open-weight half of the agent cohort) kicks in once monthly LLM spend exceeds ~$1,800, which is the crossover with a single A100 box at spot pricing. Three concentric layers of cost optimization — free tier, paid burst, self-host — let the same pipeline serve a 10-event/day demo or a 10,000-event/day production run without an architectural rewrite.

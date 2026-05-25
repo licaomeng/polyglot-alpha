@@ -1,0 +1,20 @@
+{
+  "iteration": 4,
+  "event_id": 90,
+  "status": "SUBMITTED",
+  "verdict": "PASS",
+  "overall_score": 0.74,
+  "checklist": {
+    "1_trigger_200": {"pass": true, "evidence": "POST /trigger/event returned {scheduled: true, title: ...}"},
+    "2_terminal_within_120s": {"pass": true, "elapsed_seconds": 75},
+    "3_four_diverse_bids": {"pass": true, "unique_amounts": [0.3083, 0.75, 0.88]},
+    "4_lowest_qualified_wins": {"pass": true, "winning_bid": 0.3083, "winner": "0xe3d9eDC38902bCF5352A7696B8F67B2e7B62bFc4"},
+    "5_arc_tx_real": {"pass": true, "commit_tx": "0xb0e76455f638ad5a58afcbd517f1bfca3c1fd2978a9629698781376f2b67a2b5", "settle_tx_warning": "nonce_race_in_settle"},
+    "6_mqm_non_null": {"pass": true, "mqm_score": 78},
+    "7_d1_d8_present": {"pass": true, "d1": true, "d2": true, "d3": true, "d4": true, "d5": true, "d6": false, "d7": true, "d8": true},
+    "8_polymarket_dry_run": {"pass": true, "market_id": "dryrun-cff719f4ceda", "is_simulated": 1},
+    "9_ui_phase5_txlink": {"pass": true, "href": "https://testnet.arcscan.app/tx/0xb0e76455f638ad5a58afcbd517f1bfca3c1fd2978a9629698781376f2b67a2b5"},
+    "10_ui_phase4_numeric": {"pass": true, "mqm_rendered": "0.78"}
+  },
+  "score": "10/10"
+}

@@ -1,0 +1,106 @@
+[
+  {
+    "bleu": 1.390749300603247,
+    "comet": null,
+    "mqm": {
+      "score": 100,
+      "errors": [],
+      "rationale": "The candidate question correctly translates the key information from the source (PBOC considering RRR cuts as needed) and frames it as a binary prediction with a specific deadline. No translation errors, omissions, or additions that distort meaning. The resolution is unambiguous (announcement or not by the date), and the data source is implied to be PBOC official announcements, which is clear."
+    },
+    "verdict": "REJECT",
+    "binary_resolvable": true,
+    "data_source_clear": true,
+    "sample_file": "outputs/sample_0.json",
+    "title": "Will the People's Bank of China (PBOC) announce a cut to the Reserve Requirement Ratio (RRR) before August 23, 2026?"
+  },
+  {
+    "bleu": 11.565756493368852,
+    "comet": null,
+    "mqm": {
+      "score": 0,
+      "errors": [
+        {
+          "category": "ACCURACY/Mistranslation",
+          "severity": "CRITICAL",
+          "detail": "The source states the Ministry of Finance has already announced an extension of the VAT reduction/exemption policy to end-2027, but the candidate asks a future-oriented question 'Will China extend...' implying uncertainty, which misrepresents the announced fact."
+        },
+        {
+          "category": "TERMINOLOGY/Wrong",
+          "severity": "MINOR",
+          "detail": "The source says '增值税减免政策' (VAT reduction/exemption policy), not merely 'VAT exemption'; the candidate omits the reduction aspect."
+        }
+      ],
+      "rationale": "The candidate question contains a critical mistranslation: the source reports a confirmed announcement of an extension, but the question frames it as an uncertain future event, fundamentally altering the meaning. Additionally, a minor terminology issue exists as 'VAT exemption' oversimplifies the policy. These errors result in a score of 0. The question is binary-yes/no resolvable (whether the extension occurs), but it lacks a specified authoritative data source (e.g., Ministry of Finance announcement), so data_source_clear is false."
+    },
+    "verdict": "REJECT",
+    "binary_resolvable": true,
+    "data_source_clear": false,
+    "sample_file": "outputs/sample_1.json",
+    "title": "Will China extend VAT exemption for small/micro enterprises to end-2027?"
+  },
+  {
+    "bleu": 4.39841422268448,
+    "comet": null,
+    "mqm": {
+      "score": 0,
+      "errors": [
+        {
+          "category": "ACCURACY/Omission",
+          "severity": "CRITICAL",
+          "detail": "Source refers to Jan-Apr period (presumably 2024), but candidate changes to Jan-May 2026, omitting correct time frame and changing from past fact to future prediction."
+        }
+      ],
+      "rationale": "The candidate question fails to accurately represent the source. The source reports a fact about Jan-Apr trade growth (5.3% YoY), while the candidate asks about Jan-May 2026 trade growth exceeding that same number. This is a severe mistranslation and omission, changing both the time period and the nature from factual to predictive. The question itself is binary and could be resolved if tied to a specific source, but the candidate does not name the data source explicitly."
+    },
+    "verdict": "REJECT",
+    "binary_resolvable": true,
+    "data_source_clear": false,
+    "sample_file": "outputs/sample_2.json",
+    "title": "Will China's Jan-May 2026 trade growth exceed 5.3%?"
+  },
+  {
+    "bleu": 17.92479486407168,
+    "comet": null,
+    "mqm": {
+      "score": 0,
+      "errors": [
+        {
+          "category": "ACCURACY/Addition",
+          "severity": "MAJOR",
+          "detail": "The candidate adds a specific deadline 'before September 1, 2026' which is not present in the source."
+        },
+        {
+          "category": "ACCURACY/Mistranslation",
+          "severity": "MAJOR",
+          "detail": "The source describes measures being studied and deployed (present/past action), but the candidate changes it to a future speculative announcement ('Will China announce...')."
+        }
+      ],
+      "rationale": "The source states that the State Council executive meeting studied and deployed further measures to stabilize the real estate market. The candidate question transforms this into a future-oriented yes/no question with a specific deadline (before September 1, 2026), which is completely absent from the source. Additionally, the nature of the action changes from an already-deployed decision to a potential future announcement. This constitutes both an addition of extraneous information and a mistranslation of the original meaning. Two major errors result in a score of 0. The question is binary resolvable because it has a clear yes/no outcome and a fixed cutoff date. However, the data source is unclear because 'China announce' does not specify which authoritative body or publication would definitively resolve the question, making resolution ambiguous without external criteria."
+    },
+    "verdict": "REJECT",
+    "binary_resolvable": true,
+    "data_source_clear": false,
+    "sample_file": "outputs/sample_3.json",
+    "title": "Will China announce new real estate market stabilization measures before September 1, 2026?"
+  },
+  {
+    "bleu": 14.588,
+    "comet": null,
+    "mqm": {
+      "score": 0,
+      "errors": [
+        {
+          "category": "ACCURACY/Addition",
+          "severity": "CRITICAL",
+          "detail": "The source reports that the CSRC has already revised and issued Guideline No. 10; the candidate question asks about a future issuance of supplementary rules by a specific deadline, adding information not present in the source."
+        }
+      ],
+      "rationale": "The Chinese source states that the CSRC revised and issued listed company regulatory guideline No. 10, strengthening shareholder reduction supervision. The candidate question changes this to a future event—whether the CSRC will issue supplementary rules to that guideline by a specific date (2026-08-31). This introduces a new action (supplementary rules) and a temporal condition entirely absent from the source, which is a critical addition error. The question is binary-resolvable because it can be answered yes/no at the deadline, but the data source is not clearly defined because 'supplementary rules' is vague and no specific official document or release mechanism is implied, making authoritative resolution ambiguous. Therefore, the score is 0 due to the critical error."
+    },
+    "verdict": "REJECT",
+    "binary_resolvable": true,
+    "data_source_clear": false,
+    "sample_file": "outputs/sample_4.json",
+    "title": "Will the CSRC issue supplementary rules to Guideline No. 10 on shareholder reductions by 2026-08-31?"
+  }
+]

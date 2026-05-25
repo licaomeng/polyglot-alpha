@@ -1,0 +1,51 @@
+Warning: optimizer settings and `viaIR` have been disabled for accurate coverage reports.
+If you encounter "stack too deep" errors, consider using `--ir-minimum` which enables `viaIR` with minimum optimization resolving most of the errors.
+See more: https://book.getfoundry.sh/guides/best-practices/stack-too-deep
+Compiling 26 files with Solc 0.8.35
+Solc 0.8.35 finished in 850.56ms
+Compiler run successful!
+Analysing contracts...
+Running tests...
+
+Ran 20 tests for test/PolyglotAlphaV2.t.sol:PolyglotAlphaV2Test
+[PASS] test_AuthorizedCanSlashReputation() (gas: 80106)
+[PASS] test_CannotBidAfterDeadline() (gas: 449768)
+[PASS] test_CannotBidUnregistered() (gas: 90622)
+[PASS] test_CannotRegisterTwice() (gas: 118319)
+[PASS] test_EwmaConstantsMatchReadme() (gas: 9179)
+[PASS] test_FullAuctionLifecycle() (gas: 1240079)
+[PASS] test_JudgePanelAttestationAndSlash() (gas: 1717195)
+[PASS] test_JudgePanelRegistration() (gas: 1795248)
+[PASS] test_Leaderboard() (gas: 933353)
+[PASS] test_RecordFillAndClaim() (gas: 539145)
+[PASS] test_RegisterAgent() (gas: 125860)
+[PASS] test_ReputationDefaultIsOne() (gas: 8498)
+[PASS] test_ReputationGateAcceptsAtThreshold() (gas: 603710)
+[PASS] test_ReputationGateRejectsLowRep() (gas: 613780)
+[PASS] test_ReputationUpdatesAfterFee() (gas: 323996)
+[PASS] test_SlashDuringSlashableWindow() (gas: 758653)
+[PASS] test_SlashStake() (gas: 129040)
+[PASS] test_UnauthorizedSlashReverts() (gas: 17111)
+[PASS] test_WinnerCannotWithdrawDuringSlashableWindow() (gas: 755867)
+[PASS] test_WithdrawNoExtraStake() (gas: 120960)
+Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 13.77ms (19.56ms CPU time)
+
+Ran 1 test suite in 22.53ms (13.77ms CPU time): 20 tests passed, 0 failed, 0 skipped (20 total tests)
+
+╭----------------------------+------------------+------------------+-----------------+----------------╮
+| File                       | % Lines          | % Statements     | % Branches      | % Funcs        |
++=====================================================================================================+
+| src/BuilderFeeRouter.sol   | 84.62% (55/65)   | 89.06% (57/64)   | 48.15% (13/27)  | 70.00% (7/10)  |
+|----------------------------+------------------+------------------+-----------------+----------------|
+| src/JudgePanel.sol         | 62.79% (27/43)   | 64.86% (24/37)   | 31.82% (7/22)   | 55.56% (5/9)   |
+|----------------------------+------------------+------------------+-----------------+----------------|
+| src/QuestionRegistry.sol   | 0.00% (0/6)      | 0.00% (0/4)      | 100.00% (0/0)   | 0.00% (0/2)    |
+|----------------------------+------------------+------------------+-----------------+----------------|
+| src/ReputationRegistry.sol | 77.27% (68/88)   | 74.00% (74/100)  | 55.00% (11/20)  | 92.31% (12/13) |
+|----------------------------+------------------+------------------+-----------------+----------------|
+| src/TranslationAuction.sol | 82.08% (87/106)  | 83.65% (87/104)  | 62.00% (31/50)  | 69.23% (9/13)  |
+|----------------------------+------------------+------------------+-----------------+----------------|
+| test/MockUSDC.sol          | 95.83% (23/24)   | 95.00% (19/20)   | 42.86% (3/7)    | 100.00% (4/4)  |
+|----------------------------+------------------+------------------+-----------------+----------------|
+| Total                      | 78.31% (260/332) | 79.33% (261/329) | 51.59% (65/126) | 72.55% (37/51) |
+╰----------------------------+------------------+------------------+-----------------+----------------╯

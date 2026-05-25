@@ -1,0 +1,11 @@
+{
+  "title": "Will the CSRC issue supplementary rules to Guideline No. 10 on shareholder reductions by 2026-08-31?",
+  "description": "On May 25, 2026, the China Securities Regulatory Commission (CSRC) revised and released Guideline No. 10 for listed companies, aimed at strengthening supervision of major shareholder share reductions. This question asks whether the CSRC will subsequently publish additional supplementary rules or detailed implementation guidance for this specific guideline on its official website by the specified cutoff date.",
+  "resolution_source": "http://www.csrc.gov.cn/",
+  "resolution_criteria": "YES if the CSRC officially publishes any document clearly labeled as supplementary, implementation, or interpretive rules specifically for Guideline No. 10 on shareholder reductions on its website (csrc.gov.cn) by 2026-08-31T23:59:59-04:00. NO otherwise. The document must be a distinct new issuance, not merely a repost or translation of the original guideline.",
+  "cutoff_ts": "2026-08-31T23:59:59-04:00",
+  "category": "policy/china",
+  "winning_translator": "market_resolvable",
+  "source_news": "证监会修订发布上市公司监管指引第10号，强化股东减持监管。",
+  "builder_code": "POLYGLOT_ALPHA_BUILDER_V1"
+}

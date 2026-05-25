@@ -1,0 +1,55 @@
+{
+  "sample_id": 4,
+  "source_chinese": "证监会修订发布上市公司监管指引第10号，强化股东减持监管。",
+  "source_url": "http://www.csrc.gov.cn/",
+  "source_outlet": "CSRC (China Securities Regulatory Commission) - Revised Guideline No. 10 for listed companies",
+  "agent_translation": "Will the CSRC issue supplementary rules to Guideline No. 10 on shareholder reductions by 2026-08-31?",
+  "ground_truth_translation": {
+    "primary": "Will the CSRC publish supplementary implementation rules for Listed Company Guideline No. 10 (shareholder reductions) by August 31, 2026?",
+    "alternative_phrasings": [
+      "Will China's CSRC issue supplementary or implementation rules for Listed Company Regulatory Guideline No. 10 by August 31, 2026?",
+      "Will the China Securities Regulatory Commission publish implementation rules for Guideline No. 10 on shareholder reductions by August 31, 2026?",
+      "Will the CSRC release supplementary rules to Guideline No. 10 (shareholder share reduction) by 2026-08-31?"
+    ],
+    "rationale": "The source announces the revised Guideline No. 10 is already issued. The market then asks about a follow-on regulatory event — supplementary or implementation rules — a common pattern in Chinese securities regulation (主指引 + 配套规则). Critical: the question must scope what counts as 'supplementary'. The ground truth keeps 'implementation rules' as the canonical term (per CSRC's own conventions), which is more concrete than agent's 'supplementary rules' (which could be read as any related document). The agent translation 'shareholder reductions' is technically OK but the precise CSRC term is 'shareholder share reduction' (股东减持)."
+  },
+  "polymarket_shape_validation": {
+    "structural_pattern": "P1_will_by_date",
+    "resolution_date": "2026-08-31",
+    "resolution_criteria": "Official publication on csrc.gov.cn of a document clearly labeled as supplementary, implementation, or interpretive rules (配套规则 / 实施细则 / 适用意见) specifically referencing Listed Company Regulatory Guideline No. 10 on shareholder share reductions. Must be a distinct new issuance — not a repost, translation, or republication of the original Guideline. Observed on or before 2026-08-31T23:59:59-04:00.",
+    "single_question": true,
+    "leading_bias": false,
+    "uma_dispute_risk": "medium - boundary between 'supplementary' and 'related guidance' could be disputed; CSRC's own labeling is the canonical disambiguator",
+    "duplicate_risk": "very low - China securities-regulator-specific markets are absent from current Polymarket corpus"
+  },
+  "comparable_polymarket_markets": [
+    {"market": "Trump eliminates capital gains tax on crypto in 2025?", "similarity": "regulator/government action, binary, time-bounded"},
+    {"market": "Fed rate hike in 2026?", "similarity": "regulator action, binary, year-bounded"},
+    {"market": "Will any country leave NATO by June 30, 2026?", "similarity": "Will X by date pattern, official-body action"}
+  ],
+  "k5_framing_variants": [
+    "Will the CSRC publish supplementary implementation rules for Listed Company Guideline No. 10 (shareholder reductions) by August 31, 2026?",
+    "Will China's CSRC issue implementation rules for Guideline No. 10 on shareholder share reductions by August 31, 2026?",
+    "Will the China Securities Regulatory Commission release supplementary rules to Listed Company Regulatory Guideline No. 10 by August 31, 2026?",
+    "Will the CSRC publish supplementary or implementation guidance for Guideline No. 10 (股东减持) by August 31, 2026?",
+    "Will the CSRC issue follow-on regulatory rules for Listed Company Guideline No. 10 on shareholder reductions by 2026-08-31?"
+  ],
+  "mqm_critical_errors": [],
+  "mqm_minor_errors": [
+    "TERMINOLOGY/Imprecision: agent's 'shareholder reductions' should be 'shareholder share reductions' (股东减持) — 'reduction' alone is ambiguous (could be voting power, holdings, or dividend cut). The CSRC term-of-art is share-volume reduction.",
+    "STYLE/Date format: '2026-08-31' is corpus-rare in titles; 'August 31, 2026' is canonical Polymarket. The agent leaves the description with both formats, which is fine."
+  ],
+  "d1_d8_validation": {
+    "d1_structural": {"pass": true, "matched_pattern": "P1_will_by_date", "note": "Matches P1 'Will X by [date]?' regex with ISO date"},
+    "d2_stylistic": {"pass": true, "note": "Length (~18 words) is in corpus median band; technical-regulator markets tend toward longer titles"},
+    "d3_framing": {"pass": true, "note": "Neutral; no leading verbs"},
+    "d4_granularity": {"pass": true, "note": "Single document-publication event — atomic"},
+    "d5_resolution_clarity": {"pass": true, "note": "Description explicitly distinguishes 'distinct new issuance' from 'repost or translation' — solid"},
+    "d6_source_reliability": {"pass": true, "note": "csrc.gov.cn is the canonical primary source for this question"},
+    "d7_leading_check": {"pass": true, "note": "No leading bias"},
+    "d8_duplicate_detection": {"pass": true, "note": "No near-duplicates in current corpus snapshot"}
+  },
+  "expected_bleu_threshold": 40,
+  "expected_comet_threshold": 0.70,
+  "annotator_notes": "Best agent translation of the five. The CSRC regulatory chain is correctly captured; resolution criteria are tight; date is unambiguous. Minor terminology slip ('reductions' vs 'share reductions') and an ISO-date-in-title preference. BLEU vs primary should be high because the agent's title is structurally very close to the ground truth."
+}

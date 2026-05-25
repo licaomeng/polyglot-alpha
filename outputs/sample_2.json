@@ -1,0 +1,11 @@
+{
+  "title": "Will China's Jan-May 2026 trade growth exceed 5.3%?",
+  "description": "The General Administration of Customs reported that China's total import and export value for January-April 2026 grew 5.3% year-on-year, beating market expectations. This question asks whether the year-on-year growth rate for the cumulative January-May 2026 period (the next scheduled release) will be strictly higher than 5.3%.",
+  "resolution_source": "http://www.customs.gov.cn/",
+  "resolution_criteria": "Resolves to YES if the official data from the General Administration of Customs shows that the year-on-year growth rate of China's total imports and exports (in RMB terms) for January-May 2026 is strictly greater than 5.3%. Resolves to NO if it is equal to or less than 5.3%, or if the data is not released by the cutoff date.",
+  "cutoff_ts": "2026-06-30T23:59:59+08:00",
+  "category": "macro/china",
+  "winning_translator": "market_resolvable",
+  "source_news": "中国海关总署：1-4月份进出口总值同比增长5.3%，超出市场预期。",
+  "builder_code": "POLYGLOT_ALPHA_BUILDER_V1"
+}

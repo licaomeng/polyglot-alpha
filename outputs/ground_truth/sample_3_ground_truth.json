@@ -1,0 +1,60 @@
+{
+  "sample_id": 3,
+  "source_chinese": "国务院常务会议研究部署进一步稳定房地产市场的政策措施。",
+  "source_url": "http://www.pbc.gov.cn/",
+  "source_outlet": "State Council executive meeting communique (deliberating real-estate stabilization measures)",
+  "agent_translation": "Will China announce new real estate market stabilization measures before September 1, 2026?",
+  "ground_truth_translation": {
+    "primary": "Will China announce new property-market stabilization measures by August 31, 2026?",
+    "alternative_phrasings": [
+      "Will the Chinese government announce additional real estate stabilization measures by August 31, 2026?",
+      "Will China's State Council or PBOC announce new property-market support measures by August 31, 2026?",
+      "Will China unveil new real-estate stabilization policies before September 1, 2026?"
+    ],
+    "rationale": "Highest-ambiguity sample. Source says 'State Council researched and deployed further measures' — this is intent, not action. The question must hinge on a concrete future announcement that goes beyond the May 2026 deliberation. Two critical disambiguators: (a) what counts as 'new' (must be distinct from May 25 deliberation), (b) what counts as 'stabilization measure' (the agent translation lists examples in description — keep those; D5 requires the examples in the description). Agent title uses 'before September 1' which is functionally equivalent to 'by August 31' but the latter is the Polymarket canonical form."
+  },
+  "polymarket_shape_validation": {
+    "structural_pattern": "P1_will_by_date",
+    "resolution_date": "2026-08-31",
+    "resolution_criteria": "Official announcement by State Council, PBOC, MoHURD, or another authoritative Chinese government body of concrete new measures explicitly targeting real-estate market stabilization (e.g., lowering down-payment ratios, reducing mortgage rates, easing purchase restrictions, restructured housing-fund support). The announcement must be (1) made on or before 2026-08-31T23:59:59-04:00 and (2) distinct from / beyond the May 25, 2026 State Council deliberation.",
+    "single_question": true,
+    "leading_bias": false,
+    "uma_dispute_risk": "high - 'new' vs 'previously announced' is the dispute axis; UMA will need a clear baseline",
+    "duplicate_risk": "low - no real-estate-China policy markets on Polymarket in current snapshot"
+  },
+  "comparable_polymarket_markets": [
+    {"market": "Trump eliminates capital gains tax on crypto in 2025?", "similarity": "policy enactment, binary, year-bounded"},
+    {"market": "Will any country leave NATO by June 30, 2026?", "similarity": "Will X by date pattern, government action"},
+    {"market": "Fed rate hike in 2026?", "similarity": "macroeconomic policy decision, binary"}
+  ],
+  "k5_framing_variants": [
+    "Will China announce new property-market stabilization measures by August 31, 2026?",
+    "Will the State Council or PBOC announce new real-estate support policies by August 31, 2026?",
+    "Will China unveil concrete new property-market stabilization measures before September 1, 2026?",
+    "Will China's government announce additional measures (beyond the May 2026 deliberation) to stabilize the real-estate market by August 31, 2026?",
+    "Will China publish new policies aimed at stabilizing the property market by August 31, 2026?"
+  ],
+  "mqm_critical_errors": [
+    {
+      "category": "ACCURACY/Ambiguity",
+      "severity": "MAJOR",
+      "detail": "Agent title's 'new ... measures' does not specify 'distinct from the May 2026 deliberation that triggered this question.' If on May 26 the State Council issues a follow-up statement re-stating the same intent, it is ambiguous whether the market resolves YES. Description partially addresses this ('beyond previously announced policies') but title leaves it open."
+    }
+  ],
+  "mqm_minor_errors": [
+    "STYLE/Date format: 'before September 1, 2026' is semantically equal to 'by August 31, 2026' but Polymarket convention prefers the latter compact form."
+  ],
+  "d1_d8_validation": {
+    "d1_structural": {"pass": true, "matched_pattern": "P1_will_by_date", "note": "Matches P1 'Will X before [date]?' regex"},
+    "d2_stylistic": {"pass": true, "note": "Length (~15 words) is in corpus median band"},
+    "d3_framing": {"pass": true, "note": "Neutral binary phrasing"},
+    "d4_granularity": {"pass": true, "note": "Single 'announcement' event — atomic; the OR of multiple policy types in the description is acceptable disjunction"},
+    "d5_resolution_clarity": {"pass": false, "note": "FAILS — 'new' is under-specified at the title level; UMA dispute risk is high"},
+    "d6_source_reliability": {"pass": true, "note": "pbc.gov.cn is acceptable but a State Council source (gov.cn) or MoHURD (mohurd.gov.cn) would be more directly applicable"},
+    "d7_leading_check": {"pass": true, "note": "No leading bias"},
+    "d8_duplicate_detection": {"pass": true, "note": "No similar markets in corpus snapshot"}
+  },
+  "expected_bleu_threshold": 35,
+  "expected_comet_threshold": 0.65,
+  "annotator_notes": "Agent translation is fluent but D5-failing due to under-specified 'new'. The ground truth could match agent closely on BLEU because the core phrasing is similar; main divergence is 'before September 1, 2026' vs 'by August 31, 2026' and the resolution source field. Pipeline did NOT catch that 'pbc.gov.cn' is a weak choice of resolution source for a State Council real-estate question — a real-world miss."
+}

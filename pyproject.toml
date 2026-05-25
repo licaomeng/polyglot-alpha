@@ -1,0 +1,29 @@
+[project]
+name = "polyglot-alpha"
+version = "2.0.0"
+description = "Multilingual translation auction market for prediction markets on Arc"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "BUSL-1.1" }
+authors = [
+    { name = "licaomeng", email = "licaomeng@gmail.com" },
+]
+classifiers = [
+    "License :: Other/Proprietary License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/licaomeng/polyglot-alpha"
+Licensing = "https://github.com/licaomeng/polyglot-alpha/blob/main/LICENSING.md"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["polyglot_alpha*"]
+exclude = ["tests*", "corpus*", "outputs*"]

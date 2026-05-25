@@ -1,0 +1,55 @@
+{
+  "sample_id": 2,
+  "source_chinese": "中国海关总署：1-4月份进出口总值同比增长5.3%，超出市场预期。",
+  "source_url": "http://www.customs.gov.cn/",
+  "source_outlet": "General Administration of Customs (GACC) - January-April 2026 trade data release",
+  "agent_translation": "Will China's Jan-May 2026 trade growth exceed 5.3%?",
+  "ground_truth_translation": {
+    "primary": "Will China's January-May 2026 total trade growth (year-on-year, RMB) exceed 5.3% in the General Administration of Customs release?",
+    "alternative_phrasings": [
+      "Will China's cumulative Jan-May 2026 import-export growth exceed 5.3% year-on-year per GACC?",
+      "Will China's total imports and exports for January-May 2026 grow by more than 5.3% year-on-year?",
+      "Will GACC report China's Jan-May 2026 trade growth above 5.3% YoY?"
+    ],
+    "rationale": "Source provides only the anchor data point (Jan-Apr 2026 = 5.3% YoY in RMB). The market question is a forward-looking comparison: does the next cumulative window (Jan-May) exceed the anchor. Critical disambiguators: (1) currency (RMB, not USD — Chinese customs reports both, and USD growth is typically different); (2) YoY (not MoM); (3) cumulative (not single-month). Agent title is concise but omits the RMB qualifier — could create UMA dispute risk if USD figure differs from RMB figure across the threshold."
+  },
+  "polymarket_shape_validation": {
+    "structural_pattern": "P3_threshold",
+    "resolution_date": "2026-06-30",
+    "resolution_criteria": "GACC official release on customs.gov.cn of the January-May 2026 import-export cumulative total reporting year-on-year growth in RMB terms strictly > 5.3%. Resolves NO if growth <= 5.3%, or if data not released by 2026-06-30T23:59:59+08:00.",
+    "single_question": true,
+    "leading_bias": false,
+    "uma_dispute_risk": "medium - RMB vs USD ambiguity; need title-level currency clause",
+    "duplicate_risk": "low - China cumulative trade-growth thresholded markets are uncommon on Polymarket"
+  },
+  "comparable_polymarket_markets": [
+    {"market": "Will Canada's 2026 inflation be between 1.5% and 1.9%?", "similarity": "macro release on scheduled cadence, numeric threshold"},
+    {"market": "Will Canada's 2026 inflation be less than 1.0%?", "similarity": "single-tail threshold on macro release"},
+    {"market": "Fed rate hike in 2026?", "similarity": "binary on scheduled-cadence policy/macro outcome"}
+  ],
+  "k5_framing_variants": [
+    "Will China's January-May 2026 total trade growth (year-on-year, RMB) exceed 5.3% in the General Administration of Customs release?",
+    "Will China's Jan-May 2026 import-export growth exceed 5.3% YoY?",
+    "Will GACC report China's Jan-May 2026 trade growth above 5.3% year-on-year (RMB)?",
+    "Will China's cumulative Jan-May 2026 trade (imports + exports, RMB) grow more than 5.3% YoY?",
+    "Will China's January-May 2026 total trade volume increase by more than 5.3% year-on-year compared to Jan-May 2025?"
+  ],
+  "mqm_critical_errors": [],
+  "mqm_minor_errors": [
+    "ACCURACY/Omission: agent title omits currency (RMB vs USD) and YoY qualifier. Description includes them, but Polymarket convention prefers title-level disambiguation for numeric threshold markets.",
+    "STYLE/Ambiguity: 'trade growth' could be read as MoM or YoY; canonical form spells out 'year-on-year'."
+  ],
+  "d1_d8_validation": {
+    "d1_structural": {"pass": true, "matched_pattern": "P3_threshold", "note": "'exceed 5.3%' matches asset_above_threshold pattern variant — this is a numeric-threshold question (P3)"},
+    "d2_stylistic": {"pass": true, "note": "Length (~9 words) is concise; matches corpus median for inflation-style markets"},
+    "d3_framing": {"pass": true, "note": "Neutral; 'exceed' is the canonical threshold verb"},
+    "d4_granularity": {"pass": true, "note": "Single release, single number — atomic"},
+    "d5_resolution_clarity": {"pass": false, "note": "FAILS — currency ambiguity (RMB vs USD); 'trade growth' verb under-specified (YoY vs MoM)"},
+    "d6_source_reliability": {"pass": true, "note": "customs.gov.cn is the authoritative GACC source"},
+    "d7_leading_check": {"pass": true, "note": "No leading bias"},
+    "d8_duplicate_detection": {"pass": true, "note": "No near-duplicates in corpus"}
+  },
+  "expected_bleu_threshold": 20,
+  "expected_comet_threshold": 0.55,
+  "annotator_notes": "Good agent translation overall; the P3 threshold pattern is correctly identified. Main miss: currency/units. UMA disputes on macro releases commonly hinge on whether USD or local-currency figures count — title-level disambiguation prevents this. Reference is intentionally a bit longer to capture the qualifiers."
+}

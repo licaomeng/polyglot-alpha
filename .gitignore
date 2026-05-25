@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+
+# Environment
+.env
+.env.local
+
+# Polyglot corpus artifacts — re-buildable, not version-controlled.
+corpus/polymarket_questions.parquet
+corpus/polymarket_index.faiss
+corpus/index_meta.json
+corpus/style_guide.md
+corpus/few_shots.json
+corpus/patterns_report.md
+corpus/*.parquet
+corpus/*.faiss
+corpus/*.csv
+corpus/*.jsonl
+
+# Full Polymarket corpus (T6) — big files re-buildable from full_scraper.py.
+# Keep stats JSONs, the 1000-row sample CSV, and full_summary.md in version control.
+corpus/full/*.parquet
+corpus/full/*.jsonl
+corpus/full/polymarket_all_markets.csv
+corpus/full/scrape.log
+
+# Local dev DB
+*.db
+*.db-journal
+
+# Logs / scratch
+*.log
+.scratch/

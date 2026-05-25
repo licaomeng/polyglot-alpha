@@ -1,0 +1,11 @@
+{
+  "title": "Will China announce new real estate market stabilization measures before September 1, 2026?",
+  "description": "On May 25, 2026, the State Council executive meeting discussed deploying further policy measures to stabilize the real estate market. This question asks whether the Chinese government will announce specific new policies (e.g., lowering down payment ratios, reducing mortgage rates, or relaxing purchase restrictions) aimed at stabilizing the property market before the cutoff date.",
+  "resolution_source": "http://www.pbc.gov.cn/",
+  "resolution_criteria": "Resolves to YES if the People's Bank of China, the State Council, or another authoritative Chinese government body announces concrete new measures (beyond previously announced policies) explicitly aimed at stabilizing the real estate market, such as reducing down payment requirements, cutting mortgage rates, or easing home purchase restrictions. The announcement must be made on or before 2026-08-31T23:59:59-04:00. Resolves to NO if no such announcement is made by the cutoff.",
+  "cutoff_ts": "2026-08-31T23:59:59-04:00",
+  "category": "policy/china",
+  "winning_translator": "market_resolvable",
+  "source_news": "国务院常务会议研究部署进一步稳定房地产市场的政策措施。",
+  "builder_code": "POLYGLOT_ALPHA_BUILDER_V1"
+}

@@ -1,0 +1,57 @@
+{
+  "n_markets": 100,
+  "n_PASS": 69,
+  "n_FAIL": 30,
+  "n_BORDERLINE": 1,
+  "n_ERROR": 0,
+  "outcome_accuracy": 0.23,
+  "semantic_similarity_avg": 0.9997325754165649,
+  "estimated_total_roi_usdc": 6277.602065949999,
+  "per_category": {
+    "Other": {
+      "n": 27,
+      "roi": 173.5327613184,
+      "accuracy": 0.25925925925925924,
+      "pass_rate": 0.7037037037037037
+    },
+    "Sports": {
+      "n": 37,
+      "roi": 291.9901649679997,
+      "accuracy": 0.10810810810810811,
+      "pass_rate": 0.6216216216216216
+    },
+    "Geopolitics": {
+      "n": 5,
+      "roi": 1159.2972941,
+      "accuracy": 0.4,
+      "pass_rate": 0.8
+    },
+    "Crypto": {
+      "n": 20,
+      "roi": 4125.749052907999,
+      "accuracy": 0.25,
+      "pass_rate": 0.85
+    },
+    "Politics": {
+      "n": 6,
+      "roi": 65.79060738480001,
+      "accuracy": 0.3333333333333333,
+      "pass_rate": 0.3333333333333333
+    },
+    "Economics": {
+      "n": 3,
+      "roi": 420.24929696399954,
+      "accuracy": 0.3333333333333333,
+      "pass_rate": 0.6666666666666666
+    },
+    "Pop-Culture": {
+      "n": 2,
+      "roi": 40.992888306800005,
+      "accuracy": 1.0,
+      "pass_rate": 1.0
+    }
+  },
+  "uma_dispute_total": 2,
+  "uma_dispute_caught_by_D5": 0,
+  "uma_dispute_missed_by_D5": 2
+}

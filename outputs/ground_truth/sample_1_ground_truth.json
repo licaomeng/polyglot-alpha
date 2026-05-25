@@ -1,0 +1,61 @@
+{
+  "sample_id": 1,
+  "source_chinese": "财政部宣布将延长针对小微企业的增值税减免政策至2027年12月底。",
+  "source_url": "http://www.mof.gov.cn/",
+  "source_outlet": "China Ministry of Finance (MoF) announcement",
+  "agent_translation": "Will China extend VAT exemption for small/micro enterprises to end-2027?",
+  "ground_truth_translation": {
+    "primary": "Will China's Ministry of Finance officially extend the VAT exemption for small and micro enterprises to December 31, 2027 by August 31, 2026?",
+    "alternative_phrasings": [
+      "Will China extend the VAT exemption for small and micro enterprises through December 31, 2027 by August 31, 2026?",
+      "Will the Ministry of Finance publish an official notice extending the small-and-micro-enterprise VAT exemption to end-2027 by August 31, 2026?",
+      "Will China's MoF formally extend the VAT exemption for small/micro enterprises to 2027-12-31 by August 31, 2026?"
+    ],
+    "rationale": "The source already implies the action is announced ('财政部宣布') — but a Polymarket-quality question must hinge on a future-resolvable event. The canonical reading is: the source describes intent; the market resolves YES when the formal MoF notice exists on mof.gov.cn extending VAT exemption to >= 2027-12-31, observed before the cutoff. Two dates must appear: (1) target extension date (2027-12-31) and (2) cutoff for the announcement (2026-08-31). Agent's title leaves the cutoff ambiguous, conflating it with 'end-2027' which is the policy target, not the market resolution date."
+  },
+  "polymarket_shape_validation": {
+    "structural_pattern": "P1_will_by_date",
+    "resolution_date": "2026-08-31",
+    "resolution_criteria": "Official MoF publication on mof.gov.cn explicitly stating VAT exemption/reduction for small and micro enterprises (小微企业) is extended to at least 2027-12-31, observed on or before 2026-08-31T23:59:59+08:00.",
+    "single_question": true,
+    "leading_bias": false,
+    "uma_dispute_risk": "medium - resolution requires checking whether the announcement counts as 'extension'; partial or conditional extensions could be litigated",
+    "duplicate_risk": "low - VAT-extension questions are rare on Polymarket"
+  },
+  "comparable_polymarket_markets": [
+    {"market": "Trump eliminates capital gains tax on crypto in 2025?", "similarity": "fiscal/tax policy, binary, year-bounded"},
+    {"market": "Trump eliminates capital gains tax on crypto before 2027?", "similarity": "tax policy P1 with 'before YEAR' resolution"},
+    {"market": "Billionaire one-time wealth tax passes in California election 2026?", "similarity": "tax-policy enactment, binary, single jurisdiction"}
+  ],
+  "k5_framing_variants": [
+    "Will China's Ministry of Finance officially extend the VAT exemption for small and micro enterprises to December 31, 2027 by August 31, 2026?",
+    "Will China extend the small-and-micro VAT exemption through end-2027 by August 31, 2026?",
+    "Will the MoF publish an official notice extending the small/micro VAT exemption to 2027-12-31 by August 31, 2026?",
+    "Will China's small/micro enterprise VAT exemption be formally extended into 2027 by August 31, 2026?",
+    "Will China extend the VAT exemption for small and micro enterprises beyond 2026 (to >= 2027-12-31) by August 31, 2026?"
+  ],
+  "mqm_critical_errors": [
+    {
+      "category": "ACCURACY/Ambiguity",
+      "severity": "MAJOR",
+      "detail": "Agent title 'extend ... to end-2027' is ambiguous between (a) the target extension date and (b) the market resolution cutoff. A trader reading only the title cannot tell when the market resolves. Description disambiguates, but D5 (resolution clarity) ideally requires title-level disambiguation."
+    }
+  ],
+  "mqm_minor_errors": [
+    "STYLE/Register: 'end-2027' is corpus-rare; canonical Polymarket form is 'December 31, 2027' or '2027-12-31'. The agent's compact form is informal.",
+    "STYLE/Acronym: 'VAT' is acceptable globally but the resolution source (mof.gov.cn) is a Chinese government source where the local term is 增值税. Not a translation error, but worth noting for D6."
+  ],
+  "d1_d8_validation": {
+    "d1_structural": {"pass": true, "matched_pattern": "P1_will_by_date", "note": "'Will X to end-2027?' matches the will_x_no_date branch; 'end-2027' is interpreted as a date token"},
+    "d2_stylistic": {"pass": true, "note": "Length (~10 words) is on the shorter side but within corpus range for policy questions"},
+    "d3_framing": {"pass": true, "note": "Neutral binary phrasing"},
+    "d4_granularity": {"pass": true, "note": "Single event (one MoF announcement) — atomic"},
+    "d5_resolution_clarity": {"pass": false, "note": "FAILS — title conflates target extension date with market cutoff. Description is needed to disambiguate. Ground truth fixes this with explicit dual dates."},
+    "d6_source_reliability": {"pass": true, "note": "mof.gov.cn is top-tier official; allowlist"},
+    "d7_leading_check": {"pass": true, "note": "No leading bias"},
+    "d8_duplicate_detection": {"pass": true, "note": "No similar China VAT-extension markets in corpus snapshot"}
+  },
+  "expected_bleu_threshold": 15,
+  "expected_comet_threshold": 0.55,
+  "annotator_notes": "Hardest sample of the five. The Chinese source already says 'announced' (宣布), but a Polymarket question must resolve on a future event — so the ground truth reframes this as 'will the official MoF notice exist on mof.gov.cn by cutoff'. Agent translation is concise but D5-failing. BLEU vs primary will be moderate because the ground truth has a much longer title."
+}

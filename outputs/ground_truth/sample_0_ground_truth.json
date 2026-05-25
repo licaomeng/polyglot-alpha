@@ -1,0 +1,54 @@
+{
+  "sample_id": 0,
+  "source_chinese": "央行行长潘功胜在金融街论坛年会上表示，将根据需要适时降准，加大对实体经济的支持力度。",
+  "source_url": "http://www.pbc.gov.cn/",
+  "source_outlet": "PBOC (People's Bank of China) - Governor Pan Gongsheng remarks at Financial Street Forum Annual Conference",
+  "agent_translation": "Will the People's Bank of China (PBOC) announce a cut to the Reserve Requirement Ratio (RRR) before August 23, 2026?",
+  "ground_truth_translation": {
+    "primary": "Will the People's Bank of China cut the Reserve Requirement Ratio by August 23, 2026?",
+    "alternative_phrasings": [
+      "Will the PBOC cut the Reserve Requirement Ratio by August 23, 2026?",
+      "Will the People's Bank of China announce a Reserve Requirement Ratio cut before August 23, 2026?",
+      "Will the PBOC announce a cut to the Reserve Requirement Ratio (RRR) by August 23, 2026?"
+    ],
+    "rationale": "Canonical Polymarket P1 form ('Will X by [date]?'). The source contains three concrete signals: actor (PBOC), action (RRR cut, 降准), conditional timing (适时='as appropriate', no explicit deadline). The deadline of 2026-08-23 is supplied by the auction window cutoff, not the source — this is an acceptable Polymarket convention because the resolution date must be concrete. We keep 'Reserve Requirement Ratio' fully spelled out (per Polymarket convention on regulatory acronyms in macro questions). Avoids editorializing ('to support the economy') that the agent dropped — that part is rationale, not the resolved event."
+  },
+  "polymarket_shape_validation": {
+    "structural_pattern": "P1_will_by_date",
+    "resolution_date": "2026-08-23",
+    "resolution_criteria": "PBOC official announcement on pbc.gov.cn (or via Xinhua / major state media) of any RRR reduction (any magnitude, any tier) on or before 2026-08-23T23:59:59+08:00.",
+    "single_question": true,
+    "leading_bias": false,
+    "uma_dispute_risk": "low",
+    "duplicate_risk": "medium - Polymarket has many 'Fed rate cut by X' and 'Will [central bank] cut by date?' macro markets; PBOC RRR specifically is less common but the pattern is well-trodden."
+  },
+  "comparable_polymarket_markets": [
+    {"market": "Fed rate hike in 2026?", "similarity": "central bank policy action, binary, year-bounded"},
+    {"market": "Will Canada's 2026 inflation be between 1.5% and 1.9%?", "similarity": "macro release on a fixed schedule, binary thresholded"},
+    {"market": "Will any country leave NATO by June 30, 2026?", "similarity": "Will X by date pattern, geopolitical event"}
+  ],
+  "k5_framing_variants": [
+    "Will the People's Bank of China cut the Reserve Requirement Ratio by August 23, 2026?",
+    "Will the PBOC announce a Reserve Requirement Ratio cut before August 23, 2026?",
+    "Will China's central bank reduce the RRR for commercial banks by August 23, 2026?",
+    "Will the PBOC lower the Reserve Requirement Ratio from its current level by August 23, 2026?",
+    "Will the People's Bank of China announce at least one Reserve Requirement Ratio reduction by August 23, 2026?"
+  ],
+  "mqm_critical_errors": [],
+  "mqm_minor_errors": [
+    "STYLE/Verbosity: agent inserts both 'People's Bank of China (PBOC)' and 'Reserve Requirement Ratio (RRR)' in the title, doubling acronym disclosure. Polymarket convention is to disclose acronym once (in title or description, not both)."
+  ],
+  "d1_d8_validation": {
+    "d1_structural": {"pass": true, "matched_pattern": "P1_will_by_date", "note": "agent uses 'before' + date — matches the canonical P1 regex"},
+    "d2_stylistic": {"pass": true, "note": "Length (~21 words) is in the corpus median band; phrasing matches Polymarket macro register"},
+    "d3_framing": {"pass": true, "note": "No leading verbs ('expect to', 'likely'); neutral binary phrasing"},
+    "d4_granularity": {"pass": true, "note": "Single atomic event (one RRR announcement); not a compound question"},
+    "d5_resolution_clarity": {"pass": true, "note": "Resolution source pbc.gov.cn explicit; magnitude clause in description ('not relevant') resolves edge cases"},
+    "d6_source_reliability": {"pass": true, "note": "pbc.gov.cn is the canonical primary source, top allowlist tier"},
+    "d7_leading_check": {"pass": true, "note": "No probability-laden words; equal entropy YES/NO available"},
+    "d8_duplicate_detection": {"pass": true, "note": "No exact-match RRR markets in current corpus snapshot; closest neighbor is 'Fed rate hike in 2026?' (different actor)"}
+  },
+  "expected_bleu_threshold": 30,
+  "expected_comet_threshold": 0.65,
+  "annotator_notes": "Solid agent translation. The agent retains the bilingual acronym pattern (full form + acronym in title) which is technically over-disclosure but very common in corpus. BLEU should score reasonably high vs primary reference because the ngrams 'Reserve Requirement Ratio', 'People's Bank of China', and 'before August 23, 2026' all overlap. Watch: agent uses 'before' while the canonical Polymarket P1 form prefers 'by' — minor but worth noting."
+}

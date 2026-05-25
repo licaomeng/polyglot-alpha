@@ -1,0 +1,14 @@
+{
+  "backend_ok": false,
+  "event_id": null,
+  "passed": 0,
+  "total": 1,
+  "checks": [
+    {
+      "name": "backend_health",
+      "ok": false,
+      "detail": "unreachable: "
+    }
+  ],
+  "trigger_response": null
+}

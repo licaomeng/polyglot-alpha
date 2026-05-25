@@ -1,0 +1,10 @@
+{
+  "title": "Will the People's Bank of China (PBOC) announce a cut to the Reserve Requirement Ratio (RRR) before August 23, 2026?",
+  "description": "People's Bank of China (PBOC) Governor Pan Gongsheng recently stated that the central bank would \"appropriately cut the reserve requirement ratio as needed\" to increase support for the real economy. This signals a clear commitment to monetary easing, aiming to inject liquidity, reduce funding costs, and stimulate economic growth. This market will resolve based on whether the PBOC officially announces at least one reduction to the RRR within the specified timeframe, reflecting its proactive stance to bolster market confidence.",
+  "resolution_source": "http://www.pbc.gov.cn/",
+  "resolution_criteria": "This market will resolve YES if the People's Bank of China (PBOC) officially announces a reduction to the Reserve Requirement Ratio (RRR) on its official website (pbc.gov.cn) or via major state media outlets (e.g., Xinhua News Agency) before August 23, 2026. The magnitude of the cut is not relevant, only the announcement of at least one reduction. Otherwise, it will resolve NO.",
+  "cutoff_ts": "2026-08-23T23:59:59+08:00",
+  "category": "policy/china",
+  "winning_translator": "market_resolvable",
+  "source_news": "央行行长潘功胜在金融街论坛年会上表示，将根据需要适时降准，加大对实体经济的支持力度。"
+}

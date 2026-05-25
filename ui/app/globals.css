@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 14% 96%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --primary: 196 100% 50%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 220 14% 90%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 220 14% 90%;
+    --muted-foreground: 222 13% 40%;
+    --accent: 320 100% 60%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 14% 85%;
+    --input: 220 14% 85%;
+    --ring: 196 100% 50%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 222 47% 5%;
+    --foreground: 210 40% 96%;
+    --card: 222 47% 7%;
+    --card-foreground: 210 40% 96%;
+    --primary: 184 100% 55%;
+    --primary-foreground: 222 47% 5%;
+    --secondary: 222 47% 11%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 222 47% 11%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 320 100% 65%;
+    --accent-foreground: 222 47% 5%;
+    --destructive: 0 73% 50%;
+    --destructive-foreground: 210 40% 96%;
+    --border: 222 47% 14%;
+    --input: 222 47% 14%;
+    --ring: 184 100% 55%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+  }
+}
+
+@layer utilities {
+  .grid-bg {
+    background-image:
+      linear-gradient(rgba(0, 240, 255, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 240, 255, 0.06) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  .glow-cyan {
+    box-shadow:
+      0 0 0 1px rgba(0, 240, 255, 0.25),
+      0 0 24px -8px rgba(0, 240, 255, 0.45);
+  }
+
+  .glow-magenta {
+    box-shadow:
+      0 0 0 1px rgba(255, 0, 212, 0.25),
+      0 0 24px -8px rgba(255, 0, 212, 0.45);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}

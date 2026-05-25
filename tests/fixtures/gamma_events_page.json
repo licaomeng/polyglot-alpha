@@ -1,0 +1,146 @@
+[
+  {
+    "id": "9001",
+    "title": "Will BTC hit $200k in 2026?",
+    "category": "Crypto",
+    "tags": [
+      {"label": "Crypto"},
+      {"label": "Bitcoin"}
+    ],
+    "endDate": "2026-12-31T23:59:59Z",
+    "markets": [
+      {
+        "id": "m-9001-1",
+        "conditionId": "0xabc1",
+        "question": "Will Bitcoin be above $200,000 by December 31, 2026?",
+        "description": "Resolves YES if the daily closing price of BTC/USD on Coinbase exceeds $200,000 at any point before December 31, 2026, 23:59 UTC.",
+        "endDate": "2026-12-31T23:59:59Z",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "volume": "1234567.89",
+        "closed": false
+      },
+      {
+        "id": "m-9001-2",
+        "conditionId": "0xabc2",
+        "question": "Will Bitcoin be above $300,000 by December 31, 2026?",
+        "description": "Resolves YES if the daily closing price of BTC/USD on Coinbase exceeds $300,000 before the deadline.",
+        "endDate": "2026-12-31T23:59:59Z",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "volume": "456789.01",
+        "closed": false
+      }
+    ]
+  },
+  {
+    "id": "9002",
+    "title": "US 2028 Presidential race",
+    "category": "Politics",
+    "tags": [
+      {"label": "Politics"},
+      {"label": "Elections"},
+      {"label": "All"}
+    ],
+    "endDate": "2028-11-05T23:59:59Z",
+    "markets": [
+      {
+        "id": "m-9002-1",
+        "conditionId": "0xdef1",
+        "question": "Who will be the next US President?",
+        "description": "Resolves to the inaugurated 47th President of the United States as confirmed by the Associated Press.",
+        "endDate": "2028-11-05T23:59:59Z",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "volume": "9876543.21",
+        "closed": false
+      }
+    ]
+  },
+  {
+    "id": "9003",
+    "title": "FIFA World Cup 2026",
+    "category": "Sports",
+    "tags": [
+      {"label": "Sports"},
+      {"label": "Soccer"}
+    ],
+    "endDate": "2026-07-19T23:59:59Z",
+    "markets": [
+      {
+        "id": "m-9003-1",
+        "conditionId": "0xfed1",
+        "question": "Will Argentina win the 2026 FIFA World Cup?",
+        "description": "Resolves YES if Argentina is officially declared champion by FIFA at the end of the 2026 World Cup final.",
+        "endDate": "2026-07-19T23:59:59Z",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "volume": "555000",
+        "closed": false
+      },
+      {
+        "id": "m-9003-2",
+        "conditionId": "0xfed2",
+        "question": "Will Brazil win the 2026 FIFA World Cup?",
+        "description": "Resolves YES if Brazil is officially declared champion by FIFA.",
+        "endDate": "2026-07-19T23:59:59Z",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "volume": "200000",
+        "closed": false
+      }
+    ]
+  },
+  {
+    "id": "9004",
+    "title": "Multi-outcome filter check",
+    "category": "Misc",
+    "tags": [{"label": "Misc"}],
+    "endDate": "2026-12-31T23:59:59Z",
+    "markets": [
+      {
+        "id": "m-9004-1",
+        "conditionId": "0xnono1",
+        "question": "Which team will win MVP this season?",
+        "description": "Multi-outcome — should be filtered out by the scraper.",
+        "endDate": "2026-12-31T23:59:59Z",
+        "outcomes": "[\"Team A\", \"Team B\", \"Team C\", \"Team D\"]",
+        "volume": "1000",
+        "closed": false
+      }
+    ]
+  },
+  {
+    "id": "9005",
+    "title": "How many SpaceX launches by EOY?",
+    "category": "Tech",
+    "tags": [{"label": "Tech"}, {"label": "Space"}],
+    "endDate": "2026-12-31T23:59:59Z",
+    "markets": [
+      {
+        "id": "m-9005-1",
+        "conditionId": "0xspx1",
+        "question": "How many SpaceX Falcon 9 launches by December 31, 2026?",
+        "description": "Resolves based on the count tracked by SpaceX's official launches page on December 31, 2026.",
+        "endDate": "2026-12-31T23:59:59Z",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "volume": "75000",
+        "closed": false
+      }
+    ]
+  },
+  {
+    "id": "9006",
+    "title": "Window-bounded event",
+    "category": "Macro",
+    "tags": [{"label": "Macro"}, {"label": "Economy"}],
+    "endDate": "2026-09-30T23:59:59Z",
+    "markets": [
+      {
+        "id": "m-9006-1",
+        "conditionId": "0xmac1",
+        "question": "Will the Fed cut rates between July 1 and September 30 2026?",
+        "description": "Resolves YES if the FOMC announces a federal funds rate cut on any meeting date within the stated window.",
+        "endDate": "2026-09-30T23:59:59Z",
+        "outcomes": "[\"Yes\", \"No\"]",
+        "volume": "330000",
+        "closed": false
+      }
+    ]
+  }
+]

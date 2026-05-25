@@ -1,0 +1,106 @@
+{
+  "total_markets": 5000,
+  "yes_rate_overall": 0.2204,
+  "no_rate_overall": 0.7426,
+  "disputed_rate_overall": 0.0036,
+  "uma_dispute_rate_overall": 0.0206,
+  "by_category": {
+    "Crypto": {
+      "yes": 269,
+      "no": 518,
+      "disputed": 0,
+      "other": 9,
+      "total": 796,
+      "uma_dispute_rate": 0.04648241206030151
+    },
+    "Economics": {
+      "yes": 93,
+      "no": 79,
+      "disputed": 0,
+      "other": 0,
+      "total": 172,
+      "uma_dispute_rate": 0.01744186046511628
+    },
+    "Geopolitics": {
+      "yes": 67,
+      "no": 211,
+      "disputed": 0,
+      "other": 1,
+      "total": 279,
+      "uma_dispute_rate": 0.02867383512544803
+    },
+    "Other": {
+      "yes": 288,
+      "no": 979,
+      "disputed": 0,
+      "other": 27,
+      "total": 1294,
+      "uma_dispute_rate": 0.0347758887171561
+    },
+    "Politics": {
+      "yes": 81,
+      "no": 210,
+      "disputed": 0,
+      "other": 1,
+      "total": 292,
+      "uma_dispute_rate": 0.02054794520547945
+    },
+    "Pop-Culture": {
+      "yes": 31,
+      "no": 14,
+      "disputed": 0,
+      "other": 0,
+      "total": 45,
+      "uma_dispute_rate": 0.0
+    },
+    "Sports": {
+      "yes": 223,
+      "no": 1683,
+      "disputed": 18,
+      "other": 129,
+      "total": 2053,
+      "uma_dispute_rate": 0.0004870920603994155
+    },
+    "Tech": {
+      "yes": 50,
+      "no": 19,
+      "disputed": 0,
+      "other": 0,
+      "total": 69,
+      "uma_dispute_rate": 0.043478260869565216
+    }
+  },
+  "by_volume_tier": {
+    "high": {
+      "yes": 270,
+      "no": 589,
+      "disputed": 0,
+      "other": 26,
+      "total": 885,
+      "uma_dispute_rate": 0.0327683615819209,
+      "volume_usdc_sum": 1878061663.1432517
+    },
+    "low": {
+      "yes": 282,
+      "no": 1560,
+      "disputed": 16,
+      "other": 109,
+      "total": 1967,
+      "uma_dispute_rate": 0.03558718861209965,
+      "volume_usdc_sum": 368975.717579
+    },
+    "mid": {
+      "yes": 550,
+      "no": 1564,
+      "disputed": 2,
+      "other": 32,
+      "total": 2148,
+      "uma_dispute_rate": 0.00186219739292365,
+      "volume_usdc_sum": 45133166.952567995
+    }
+  },
+  "volume_tier_boundaries_usdc": {
+    "low_max": 1000.0,
+    "mid_max": 100000.0
+  }
+}

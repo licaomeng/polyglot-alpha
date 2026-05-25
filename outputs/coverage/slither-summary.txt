@@ -1,0 +1,30 @@
+'forge clean' running (wd: /Users/messili/codebase/polyglot-alpha/contracts)
+'forge config --json' running
+'forge build --build-info src' running (wd: /Users/messili/codebase/polyglot-alpha/contracts)
+INFO:Printers:
+Compiled with Foundry
+Total number of contracts in source files: 10
+Source lines of code (SLOC) in source files: 656
+Number of  assembly lines: 0
+Number of optimization issues: 1
+Number of informational issues: 11
+Number of low issues: 22
+Number of medium issues: 9
+Number of high issues: 0
+
+
++---------------------+-------------+------+------------+--------------+--------------------+
+| Name                | # functions | ERCS | ERC20 info | Complex code | Features           |
++---------------------+-------------+------+------------+--------------+--------------------+
+| IERC20              | 3           |      |            | No           |                    |
+| IReputationRegistry | 1           |      |            | No           |                    |
+| BuilderFeeRouter    | 10          |      |            | No           | Tokens interaction |
+| IERC20              | 3           |      |            | No           |                    |
+| JudgePanel          | 9           |      |            | No           | Tokens interaction |
+| QuestionRegistry    | 2           |      |            | No           |                    |
+| ReputationRegistry  | 12          |      |            | No           |                    |
+| IERC20              | 3           |      |            | No           |                    |
+| IReputationRegistry | 2           |      |            | No           |                    |
+| TranslationAuction  | 13          |      |            | Yes          | Tokens interaction |
++---------------------+-------------+------+------------+--------------+--------------------+
+INFO:Slither:src/ analyzed (10 contracts)

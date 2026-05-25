@@ -1,0 +1,45 @@
+{
+  "n_markets": 20,
+  "n_PASS": 17,
+  "n_FAIL": 3,
+  "n_BORDERLINE": 0,
+  "n_ERROR": 0,
+  "outcome_accuracy": 0.1,
+  "semantic_similarity_avg": 1.0,
+  "estimated_total_roi_usdc": 1003.9794295436002,
+  "per_category": {
+    "Other": {
+      "n": 6,
+      "roi": 38.99642686440001,
+      "accuracy": 0.0,
+      "pass_rate": 1.0
+    },
+    "Sports": {
+      "n": 5,
+      "roi": 0.9289999999999999,
+      "accuracy": 0.2,
+      "pass_rate": 0.6
+    },
+    "Geopolitics": {
+      "n": 1,
+      "roi": 12.9866025104,
+      "accuracy": 0.0,
+      "pass_rate": 1.0
+    },
+    "Crypto": {
+      "n": 6,
+      "roi": 933.0527767016002,
+      "accuracy": 0.16666666666666666,
+      "pass_rate": 1.0
+    },
+    "Politics": {
+      "n": 2,
+      "roi": 18.0146234672,
+      "accuracy": 0.0,
+      "pass_rate": 0.5
+    }
+  },
+  "uma_dispute_total": 0,
+  "uma_dispute_caught_by_D5": 0,
+  "uma_dispute_missed_by_D5": 0
+}

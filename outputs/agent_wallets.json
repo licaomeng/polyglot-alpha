@@ -1,0 +1,18 @@
+{
+  "gemini": {
+    "address": "0x396B8578a34517eb0A6968A1798703eD5c6D51f4",
+    "env_var": "GEMINI_WALLET_PRIVATE_KEY"
+  },
+  "deepseek": {
+    "address": "0x144ddfDb9129FA11F1041bF2349F6193f818Eb4A",
+    "env_var": "DEEPSEEK_WALLET_PRIVATE_KEY"
+  },
+  "qwen": {
+    "address": "0x5554a1Ce6C0085ca54A8b9f2E50b1D1548CDE7F6",
+    "env_var": "QWEN_WALLET_PRIVATE_KEY"
+  },
+  "llama": {
+    "address": "0xC95DF8d7E21B3E8a3266e4E48D8cf7B2731F56F0",
+    "env_var": "LLAMA_WALLET_PRIVATE_KEY"
+  }
+}
