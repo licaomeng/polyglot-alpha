@@ -249,7 +249,15 @@ def _mock_panel_verdict(question: PanelQuestion) -> PanelVerdict:
     judge_dossier: list[dict[str, Any]] = []
     for name in _MOCK_JUDGE_NAMES:
         score = round(0.85 + rng.random() * 0.10, 4)  # 0.85-0.95
-        reason = "Mock mode: judge skipped"
+        # Per W5-A3 spec: every judge dossier entry must carry the full
+        # short-circuit phrase so any UI that surfaces per-judge reasons
+        # (e.g. PhaseDetailsAccordion → JudgeDetails dossier list) renders
+        # the explicit "panel.evaluate short-circuited" wording. The
+        # judge name is interpolated so each row is also self-describing.
+        reason = (
+            "Mock mode: panel.evaluate short-circuited with synthetic PASS "
+            f"(judge={name})."
+        )
         jr = JudgeResult(
             name=name,
             passed=True,

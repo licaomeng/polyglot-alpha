@@ -1,42 +1,24 @@
 {
   "verdict": "has-issues",
   "urlPrecedence": "PASS",
-  "toggleClick": "FAIL",
-  "storagePersist": "FAIL",
+  "toggleClick": "PASS",
+  "storagePersist": "PASS",
   "liveResult": "TIMEOUT(status=null)",
   "stickyFailures": [
     "leaderboard"
   ],
-  "keyboardNav": "PASS",
-  "consoleErrors": 0,
-  "consoleWarnings": 3,
-  "networkBad": 0,
-  "liveEventId": null,
+  "keyboardNav": "FAIL",
+  "consoleErrors": 7,
+  "consoleWarnings": 0,
+  "networkBad": 7,
+  "liveEventId": "193",
   "findings": [
-    {
-      "level": "HIGH",
-      "title": "Toggle click did not update visuals OR mutated URL",
-      "where": "http://localhost:3001/?mode=live then click MOCK (step 3)",
-      "expected": "before=LIVE, after=MOCK, header amber, storage=mock, URL stays ?mode=live",
-      "actual": "before=LIVE, after=LIVE, data-mode=live, flask=0, storage=mock, url=http://localhost:3001/?mode=live",
-      "screenshot": "/Users/messili/codebase/polyglot-alpha/ui/screenshots/w6-p2/step3-toggle-click-mock.png",
-      "hypothesis": "Toggle handler is writing URL OR URL effect overrides storage write"
-    },
-    {
-      "level": "HIGH",
-      "title": "localStorage persistence not restored on refresh",
-      "where": "http://localhost:3001/ refresh (step 4)",
-      "expected": "before storage=mock, after refresh: toggle=MOCK, data-mode=mock, storage=mock",
-      "actual": "storageBefore=null, checked=LIVE, data-mode=live, storage=null",
-      "screenshot": "/Users/messili/codebase/polyglot-alpha/ui/screenshots/w6-p2/step4-before-refresh.png | /Users/messili/codebase/polyglot-alpha/ui/screenshots/w6-p2/step4-after-refresh.png",
-      "hypothesis": "readInitialMode not reading localStorage OR hydration mismatch"
-    },
     {
       "level": "MEDIUM",
       "title": "Live trigger did not finalize within 5min cap",
       "where": "http://localhost:3001/ trigger live (step 5)",
       "expected": "lifecycle finalizes SUBMITTED or FAILED inside 5min",
-      "actual": "eventId=null, terminal status=null, result=TIMEOUT(status=null)",
+      "actual": "eventId=193, terminal status=null, result=TIMEOUT(status=null)",
       "screenshot": "/Users/messili/codebase/polyglot-alpha/ui/screenshots/w6-p2/step5-live-trigger-result.png",
       "hypothesis": "Backend lifecycle stalled — seeder gas, RPC, or judge panel timeout"
     },
@@ -45,11 +27,85 @@
       "title": "Sticky header not pinned on leaderboard",
       "where": "http://localhost:3001/leaderboard (step 7)",
       "expected": "header bounding box y≈0 while scrollY > 50",
-      "actual": "header.y=0, scrollY=0",
+      "actual": "header.y=-153, scrollY=800, headerBeforeY=0",
       "screenshot": "/Users/messili/codebase/polyglot-alpha/ui/screenshots/w6-p2/step7-sticky-leaderboard.png",
       "hypothesis": "ancestor overflow rule clipping sticky positioning"
+    },
+    {
+      "level": "MEDIUM",
+      "title": "Keyboard navigation on toggle did not behave per W3C radiogroup pattern",
+      "where": "http://localhost:3001/ toggle (step 8)",
+      "expected": "ArrowRight: LIVE→MOCK, ArrowLeft: MOCK→LIVE, Space: activate; aria-checked updates",
+      "actual": "after ArrowRight=LIVE, after ArrowLeft=MOCK, after Space=LIVE, mock aria-checked=false, live aria-checked=true",
+      "screenshot": "/Users/messili/codebase/polyglot-alpha/ui/screenshots/w6-p2/step8-keyboard-nav.png",
+      "hypothesis": "handleKey not switching focus + selection, or aria-checked stale"
     }
   ],
-  "networkBadList": [],
-  "consoleErrorList": []
+  "networkBadList": [
+    {
+      "status": 404,
+      "url": "http://localhost:3001/",
+      "page": "http://localhost:3001/"
+    },
+    {
+      "status": 404,
+      "url": "http://localhost:3001/?mode=mock",
+      "page": "http://localhost:3001/"
+    },
+    {
+      "status": 404,
+      "url": "http://localhost:3001/?mode=mock",
+      "page": "http://localhost:3001/?mode=mock"
+    },
+    {
+      "status": 404,
+      "url": "http://localhost:3001/?mode=mock",
+      "page": "http://localhost:3001/?mode=mock"
+    },
+    {
+      "status": 404,
+      "url": "http://localhost:3001/?mode=mock",
+      "page": "http://localhost:3001/?mode=mock"
+    },
+    {
+      "status": 404,
+      "url": "http://localhost:3001/?mode=mock",
+      "page": "http://localhost:3001/?mode=mock"
+    },
+    {
+      "status": 404,
+      "url": "http://localhost:3001/?mode=mock",
+      "page": "http://localhost:3001/?mode=mock"
+    }
+  ],
+  "consoleErrorList": [
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://localhost:3001/"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://localhost:3001/?mode=mock"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://localhost:3001/?mode=mock"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://localhost:3001/?mode=mock"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://localhost:3001/?mode=mock"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://localhost:3001/?mode=mock"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://localhost:3001/?mode=mock"
+    }
+  ]
 }

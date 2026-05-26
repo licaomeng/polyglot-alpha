@@ -3,8 +3,8 @@
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Link2, Package, ShieldCheck, ExternalLink } from "lucide-react";
-import { arcTxUrl, type EventDetail } from "@/lib/api";
-import { classifyIpfsRef } from "@/lib/utils";
+import { type EventDetail } from "@/lib/api";
+import { classifyIpfsRef, isSimTxHash, arcscanTxUrl } from "@/lib/utils";
 
 /**
  * Trust badges shown near the headline. Three signals at most:
@@ -23,7 +23,13 @@ export function TrustIndicators({ event }: { event: EventDetail }) {
   const loose = event as Loose;
 
   const anchorTx = event.anchor?.txHash;
-  const anchorUrl = event.anchor?.explorerUrl ?? (anchorTx ? arcTxUrl(anchorTx) : undefined);
+  // Synthetic `0xsim_…` anchor txs (mock mode) must NOT render the explorer
+  // link form of the badge — that wraps the synthetic hash in a 404-bound URL.
+  // Fall back to the muted, non-clickable badge below in that case.
+  const anchorIsSim = isSimTxHash(anchorTx);
+  const anchorUrl = anchorIsSim
+    ? undefined
+    : (event.anchor?.explorerUrl ?? (anchorTx ? arcscanTxUrl(anchorTx) ?? undefined : undefined));
   const rawIpfsCid = event.anchor?.ipfsCid;
   // Classify the ipfsCid: real v0/v1 CIDs route through ipfs.io; synthetic
   // pipeline-trace paths (e.g. `ipfs://pipeline/qwen/...`) render as a muted
@@ -47,7 +53,34 @@ export function TrustIndicators({ event }: { event: EventDetail }) {
       aria-label="Trust indicators"
       data-testid="trust-indicators"
     >
-      {anchorTx && (
+      {anchorTx && (anchorIsSim || !anchorUrl ? (
+        <Tooltip
+          widthClassName="max-w-xs"
+          content={
+            <div className="space-y-1">
+              <p className="font-mono text-[11px] font-semibold text-foreground">
+                Synthetic anchor
+              </p>
+              <p className="text-foreground/85">
+                Mock-mode tx — not committed to Arc testnet. Shown for
+                traceability; no explorer link because the hash is synthetic.
+              </p>
+              <p className="font-mono text-[10px] text-muted-foreground break-all">
+                {anchorTx}
+              </p>
+            </div>
+          }
+        >
+          <Badge
+            variant="secondary"
+            className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+            aria-label="Synthetic anchor tx (mock mode)"
+          >
+            <Link2 className="h-3 w-3" aria-hidden />
+            synthetic anchor
+          </Badge>
+        </Tooltip>
+      ) : (
         <Tooltip
           widthClassName="max-w-xs"
           content={
@@ -82,7 +115,7 @@ export function TrustIndicators({ event }: { event: EventDetail }) {
             </Badge>
           </a>
         </Tooltip>
-      )}
+      ))}
 
       {ipfsRef?.isReal && ipfsRef.gatewayUrl ? (
         <Tooltip

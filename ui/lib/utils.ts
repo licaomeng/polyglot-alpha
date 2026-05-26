@@ -89,6 +89,70 @@ export function classifyIpfsRef(raw?: string | null): {
   };
 }
 
+/**
+ * Detect a synthetic ("sim-prefix") Arc tx hash emitted by the backend in
+ * mock mode (W5-A2). Real Arc testnet tx hashes are `0x` + 64 hex chars;
+ * synthetic mock hashes always begin with the literal prefix `0xsim_`.
+ *
+ * The UI uses this gate at every external-explorer link site so a synthetic
+ * hash is rendered as muted, non-clickable text rather than wrapped in an
+ * `https://testnet.arcscan.app/tx/0xsim_…` link that would 404.
+ */
+export function isSimTxHash(h: string | null | undefined): boolean {
+  return typeof h === "string" && h.toLowerCase().startsWith("0xsim_");
+}
+
+/**
+ * Detect a synthetic Polymarket market_id emitted by the backend in mock /
+ * dry-run mode. The backend uses two prefixes: `sim-` for fully simulated
+ * markets and `dryrun-` for dry-run submissions. Either prefix means the
+ * market does not exist on polymarket.com and the UI MUST NOT wrap it in an
+ * external link.
+ */
+export function isSimPolymarketId(id: string | null | undefined): boolean {
+  if (typeof id !== "string") return false;
+  const lower = id.toLowerCase();
+  return lower.startsWith("sim-") || lower.startsWith("dryrun-");
+}
+
+/**
+ * Build a Polymarket market URL when, and only when, the supplied id is a
+ * real (non-sim) market_id. Returns `null` for sim / dry-run ids so callers
+ * can fall back to a muted, non-clickable text label.
+ */
+export function polymarketMarketUrl(id: string | null | undefined): string | null {
+  if (!id || isSimPolymarketId(id)) return null;
+  return `https://polymarket.com/market/${id}`;
+}
+
+/**
+ * Validate a `market_url` field returned by the backend. The backend may
+ * synthesise a `polymarket.com/market/sim-...` URL in mock mode; we don't
+ * trust it blindly. Returns the URL only when it's a real polymarket URL
+ * (i.e. the market_id segment does NOT start with `sim-` / `dryrun-`); for
+ * any sim-prefixed URL, returns `null` so the UI renders muted text.
+ */
+export function safePolymarketUrl(url: string | null | undefined): string | null {
+  if (typeof url !== "string" || !url) return null;
+  const match = url.match(/\/market\/([^/?#]+)/);
+  if (match && isSimPolymarketId(match[1])) return null;
+  return url;
+}
+
+/**
+ * Build an Arc testnet explorer URL for a tx hash when, and only when, the
+ * hash is a *real* on-chain hash. Synthetic `0xsim_…` hashes return `null`
+ * so callers can render a muted span instead of a broken external link.
+ *
+ * The base URL is the canonical Arc testnet explorer used by `arcTxUrl()`
+ * in `ui/lib/api.ts`; we don't import from there to avoid a cycle and to
+ * keep this helper self-contained for unit testing.
+ */
+export function arcscanTxUrl(h: string | null | undefined): string | null {
+  if (!h || isSimTxHash(h)) return null;
+  return `https://testnet.arcscan.app/tx/${h}`;
+}
+
 export function relativeTime(iso?: string | null): string {
   if (!iso) return "—";
   const then = new Date(iso).getTime();

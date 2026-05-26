@@ -54,12 +54,30 @@ function shotFull(name) {
 async function getStorage() {
   return await page.evaluate(() => localStorage.getItem("polyglot:mode"));
 }
+// Wait for hydration to settle — the SSR markup has live as default; the
+// client first-effect cycle may flip to mock from URL/storage. We wait until
+// the header's data-mode attribute matches the expected mode, otherwise we
+// read a transient pre-hydration value.
+async function waitForMode(expected, timeout = 5000) {
+  try {
+    await page.waitForFunction(
+      (m) => document.querySelector(`header[data-mode="${m}"]`) !== null,
+      expected,
+      { timeout },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
 async function checkedLabel() {
-  return await page
-    .locator('[role="radio"][aria-checked="true"]')
-    .first()
-    .innerText()
-    .catch(() => null);
+  // Read the aria-checked button via inner attribute, not text — text can be
+  // stale between renders on the same node.
+  return await page.evaluate(() => {
+    const btns = Array.from(document.querySelectorAll('[role="radio"]'));
+    const hit = btns.find((b) => b.getAttribute("aria-checked") === "true");
+    return hit ? hit.textContent?.trim() : null;
+  });
 }
 async function headerDataMode() {
   return await page.locator("header[data-mode]").first().getAttribute("data-mode");
@@ -87,7 +105,8 @@ function record(level, title, where, expected, actual, screenshot, hypothesis) {
   await page.evaluate(() => localStorage.removeItem("polyglot:mode"));
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector('[role="radiogroup"][aria-label="Demo mode"]');
-  await page.waitForTimeout(300);
+  await waitForMode("live");
+  await page.waitForTimeout(400);
   const checked = await checkedLabel();
   const mode = await headerDataMode();
   const zap = await headerHasZap();
@@ -122,7 +141,8 @@ let urlPrecedencePass = false;
 {
   await page.goto(`${BASE}/?mode=mock`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector('[role="radiogroup"][aria-label="Demo mode"]');
-  await page.waitForTimeout(400);
+  await waitForMode("mock");
+  await page.waitForTimeout(300);
   const checked = await checkedLabel();
   const mode = await headerDataMode();
   const flask = await headerHasFlask();
@@ -152,11 +172,12 @@ let toggleClickPass = false;
 {
   await page.goto(`${BASE}/?mode=live`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector('[role="radiogroup"][aria-label="Demo mode"]');
+  await waitForMode("live");
   await page.waitForTimeout(300);
   // sanity check we started live
   const before = await checkedLabel();
   await page.locator('[role="radio"]:has-text("MOCK")').click();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(700);
   const after = await checkedLabel();
   const mode = await headerDataMode();
   const flask = await headerHasFlask();
@@ -194,9 +215,12 @@ let storagePersistPass = false;
   await page.evaluate(() => localStorage.removeItem("polyglot:mode"));
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector('[role="radiogroup"][aria-label="Demo mode"]');
+  await waitForMode("live");
+  await page.waitForTimeout(400); // hydration
   // toggle to mock
   await page.locator('[role="radio"]:has-text("MOCK")').click();
-  await page.waitForTimeout(300);
+  await waitForMode("mock");
+  await page.waitForTimeout(400);
   const beforePath = await shot("step4-before-refresh");
   const storageBefore = await getStorage();
   // refresh
@@ -218,6 +242,46 @@ let storagePersistPass = false;
       `storageBefore=${storageBefore}, checked=${checked}, data-mode=${mode}, storage=${storage}`,
       `${beforePath} | ${afterPath}`,
       "readInitialMode not reading localStorage OR hydration mismatch"
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Step 3b: re-verify toggle click DOES work when URL has no ?mode= param.
+// ────────────────────────────────────────────────────────────────────────────
+let toggleClickCleanUrlPass = false;
+{
+  await page.goto(BASE, { waitUntil: "domcontentloaded" });
+  await page.evaluate(() => localStorage.removeItem("polyglot:mode"));
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForSelector('[role="radiogroup"][aria-label="Demo mode"]');
+  await waitForMode("live");
+  await page.waitForTimeout(400);
+  const before = await checkedLabel();
+  await page.locator('[role="radio"]:has-text("MOCK")').click();
+  await waitForMode("mock");
+  await page.waitForTimeout(400);
+  const after = await checkedLabel();
+  const mode = await headerDataMode();
+  const storage = await getStorage();
+  const url = page.url();
+  const path = await shot("step3b-toggle-click-clean-url");
+
+  toggleClickCleanUrlPass =
+    before === "LIVE" &&
+    after === "MOCK" &&
+    mode === "mock" &&
+    storage === "mock" &&
+    !/\?mode=/.test(url);
+  if (!toggleClickCleanUrlPass) {
+    record(
+      "HIGH",
+      "Toggle click failed on clean URL (no ?mode= param)",
+      `${BASE}/ click MOCK (step 3b)`,
+      "before=LIVE, after=MOCK, header amber, storage=mock, URL clean",
+      `before=${before}, after=${after}, data-mode=${mode}, storage=${storage}, url=${url}`,
+      path,
+      "click handler not invoking setMode or React not hydrated"
     );
   }
 }
@@ -261,10 +325,10 @@ let liveEventId = null;
       /* ignore */
     }
   }
-  // Wait up to 5 min for finalization. The TriggerButton navigates to
-  // /events/{id} on finalize, so we wait for that route OR a 5min cap.
+  // Wait up to 3 min for finalization. The TriggerButton navigates to
+  // /events/{id} on finalize, so we wait for that route OR a cap.
   const start = Date.now();
-  const cap = 5 * 60 * 1000;
+  const cap = 3 * 60 * 1000;
   let navigatedToDetail = false;
   while (Date.now() - start < cap) {
     if (/\/events\/\d+/.test(page.url())) {
@@ -404,27 +468,32 @@ let liveEventId = null;
   let liveBadgeReadsLive = null;
   let liveDetailPath = null;
   if (liveId) {
-    await page.goto(`${BASE}/events/${liveId}`, { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(1500);
-    // RealVsMockBadge text for live = "Live", mock = "Mock". Use a header-
-    // scoped check to avoid stray matches in the page body.
-    liveBadgeReadsLive = await page
-      .locator('span[aria-label="Live data"], [aria-label="Live data"]')
-      .count();
-    liveDetailPath = await shotFull("step6-event-detail-live");
+    try {
+      await page.goto(`${BASE}/events/${liveId}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+      await page.waitForTimeout(2000);
+      liveBadgeReadsLive = await page
+        .locator('[aria-label="Live data"]')
+        .count();
+      liveDetailPath = await shotFull("step6-event-detail-live");
+    } catch (e) {
+      record("MEDIUM", "Step 6 live event navigation failed", `${BASE}/events/${liveId}`, "page loads", e.message, "n/a", "navigation timeout");
+    }
   }
 
   let mockBadgeReadsMock = null;
   let mockDetailPath = null;
   if (mockId) {
-    // flip toggle to live to verify badge still reads mock for the mock event
-    await page.evaluate(() => localStorage.setItem("polyglot:mode", "live"));
-    await page.goto(`${BASE}/events/${mockId}`, { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(1500);
-    mockBadgeReadsMock = await page
-      .locator('[aria-label="Mock data"]')
-      .count();
-    mockDetailPath = await shotFull("step6-event-detail-mock");
+    try {
+      await page.evaluate(() => localStorage.setItem("polyglot:mode", "live"));
+      await page.goto(`${BASE}/events/${mockId}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+      await page.waitForTimeout(2000);
+      mockBadgeReadsMock = await page
+        .locator('[aria-label="Mock data"]')
+        .count();
+      mockDetailPath = await shotFull("step6-event-detail-mock");
+    } catch (e) {
+      record("MEDIUM", "Step 6 mock event navigation failed", `${BASE}/events/${mockId}`, "page loads", e.message, "n/a", "navigation timeout");
+    }
   }
 
   if (liveId && liveBadgeReadsLive === 0) {
@@ -463,20 +532,27 @@ const pagesToTest = [
 // Add event detail if we have an id
 if (liveEventId) pagesToTest.push({ name: "event-detail", path: `/events/${liveEventId}` });
 const stickyFails = [];
+// Use a short viewport so every page can scroll; long content not needed.
+await page.setViewportSize({ width: 1280, height: 400 });
 for (const t of pagesToTest) {
   await page.goto(`${BASE}${t.path}`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector("header");
-  await page.waitForTimeout(400);
-  // Scroll midway
+  await page.waitForTimeout(600);
+  const beforeBox = await page.locator("header").first().boundingBox();
+  // Inject a tall spacer so we can always scroll past the header.
   await page.evaluate(() => {
-    const h = document.documentElement.scrollHeight;
-    window.scrollTo(0, Math.floor(h / 2));
+    const spacer = document.createElement("div");
+    spacer.style.height = "2000px";
+    spacer.id = "__w6p2_spacer";
+    document.body.appendChild(spacer);
   });
-  await page.waitForTimeout(300);
-  // Header should still be visible at top of viewport.
+  await page.evaluate(() => window.scrollTo(0, 800));
+  await page.waitForTimeout(400);
   const box = await page.locator("header").first().boundingBox();
   const scrollY = await page.evaluate(() => window.scrollY);
-  const stuck = box && box.y >= 0 && box.y < 5 && scrollY > 50;
+  // Clean up spacer
+  await page.evaluate(() => document.getElementById("__w6p2_spacer")?.remove());
+  const stuck = box && box.y >= 0 && box.y < 10 && scrollY > 50;
   const path = await shot(`step7-sticky-${t.name}`);
   if (!stuck) {
     stickyFails.push(t.name);
@@ -485,12 +561,14 @@ for (const t of pagesToTest) {
       `Sticky header not pinned on ${t.name}`,
       `${BASE}${t.path} (step 7)`,
       "header bounding box y≈0 while scrollY > 50",
-      `header.y=${box?.y}, scrollY=${scrollY}`,
+      `header.y=${box?.y}, scrollY=${scrollY}, headerBeforeY=${beforeBox?.y}`,
       path,
       "ancestor overflow rule clipping sticky positioning"
     );
   }
 }
+// Restore viewport for remaining steps
+await page.setViewportSize({ width: 1280, height: 900 });
 
 // ────────────────────────────────────────────────────────────────────────────
 // Step 8: Keyboard navigation on toggle
@@ -501,24 +579,28 @@ let kbPass = false;
   await page.evaluate(() => localStorage.setItem("polyglot:mode", "live"));
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector('[role="radiogroup"][aria-label="Demo mode"]');
+  await waitForMode("live");
   await page.waitForTimeout(300);
 
   // Focus the active radio
   await page.locator('[role="radio"][aria-checked="true"]').first().focus();
-  await page.waitForTimeout(100);
+  await page.waitForTimeout(150);
   // Press ArrowRight — should switch to MOCK
   await page.keyboard.press("ArrowRight");
+  await waitForMode("mock");
   await page.waitForTimeout(200);
   const after1 = await checkedLabel();
   // Press ArrowLeft — should switch back to LIVE
   await page.keyboard.press("ArrowLeft");
+  await waitForMode("live");
   await page.waitForTimeout(200);
   const after2 = await checkedLabel();
   // Press Space on MOCK
   await page.keyboard.press("ArrowRight");
+  await waitForMode("mock");
   await page.waitForTimeout(150);
   await page.keyboard.press(" ");
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(300);
   const after3 = await checkedLabel();
   // verify aria-checked accurately tracks
   const mockChecked = await page

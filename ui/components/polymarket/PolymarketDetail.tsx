@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { BuilderCodeBadge } from "./BuilderCodeBadge";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn, safePolymarketUrl } from "@/lib/utils";
 import { submitPolymarketReal, type EventDetail } from "@/lib/api";
 
 type PM = NonNullable<EventDetail["polymarket"]>;
@@ -98,17 +98,31 @@ export function PolymarketDetail({ polymarket, eventId }: Props) {
         )}
       </div>
 
-      {polymarket.marketUrl ? (
-        <a
-          href={polymarket.marketUrl}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="inline-flex items-center gap-1 rounded font-mono text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {polymarket.marketUrl}
-          <ExternalLink className="h-3 w-3" aria-hidden />
-        </a>
-      ) : (
+      {polymarket.marketUrl ? (() => {
+        // Strip sim-prefixed market URLs the backend may emit in mock /
+        // dry-run mode (`polymarket.com/market/sim-…`). The market doesn't
+        // exist on prod, so we render the URL as muted text instead of a
+        // clickable link.
+        const safeUrl = safePolymarketUrl(polymarket.marketUrl);
+        return safeUrl ? (
+          <a
+            href={safeUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1 rounded font-mono text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {safeUrl}
+            <ExternalLink className="h-3 w-3" aria-hidden />
+          </a>
+        ) : (
+          <span
+            className="font-mono text-muted-foreground"
+            title="Synthetic market — not on polymarket.com"
+          >
+            {polymarket.marketUrl}
+          </span>
+        );
+      })() : (
         polymarket.marketId && (
           <span className="font-mono text-muted-foreground">market_id · {polymarket.marketId}</span>
         )

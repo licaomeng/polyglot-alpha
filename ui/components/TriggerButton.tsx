@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Play, Check, Loader2 } from "lucide-react";
 import { triggerEvent, type SseEventType } from "@/lib/api";
 import { useEventStream } from "@/hooks/useEventStream";
+import { useEvent } from "@/hooks/useEvent";
 import { useDemoMode } from "@/contexts/ModeContext";
 
 // Lifecycle phase → human-readable progress label. Keys are the named SSE
@@ -44,8 +45,23 @@ export function TriggerButton() {
   // filter) that drops the early ``event.created`` event, which is why the
   // progressive labels appeared frozen on "Triggered" in Wave 1.
   const { latest } = useEventStream(eventId);
+  // W7-A race fix: SSE subscription opens AFTER `setEventId`, so a fast
+  // (~1.8s) mock-mode lifecycle can finalize before the EventSource is even
+  // listening — the `event.finalized` payload for our own id is then lost
+  // and we fall back to the 120s timer. To plug that gap we also poll
+  // `/events/{id}` once an id exists; whichever source (SSE or poll) first
+  // reports a terminal status wins the autonav race.
+  const { data: polledEvent } = useEvent(eventId ?? "");
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const navigateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Backend statuses that mean "lifecycle is done — safe to navigate". We
+  // include FAILED so the user still lands on the event detail page (which
+  // renders the failure banner) instead of staring at the spinner.
+  const TERMINAL_STATUSES = useMemo(
+    () => new Set(["SUBMITTED", "REJECTED", "FAILED"]),
+    [],
+  );
 
   useEffect(() => {
     if (!busy) return;
@@ -60,9 +76,24 @@ export function TriggerButton() {
   // Navigate + clear busy when the lifecycle finalizes (or fallback timer
   // fires). This keeps the button mounted long enough for the progressive
   // labels to actually animate through the SSE event types.
+  //
+  // W7-A: we race two signals here so a missed `event.finalized` SSE frame
+  // (which happens in mock mode because the lifecycle is faster than the
+  // EventSource handshake) can't strand the user on the spinner:
+  //   1. SSE `event.finalized` for our own event_id (fast path)
+  //   2. REST poll on `/events/{id}` reporting a terminal status — useEvent
+  //      already runs at 4s intervals so the worst case is bounded.
+  // Whichever arrives first triggers navigation.
   useEffect(() => {
     if (!busy || !eventId) return;
-    if (latest?.type === "event.finalized") {
+    const sseFinalized = latest?.type === "event.finalized";
+    const polledStatus =
+      typeof polledEvent?.status === "string"
+        ? polledEvent.status.toUpperCase()
+        : undefined;
+    const pollFinalized = polledStatus !== undefined &&
+      TERMINAL_STATUSES.has(polledStatus);
+    if (sseFinalized || pollFinalized) {
       if (navigateTimerRef.current) {
         clearTimeout(navigateTimerRef.current);
         navigateTimerRef.current = null;
@@ -71,7 +102,7 @@ export function TriggerButton() {
       setTriggered(true);
       router.push(`/events/${eventId}`);
     }
-  }, [latest, busy, eventId, router]);
+  }, [latest, busy, eventId, polledEvent, router, TERMINAL_STATUSES]);
 
   // NOTE: removed the legacy `event.finalized → router.push` effect that used
   // to do a delayed redirect to the triggered event. The click handler already

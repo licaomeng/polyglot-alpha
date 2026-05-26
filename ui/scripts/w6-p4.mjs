@@ -3,8 +3,8 @@
 import { chromium } from "playwright";
 import fs from "node:fs";
 
-const BASE_UI = process.env.W6_UI_BASE || "http://localhost:3001";
-const BASE_API = process.env.W6_API_BASE || "http://localhost:8000";
+const BASE_UI = process.env.W6_UI_BASE || "http://127.0.0.1:3001";
+const BASE_API = process.env.W6_API_BASE || "http://127.0.0.1:8000";
 const SS_DIR = "/Users/messili/codebase/polyglot-alpha/screenshots/wave6-p4";
 const OUT_MD = "/tmp/wave6-p4-findings.md";
 const BACKEND_LOG = "/tmp/polyglot-backend.log";
@@ -114,8 +114,11 @@ const triggeredIdsA = triggerResultsA
 console.log(`[A] triggered ${triggeredIdsA.length}/10 ids: ${triggeredIdsA.join(",")}`);
 
 const triggerFailuresA = triggerResultsA.filter(r => !r.ok);
-if (triggerFailuresA.length > 0) {
-  logFinding("HIGH", `Scenario A: ${triggerFailuresA.length}/10 trigger requests failed`, "POST /trigger/event", "10x 200 OK", JSON.stringify(triggerFailuresA.slice(0, 3)), "", "Backend may be rejecting concurrent triggers");
+const rateLimitedA = triggerResultsA.filter(r => r.status === 429 || (r.body && typeof r.body === "object" && /rate limit/i.test(r.body.error || ""))).length;
+if (rateLimitedA > 0) {
+  logFinding("HIGH", `Scenario A: ${rateLimitedA}/10 triggers blocked by 10/minute rate limit`, "POST /trigger/event @limiter.limit('10/minute')", "all 10 accepted", `${rateLimitedA} returned 429`, "", "Trigger rate limit exactly equals the requested burst — boundary race causes the 10th request to be rejected when slowapi counts the in-flight call as already consumed");
+} else if (triggerFailuresA.length > 0) {
+  logFinding("HIGH", `Scenario A: ${triggerFailuresA.length}/10 trigger requests failed`, "POST /trigger/event", "10x 200 OK", JSON.stringify(triggerFailuresA.slice(0, 3)), "", "Backend rejecting concurrent triggers");
 }
 
 const deadlineA = Date.now() + 60_000;
@@ -157,6 +160,10 @@ await ctxA.close();
 // take pre-B leaderboard snapshot
 const lbBefore = (await nfetch(`${BASE_API}/leaderboard`)).body;
 
+// Trigger endpoint is @limiter.limit("10/minute"). A burned 10 budget. Wait ~65s for window to slide.
+console.log("[A->B] waiting 65s for trigger rate limit window to reset");
+await sleep(65_000);
+
 // ===================================================================
 // SCENARIO B: Mixed mode burst (5 live + 5 mock alternating)
 // ===================================================================
@@ -175,15 +182,23 @@ try {
 const triggerPromisesB = [];
 for (let i = 0; i < 10; i++) {
   const mode = (i % 2 === 0) ? "live" : "mock";
+  // For live, default event_source=user_payload requires a title; use hardcoded sample to mimic demo button.
+  const body = mode === "live"
+    ? { mode: "live", event_source: "hardcoded" }
+    : { mode: "mock" };
   triggerPromisesB.push(
     nfetch(`${BASE_API}/trigger/event`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify(body),
     }).then(r => ({ ...r, mode }))
   );
 }
 const triggerResultsB = await Promise.all(triggerPromisesB);
+const rateLimitedB = triggerResultsB.filter(r => r.status === 429 || (r.body && typeof r.body === "object" && /rate limit/i.test(r.body.error || ""))).length;
+if (rateLimitedB > 0) {
+  logFinding("MEDIUM", `Scenario B: ${rateLimitedB}/10 triggers hit 10/minute rate limit`, "POST /trigger/event @limiter.limit('10/minute')", "all 10 accepted", `${rateLimitedB} returned 429 / 'Rate limit exceeded'`, "", "Trigger rate limit too restrictive for concurrent stress");
+}
 
 const triggeredMockIdsB = triggerResultsB.filter(r => r.mode === "mock" && r.ok && r.body && r.body.event_id != null).map(r => String(r.body.event_id));
 const triggeredLiveIdsB = triggerResultsB.filter(r => r.mode === "live" && r.ok && r.body && r.body.event_id != null).map(r => String(r.body.event_id));
@@ -235,6 +250,10 @@ const totalBidsDelta = lbBids(lbAfter) - lbBids(lbBefore);
 if (polluted) {
   logFinding("HIGH", "Leaderboard polluted by mock wallets", "/leaderboard", "no mock wallet addresses", `${mockInLb.length} mock wallets present: ${mockInLb.map(r => r.address).join(", ")}`, "", "Mock-mode bids leaked into leaderboard aggregation");
 }
+
+// Wait for trigger rate-limit window before C/D (their evaluator triggers a single event each).
+console.log("[B->C] waiting 65s for trigger rate limit window to reset");
+await sleep(65_000);
 
 // ===================================================================
 // SCENARIO C: SSE reliability under refresh storm
@@ -430,6 +449,16 @@ md.push(`console.warns total: ${warnSummary}` + (warnSummary > 0 && warnSummary 
 md.push(`pageerrors total: ${peSummary}` + (peSummary > 0 && peSummary < 10 ? "\n  " + pageErrors.map(e => `[${e.label}] ${e.txt}`).join("\n  ") : ""));
 md.push(`network errors total (excl. intentional 404): ${netSummary}` + (netSummary > 0 && netSummary < 10 ? "\n  " + networkErrors.map(e => `[${e.label}] ${e.status} ${e.url}${e.error ? " (" + e.error + ")" : ""}`).join("\n  ") : ""));
 md.push(`Backend log issues during run: errors=${backendIssues.error}, warnings=${backendIssues.warning}, oom=${backendIssues.oom}, locks=${backendIssues.lock}, malformed=${backendIssues.malformed}`);
+if (peSummary > 0) {
+  md.push("");
+  md.push("All pageerrors:");
+  for (const e of pageErrors) md.push(`  [${e.label}] ${e.txt}`);
+}
+if (netSummary > 0) {
+  md.push("");
+  md.push("All network errors:");
+  for (const e of networkErrors.slice(0, 20)) md.push(`  [${e.label}] ${e.status} ${e.url}${e.error ? " (" + e.error + ")" : ""}`);
+}
 
 const newFindings = [];
 if (polluted) newFindings.push("Mock wallets in leaderboard");

@@ -425,12 +425,21 @@ function renderPhaseBody(
                 </a>
               );
             }
+            // Preserve the `ipfs://` scheme so the synthetic provenance
+            // string is unambiguous (and so DOM probes that look for the
+            // literal `ipfs://sim/<hash>` token can find it). The classifier
+            // already stripped the prefix to derive `ref.cid`, so we put it
+            // back here for display purposes only.
+            const displayRef = rawCid.startsWith("ipfs://")
+              ? rawCid
+              : `ipfs://${ref.cid}`;
             return (
               <span
                 className="inline-flex items-center gap-1 font-mono text-muted-foreground"
-                title={`Synthetic provenance: ${ref.cid}`}
+                title={`Synthetic provenance: ${displayRef}`}
+                data-testid="phase-5-ipfs-synthetic"
               >
-                reasoning · synthetic · {ref.cid.slice(0, 24)}…
+                reasoning · synthetic · {displayRef.slice(0, 32)}…
               </span>
             );
           })()}
@@ -508,6 +517,18 @@ function renderPhaseBody(
 
     case "Streaming Revenue": {
       const overallStatus = String(event.status ?? "").toUpperCase();
+      // Mock-mode hint: the reputation registry is intentionally skipped for
+      // mock events (W5-A1), so the phase completes with zero rep deltas.
+      // Surface that explicitly so the empty Reputation Update section
+      // doesn't look like a regression.
+      const mockRepHint = event.mode === "mock" ? (
+        <p
+          className="font-mono text-[10px] text-muted-foreground"
+          data-testid="revenue-mock-rep-hint"
+        >
+          (mock — not recorded to reputation)
+        </p>
+      ) : null;
       const streamingSkipped =
         event.polymarket == null &&
         (overallStatus === "REJECTED" || overallStatus === "FAILED");
@@ -528,6 +549,7 @@ function renderPhaseBody(
             <p className="mt-1 font-mono text-[10px] text-muted-foreground">
               cumulative fee · — · entries · — · last fill · —
             </p>
+            {mockRepHint}
           </div>,
         );
       }
@@ -535,7 +557,10 @@ function renderPhaseBody(
       const fills = event.polymarket?.recentFills;
       if (!stream || stream.length === 0) {
         return wrap(
-          <p className="text-xs text-muted-foreground">no fees streamed yet</p>,
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">no fees streamed yet</p>
+            {mockRepHint}
+          </div>,
         );
       }
       // BuilderFeeStream expects a strictly-typed { ts: string; usd: number }[]
@@ -548,6 +573,7 @@ function renderPhaseBody(
         <>
           <Separator />
           <BuilderFeeStream stream={chartStream} recentFills={fills} />
+          {mockRepHint}
         </>,
       );
     }

@@ -6,8 +6,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { IngestionSourcesView } from "./IngestionSourcesView";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { cn, shortAddr, formatUsd } from "@/lib/utils";
-import { arcTxUrl, type EventDetail, type PhaseState } from "@/lib/api";
+import {
+  cn,
+  shortAddr,
+  formatUsd,
+  isSimTxHash,
+  arcscanTxUrl,
+  safePolymarketUrl,
+} from "@/lib/utils";
+import { type EventDetail, type PhaseState } from "@/lib/api";
 
 interface PhaseDetailsAccordionProps {
   phase: PhaseState;
@@ -327,19 +334,34 @@ function AuctionDetails({
           },
           {
             label: "settle_tx_hash",
-            value: det.tx_hash ? (
-              <a
-                href={`https://explorer.arc-testnet.io/tx/${det.tx_hash}`}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
-              >
-                {det.tx_hash.slice(0, 14)}…
-                <ExternalLink className="h-3 w-3" aria-hidden />
-              </a>
-            ) : (
-              "—"
-            ),
+            // Synthetic mock tx hashes (`0xsim_…`) MUST render as muted text;
+            // wrapping them in an Arc explorer link would 404 and contradict
+            // the MOCK badge alongside the row.
+            value: det.tx_hash
+              ? (() => {
+                  const sim = isSimTxHash(det.tx_hash);
+                  const url = sim ? null : arcscanTxUrl(det.tx_hash);
+                  const display = `${det.tx_hash.slice(0, 14)}…`;
+                  return url ? (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+                    >
+                      {display}
+                      <ExternalLink className="h-3 w-3" aria-hidden />
+                    </a>
+                  ) : (
+                    <span
+                      className="font-mono text-muted-foreground"
+                      title="Synthetic tx — not on-chain"
+                    >
+                      {display}
+                    </span>
+                  );
+                })()
+              : "—",
           },
         ]}
       />
@@ -661,22 +683,35 @@ function AnchorDetails({
           },
           {
             label: "commit_tx_hash",
-            value: det.tx_hash ?? event.anchor?.txHash ? (
-              <a
-                href={
-                  event.anchor?.explorerUrl ??
-                  `https://explorer.arc-testnet.io/tx/${det.tx_hash}`
-                }
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
-              >
-                {(det.tx_hash ?? event.anchor?.txHash ?? "").slice(0, 14)}…
-                <ExternalLink className="h-3 w-3" aria-hidden />
-              </a>
-            ) : (
-              "—"
-            ),
+            value: (() => {
+              const tx = det.tx_hash ?? event.anchor?.txHash;
+              if (!tx) return "—";
+              // Same sim-prefix gate as Phase 2: never wrap `0xsim_…` in an
+              // explorer link; render muted, non-clickable text instead.
+              const sim = isSimTxHash(tx);
+              const url = sim
+                ? null
+                : (event.anchor?.explorerUrl ?? arcscanTxUrl(tx));
+              const display = `${tx.slice(0, 14)}…`;
+              return url ? (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+                >
+                  {display}
+                  <ExternalLink className="h-3 w-3" aria-hidden />
+                </a>
+              ) : (
+                <span
+                  className="font-mono text-muted-foreground"
+                  title="Synthetic tx — not on-chain"
+                >
+                  {display}
+                </span>
+              );
+            })(),
           },
           {
             label: "contract",
@@ -842,23 +877,33 @@ function PolymarketDetails({
           },
           {
             label: "market_url",
-            value: marketUrl ? (
-              isSimulated ? (
-                <span className="font-mono text-muted-foreground">{marketUrl}</span>
-              ) : (
-                <a
-                  href={marketUrl}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
-                >
-                  open market
-                  <ExternalLink className="h-3 w-3" aria-hidden />
-                </a>
-              )
-            ) : (
-              DASH
-            ),
+            // Two gates: (1) explicit `isSimulated` from backend → muted text,
+            // (2) `safePolymarketUrl` strips any URL whose market_id segment
+            // is `sim-…` / `dryrun-…` so even a mis-flagged backend payload
+            // can't trick us into a clickable external link.
+            value: marketUrl
+              ? (() => {
+                  const safeUrl = isSimulated ? null : safePolymarketUrl(marketUrl);
+                  return safeUrl ? (
+                    <a
+                      href={safeUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+                    >
+                      open market
+                      <ExternalLink className="h-3 w-3" aria-hidden />
+                    </a>
+                  ) : (
+                    <span
+                      className="font-mono text-muted-foreground"
+                      title="Synthetic market — not on polymarket.com"
+                    >
+                      {marketUrl}
+                    </span>
+                  );
+                })()
+              : DASH,
           },
         ]}
       />
@@ -1100,18 +1145,31 @@ function RevenueDetails({ event }: { event: EventDetail }) {
                   <span className="font-mono text-emerald-400">
                     {formatUsd(leg.usd)}
                   </span>
-                  {leg.arcTxHash ? (
-                    <a
-                      href={arcTxUrl(leg.arcTxHash)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 font-mono text-[10px] text-primary hover:underline"
-                      aria-label={`Arc transaction ${leg.arcTxHash}`}
-                    >
-                      {leg.arcTxHash.slice(0, 10)}…
-                      <ExternalLink className="h-3 w-3" aria-hidden />
-                    </a>
-                  ) : (
+                  {leg.arcTxHash ? (() => {
+                    // Builder-fee disbursement legs in mock mode emit synthetic
+                    // `0xsim_…` hashes; gate the explorer link the same way.
+                    const legUrl = arcscanTxUrl(leg.arcTxHash);
+                    const legDisplay = `${leg.arcTxHash.slice(0, 10)}…`;
+                    return legUrl ? (
+                      <a
+                        href={legUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 font-mono text-[10px] text-primary hover:underline"
+                        aria-label={`Arc transaction ${leg.arcTxHash}`}
+                      >
+                        {legDisplay}
+                        <ExternalLink className="h-3 w-3" aria-hidden />
+                      </a>
+                    ) : (
+                      <span
+                        className="font-mono text-[10px] text-muted-foreground"
+                        title="Synthetic tx — not on-chain"
+                      >
+                        {legDisplay}
+                      </span>
+                    );
+                  })() : (
                     <span className="font-mono text-[10px] text-muted-foreground">
                       {DASH}
                     </span>
