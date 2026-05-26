@@ -1,0 +1,55 @@
+{
+  "verdict": "has-issues",
+  "urlPrecedence": "PASS",
+  "toggleClick": "FAIL",
+  "storagePersist": "FAIL",
+  "liveResult": "TIMEOUT(status=null)",
+  "stickyFailures": [
+    "leaderboard"
+  ],
+  "keyboardNav": "PASS",
+  "consoleErrors": 0,
+  "consoleWarnings": 3,
+  "networkBad": 0,
+  "liveEventId": null,
+  "findings": [
+    {
+      "level": "HIGH",
+      "title": "Toggle click did not update visuals OR mutated URL",
+      "where": "http://localhost:3001/?mode=live then click MOCK (step 3)",
+      "expected": "before=LIVE, after=MOCK, header amber, storage=mock, URL stays ?mode=live",
+      "actual": "before=LIVE, after=LIVE, data-mode=live, flask=0, storage=mock, url=http://localhost:3001/?mode=live",
+      "screenshot": "/Users/messili/codebase/polyglot-alpha/ui/screenshots/w6-p2/step3-toggle-click-mock.png",
+      "hypothesis": "Toggle handler is writing URL OR URL effect overrides storage write"
+    },
+    {
+      "level": "HIGH",
+      "title": "localStorage persistence not restored on refresh",
+      "where": "http://localhost:3001/ refresh (step 4)",
+      "expected": "before storage=mock, after refresh: toggle=MOCK, data-mode=mock, storage=mock",
+      "actual": "storageBefore=null, checked=LIVE, data-mode=live, storage=null",
+      "screenshot": "/Users/messili/codebase/polyglot-alpha/ui/screenshots/w6-p2/step4-before-refresh.png | /Users/messili/codebase/polyglot-alpha/ui/screenshots/w6-p2/step4-after-refresh.png",
+      "hypothesis": "readInitialMode not reading localStorage OR hydration mismatch"
+    },
+    {
+      "level": "MEDIUM",
+      "title": "Live trigger did not finalize within 5min cap",
+      "where": "http://localhost:3001/ trigger live (step 5)",
+      "expected": "lifecycle finalizes SUBMITTED or FAILED inside 5min",
+      "actual": "eventId=null, terminal status=null, result=TIMEOUT(status=null)",
+      "screenshot": "/Users/messili/codebase/polyglot-alpha/ui/screenshots/w6-p2/step5-live-trigger-result.png",
+      "hypothesis": "Backend lifecycle stalled — seeder gas, RPC, or judge panel timeout"
+    },
+    {
+      "level": "MEDIUM",
+      "title": "Sticky header not pinned on leaderboard",
+      "where": "http://localhost:3001/leaderboard (step 7)",
+      "expected": "header bounding box y≈0 while scrollY > 50",
+      "actual": "header.y=0, scrollY=0",
+      "screenshot": "/Users/messili/codebase/polyglot-alpha/ui/screenshots/w6-p2/step7-sticky-leaderboard.png",
+      "hypothesis": "ancestor overflow rule clipping sticky positioning"
+    }
+  ],
+  "networkBadList": [],
+  "consoleErrorList": []
+}
