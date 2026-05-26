@@ -1,5 +1,5 @@
 """Pipeline dispatch — glue from orchestrator to the 5-layer translation
-pipeline + 4-agent evaluate/bid stage.
+pipeline + 3-seeder evaluate/bid stage.
 
 This module is what ``orchestrator.py`` imports as ``from .agents import dispatch``.
 When the import (or the underlying chain on-chain stack) fails, the orchestrator
@@ -86,10 +86,12 @@ def _load_wallet_map() -> dict[str, str]:
 
 
 def resolve_agent_name(agent_address: str) -> str:
-    """Map a winner address back to ``gemini`` / ``deepseek`` / ``qwen`` / ``llama``.
+    """Map a winner address back to a seeder slot (``gemini`` / ``deepseek`` / ``qwen``).
 
-    Falls back to ``"gemini"`` so the pipeline always has a valid model
-    binding even if the on-chain winner is an unregistered demo address.
+    Falls back to ``"gemini"`` (Seeder Alpha) so the pipeline always has
+    a valid model binding even if the on-chain winner is an unregistered
+    demo address. The slot names are kept as pre-rename identifiers so
+    historical wallet derivation continues to work.
     """
 
     if not agent_address:
@@ -448,7 +450,7 @@ async def collect_bids_inline(
     window_seconds: float = _DEFAULT_AUCTION_WINDOW_SECONDS,
     auction_event_id: Any = None,
 ) -> list[dict[str, Any]]:
-    """Run all 4 reference agents in parallel; each agent's bid goes on-chain.
+    """Run all 3 reference seeders in parallel; each seeder's bid goes on-chain.
 
     Each agent drives its real ``evaluate_event`` (the LLM-backed pricing
     call) and, when its wallet is resolvable + ``auction_event_id`` is
@@ -472,11 +474,11 @@ async def collect_bids_inline(
 
     Agents whose ``evaluate_event`` raises are **dropped** — no synthetic
     placeholder bid is returned. The orchestrator therefore proceeds with
-    however many real bids were produced (0-4) instead of pretending all
-    four agents voted.
+    however many real bids were produced (0-3) instead of pretending all
+    three seeders voted.
     """
 
-    items = list(AGENT_REGISTRY.items())  # [(name, cls), ...] — 4 entries.
+    items = list(AGENT_REGISTRY.items())  # [(name, cls), ...] — 3 entries.
     tasks = [
         asyncio.create_task(
             _safe_agent_bid(name, cls, event, auction_event_id=auction_event_id)

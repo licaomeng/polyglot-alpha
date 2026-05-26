@@ -172,6 +172,108 @@ async def record_fill(
     return tx_hash
 
 
+# ---------------------------------------------------------------------------
+# Fee splitting (Path A — protocol-level 90/10 split without contract redeploy)
+# ---------------------------------------------------------------------------
+
+# Operator share of the on-chain builder fee. Anti-Sybil + protocol-sustainability
+# constants are documented in outputs/WEB3_STORY.md (section 3, "Auto fee-splitting").
+WINNER_SHARE: float = 0.90
+TREASURY_SHARE: float = 0.10
+
+# Minimum credit per recordFill leg, in USDC. The contract reverts on
+# ``fillAmount == 0`` so we floor every leg to one base unit (1e-6 USDC).
+_MIN_FILL_USDC: float = 1.0 / (10 ** 6)
+
+
+async def record_fill_with_split(
+    market_id: str,
+    fill_amount_usdc: float,
+    winner: str,
+    treasury: str,
+    *,
+    onchain: Optional[OnChainClient] = None,
+    winner_share: float = WINNER_SHARE,
+) -> dict[str, Any]:
+    """Split a Polymarket builder fee 90/10 between winner and treasury.
+
+    This is Path A of the WEB3_STORY decentralization plan: rather than
+    redeploying ``BuilderFeeRouter`` with split logic baked in, we emit two
+    ``recordFill`` transactions from the orchestrator. Both legs are real
+    on-chain transfers on Arc; nothing is custodial.
+
+    Returns a dict with both tx hashes and per-leg USDC credit amounts::
+
+        {
+            "winner_tx":      "0x...",
+            "treasury_tx":    "0x...",
+            "winner_amount":  0.9,
+            "treasury_amount": 0.1,
+            "winner":         "0x...",
+            "treasury":       "0x...",
+        }
+
+    Either tx hash may be ``None`` if that leg failed; the caller decides
+    whether to mark the whole event simulated. We never fabricate a hash.
+    """
+
+    if fill_amount_usdc <= 0:
+        raise ValueError("fill_amount_usdc must be positive for a 90/10 split")
+    if not (0.0 < winner_share < 1.0):
+        raise ValueError("winner_share must be in (0, 1)")
+
+    winner_amount = max(_MIN_FILL_USDC, fill_amount_usdc * winner_share)
+    treasury_amount = max(_MIN_FILL_USDC, fill_amount_usdc * (1.0 - winner_share))
+
+    client = onchain or OnChainClient()
+
+    winner_tx: Optional[str] = None
+    treasury_tx: Optional[str] = None
+    try:
+        winner_tx = await record_fill(
+            market_id, winner_amount, winner, onchain=client
+        )
+    except Exception as exc:  # pragma: no cover - best-effort, mirrors record_fill semantics
+        logger.error(
+            "record_fill_with_split: winner leg failed (market=%s winner=%s): %s",
+            market_id,
+            winner,
+            exc,
+        )
+    try:
+        treasury_tx = await record_fill(
+            market_id, treasury_amount, treasury, onchain=client
+        )
+    except Exception as exc:  # pragma: no cover
+        logger.error(
+            "record_fill_with_split: treasury leg failed (market=%s treasury=%s): %s",
+            market_id,
+            treasury,
+            exc,
+        )
+
+    logger.info(
+        "record_fill_with_split(market=%s, total=%.6f, winner=%s [%.6f], "
+        "treasury=%s [%.6f]) winner_tx=%s treasury_tx=%s",
+        market_id,
+        fill_amount_usdc,
+        winner,
+        winner_amount,
+        treasury,
+        treasury_amount,
+        winner_tx,
+        treasury_tx,
+    )
+    return {
+        "winner_tx": winner_tx,
+        "treasury_tx": treasury_tx,
+        "winner_amount": winner_amount,
+        "treasury_amount": treasury_amount,
+        "winner": winner,
+        "treasury": treasury,
+    }
+
+
 async def claim_fees(
     translator: str,
     *,
@@ -198,4 +300,11 @@ async def claim_fees(
     return tx_hash
 
 
-__all__ = ["BuilderFeeRouter", "claim_fees", "record_fill"]
+__all__ = [
+    "BuilderFeeRouter",
+    "claim_fees",
+    "record_fill",
+    "record_fill_with_split",
+    "WINNER_SHARE",
+    "TREASURY_SHARE",
+]

@@ -1,8 +1,11 @@
 """Deterministic agent wallet derivation.
 
-Each translator agent (gemini, deepseek, qwen, llama) gets a fresh
-keypair derived from the operator private key + the agent name. This
-gives us wallets that are:
+Each reference seeder slot (``gemini``, ``deepseek``, ``qwen``) gets a
+fresh keypair derived from the operator private key + the slot name.
+The slot names are kept as the pre-rename identifiers so historical
+on-chain reputation and persisted bid records remain stable; the
+surfaced agent personas are :class:`SeederAlpha` / :class:`SeederBeta`
+/ :class:`SeederGamma`. This gives us wallets that are:
 
 * Stable across process restarts (no PK to store on disk).
 * Disjoint from the operator wallet (so an agent compromise can not
@@ -34,7 +37,7 @@ from eth_account.signers.local import LocalAccount
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 WALLETS_PATH = _REPO_ROOT / "outputs" / "agent_wallets.json"
 
-AGENT_NAMES: tuple[str, ...] = ("gemini", "deepseek", "qwen", "llama")
+AGENT_NAMES: tuple[str, ...] = ("gemini", "deepseek", "qwen")
 
 
 @dataclass(frozen=True)
@@ -76,7 +79,7 @@ def derive_agent_wallet(operator_pk: str, agent_name: str) -> AgentWallet:
 def derive_all_wallets(
     operator_pk: Optional[str] = None,
 ) -> dict[str, AgentWallet]:
-    """Derive wallets for all four reference agents."""
+    """Derive wallets for all three reference seeder slots."""
 
     pk = operator_pk or os.environ.get("HACKATHON_WALLET_PRIVATE_KEY")
     if not pk:

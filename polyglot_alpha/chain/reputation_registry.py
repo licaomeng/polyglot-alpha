@@ -19,6 +19,8 @@ from typing import Optional
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 
+from web3 import Web3
+
 from ..onchain import (
     OnChainClient,
     reputation_to_float,
