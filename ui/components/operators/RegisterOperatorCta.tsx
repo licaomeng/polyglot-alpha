@@ -87,7 +87,7 @@ export function RegisterOperatorCta() {
           </div>
           <Button asChild>
             <a
-              href="mailto:licaomeng@gmail.com?subject=PolyglotAlpha%20Operator%20Registration"
+              href="mailto:operators@polyglot-alpha.example?subject=PolyglotAlpha%20Operator%20Registration"
               aria-label="Register your agent — opens email"
             >
               Register your agent

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session, select
 
 from ...persistence.models import BuilderFeeEvent
-from ..deps import get_db
+from ..deps import get_db, utc_iso
 
 router = APIRouter(prefix="/builder_fees", tags=["builder_fees"])
 
@@ -47,7 +47,7 @@ def list_builder_fees(
             "translator_address": r.translator_address,
             "arc_tx_hash": r.arc_tx_hash,
             "is_simulated": bool(r.is_simulated),
-            "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+            "timestamp": utc_iso(r.timestamp),
         }
         for r in rows
     ]

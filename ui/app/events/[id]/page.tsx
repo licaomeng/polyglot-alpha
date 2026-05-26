@@ -15,6 +15,9 @@ import { relativeTime } from "@/lib/utils";
 import { usePhaseState } from "@/hooks/usePhaseState";
 import { SSE_TO_PHASE_INDEX, type AnySseEventType } from "@/lib/api";
 import { AgentDebatePanel } from "@/components/event/AgentDebatePanel";
+import { JudgePanel as EventJudgePanel } from "@/components/event/JudgePanel";
+import { AuctionExplainer } from "@/components/event/AuctionExplainer";
+import { TrustIndicators } from "@/components/event/TrustIndicators";
 
 export default function EventDetailPage() {
   const params = useParams<{ id: string }>();
@@ -35,7 +38,17 @@ export default function EventDetailPage() {
     // server. The pre-created event row had a placeholder title; we need
     // to invalidate the cached `GET /events/{id}` so the header re-renders
     // with the real title + sources.
-    if (latest.type === "event.updated") {
+    //
+    // `quality.verdict` and `event.finalized` mark the end of the
+    // lifecycle — the event's top-level `status` flips from EVALUATING to
+    // REJECTED / SETTLED / FAILED at this point, so we invalidate again so
+    // the status badge shows the final state instead of staying on
+    // "Judging".
+    if (
+      latest.type === "event.updated" ||
+      latest.type === "quality.verdict" ||
+      latest.type === "event.finalized"
+    ) {
       queryClient.invalidateQueries({ queryKey: ["event", id] });
     }
   }, [latest, setActivePhase, queryClient, id]);
@@ -123,19 +136,37 @@ export default function EventDetailPage() {
             sse {connected ? "connected" : "offline"}
           </span>
         </div>
-        <h1 className="text-2xl font-semibold leading-tight text-balance">{merged.headline}</h1>
-        <p className="text-xs text-muted-foreground">{merged.source}</p>
+        <h1
+          dir="auto"
+          className="text-2xl font-semibold leading-tight text-balance"
+        >
+          {merged.headline}
+        </h1>
+        <p dir="auto" className="text-xs text-muted-foreground">
+          {merged.source}
+        </p>
+        <TrustIndicators event={merged} />
       </header>
 
       <WorkflowOverview phases={merged.phases} />
 
       <section className="space-y-3">
-        <h2 className="text-base font-semibold">Phase timeline</h2>
+        <h2 className="text-base font-semibold">Phase timeline · 7 phases</h2>
         <EventTimeline event={merged} />
       </section>
 
       <section className="space-y-3">
         <AgentDebatePanel event={merged} />
+      </section>
+
+      <section className="space-y-3" aria-label="Auction explainer">
+        <h2 className="text-base font-semibold">Auction · why this winner</h2>
+        <AuctionExplainer event={merged} />
+      </section>
+
+      <section className="space-y-3" aria-label="Judge breakdown">
+        <h2 className="text-base font-semibold">11-Judge breakdown</h2>
+        <EventJudgePanel event={merged} />
       </section>
     </div>
   );

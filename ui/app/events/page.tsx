@@ -45,7 +45,7 @@ export default function EventsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Events</h1>
           <p className="text-xs text-muted-foreground">
-            Live + recent runs across the full 7-phase pipeline.
+            Live + recent runs across the full 7-phase lifecycle (11-node workflow).
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
@@ -131,7 +131,10 @@ export default function EventsPage() {
       )}
       {!isLoading && items.length > 0 && (
         <>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <p
+            className="text-[10px] uppercase tracking-wider text-muted-foreground"
+            aria-live="polite"
+          >
             Showing {items.length} of {data?.length ?? 0} events
             {isFetching && <span className="ml-2 text-primary">· refreshing…</span>}
           </p>

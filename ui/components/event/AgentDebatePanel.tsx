@@ -5,8 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Bot, Gavel, Info, Sparkles, Wand2 } from "lucide-react";
-import type { EventDetail, PhaseState } from "@/lib/api";
+import { Bot, Check, Gavel, Info, Loader2, Sparkles, Wand2, X } from "lucide-react";
+import type { EventDetail, PhaseState, PhaseStatus } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -156,6 +157,142 @@ function debateStage(event: EventDetail): "pre-l3" | "l3" | "l4" | "l5" | "done"
   if (subPhases["L3 Critics"] === "completed") return "l4";
   if (subPhases["L3 Critics"] === "running") return "l3";
   return "pre-l3";
+}
+
+// ─── Debate steps (5-chip progression) ────────────────────────────────────
+
+const DEBATE_STEPS = [
+  { key: "proposing", label: "Proposing", description: "L1/L2 translators generate candidate questions." },
+  { key: "critiquing", label: "Critiquing", description: "L3 critics list strengths + issues per candidate." },
+  { key: "moderating", label: "Moderating", description: "L4 moderator picks the best candidate." },
+  { key: "refining", label: "Refining", description: "L5 refine pass applies the critique signal." },
+  { key: "finalized", label: "Finalized", description: "Refined question persisted as final_question." },
+] as const;
+
+type DebateStepKey = typeof DEBATE_STEPS[number]["key"];
+
+function debateStepStatus(
+  event: EventDetail,
+): Record<DebateStepKey, PhaseStatus> {
+  const phase2 = (event.phases ?? [])[2];
+  const sub =
+    (phase2?.details?.subPhases as Record<string, PhaseStatus> | undefined) ?? {};
+  const map: Record<DebateStepKey, PhaseStatus> = {
+    proposing: "pending",
+    critiquing: "pending",
+    moderating: "pending",
+    refining: "pending",
+    finalized: "pending",
+  };
+
+  // L2 translators done ⇒ "proposing" done.
+  const l2 = sub["L2 Translators"];
+  if (l2 === "completed" || sub["L3 Critics"] || sub["L4 Moderator"] || sub["L5 Refine"]) {
+    map.proposing = "completed";
+  } else if (phase2?.status === "running") {
+    map.proposing = "running";
+  } else if (phase2?.status === "completed") {
+    map.proposing = "completed";
+  }
+
+  // L3 critics
+  const l3 = sub["L3 Critics"];
+  if (l3 === "completed") map.critiquing = "completed";
+  else if (l3 === "running") map.critiquing = "running";
+  else if (l3 === "failed") map.critiquing = "failed";
+  else if (map.proposing === "completed" && phase2?.status === "running") {
+    map.critiquing = "running";
+  }
+
+  // L4 moderator
+  const l4 = sub["L4 Moderator"];
+  if (l4 === "completed") map.moderating = "completed";
+  else if (l4 === "running") map.moderating = "running";
+  else if (l4 === "failed") map.moderating = "failed";
+
+  // L5 refine
+  const l5 = sub["L5 Refine"];
+  if (l5 === "completed") map.refining = "completed";
+  else if (l5 === "running") map.refining = "running";
+  else if (l5 === "failed") map.refining = "failed";
+
+  // Finalized when phase 2 is completed.
+  if (phase2?.status === "completed") {
+    map.finalized = "completed";
+    map.refining = map.refining === "pending" ? "completed" : map.refining;
+    map.moderating = map.moderating === "pending" ? "completed" : map.moderating;
+    map.critiquing = map.critiquing === "pending" ? "completed" : map.critiquing;
+  }
+  if (phase2?.status === "failed") {
+    // Whichever step was last running is marked failed; others stay.
+    if (map.refining === "running") map.refining = "failed";
+    else if (map.moderating === "running") map.moderating = "failed";
+    else if (map.critiquing === "running") map.critiquing = "failed";
+    else if (map.proposing === "running") map.proposing = "failed";
+  }
+  return map;
+}
+
+function DebateStepStrip({ event }: { event: EventDetail }) {
+  const statuses = debateStepStatus(event);
+  return (
+    <ol
+      className="flex flex-wrap items-center gap-1.5"
+      aria-label="Debate process steps"
+      data-testid="debate-step-strip"
+    >
+      {DEBATE_STEPS.map((step, idx) => {
+        const status = statuses[step.key];
+        const isLast = idx === DEBATE_STEPS.length - 1;
+        const tone =
+          status === "completed"
+            ? "border-emerald-500/40 bg-emerald-500/[0.08] text-emerald-300"
+            : status === "running"
+              ? "border-primary/50 bg-primary/[0.08] text-primary"
+              : status === "failed"
+                ? "border-destructive/50 bg-destructive/[0.08] text-destructive"
+                : "border-border/60 bg-muted/20 text-muted-foreground";
+        return (
+          <li key={step.key} className="flex items-center gap-1.5">
+            <span
+              title={step.description}
+              aria-label={`${step.label} (${status})`}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider",
+                tone,
+              )}
+            >
+              {status === "completed" && (
+                <Check className="h-3 w-3" aria-hidden />
+              )}
+              {status === "running" && (
+                <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              )}
+              {status === "failed" && <X className="h-3 w-3" aria-hidden />}
+              {status === "pending" && (
+                <span
+                  className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60"
+                  aria-hidden
+                />
+              )}
+              {step.label}
+            </span>
+            {!isLast && (
+              <span
+                className={cn(
+                  "h-px w-3 sm:w-5",
+                  status === "completed"
+                    ? "bg-emerald-500/40"
+                    : "bg-border/60",
+                )}
+                aria-hidden
+              />
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────────
@@ -413,7 +550,7 @@ export function AgentDebatePanel({ event }: { event: EventDetail }) {
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
-            This is one of our 4 reference seeder agents&apos; internal method.
+            This is one of our 3 reference seeder agents&apos; internal method.
             External operators are free to use any approach — single-shot,
             multi-agent debate, RAG, anything. Agent debate (L3 Critics → L4
             Moderator → L5 Refine).
@@ -436,6 +573,8 @@ export function AgentDebatePanel({ event }: { event: EventDetail }) {
       </header>
 
       <Separator />
+
+      <DebateStepStrip event={event} />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {candidates.length > 0 ? (

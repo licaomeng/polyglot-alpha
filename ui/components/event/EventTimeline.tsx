@@ -14,6 +14,9 @@ import { PolymarketDetail } from "@/components/polymarket/PolymarketDetail";
 import { Separator } from "@/components/ui/separator";
 import { ExternalLink } from "lucide-react";
 import { usePhaseState } from "@/hooks/usePhaseState";
+import { PhaseInfo } from "@/components/event/MetricExplainer";
+import { ProgressIndicator } from "@/components/event/ProgressIndicator";
+import { PhaseDetailsAccordion } from "@/components/event/PhaseDetailsAccordion";
 
 // Map the backend detail row for phase 4 (with verdict + overall_score) into
 // a synthetic 11-judge array when the top-level `judges` field is absent.
@@ -143,6 +146,85 @@ export function EventTimeline({ event }: { event: EventDetail }) {
   );
 }
 
+/**
+ * Per-phase documentation rendered through the (i) tooltip. Each entry
+ * surfaces (a) what the phase does, (b) which SSE event signals its
+ * progress, and (c) what the phase persists to disk/db on completion.
+ */
+const PHASE_DOCS: Record<string, { what: string; signals: string; produces: string; typicalSec: number }> = {
+  "Event Ingestion": {
+    what: "Polls RSS / manual triggers and stages a news event for the marketplace.",
+    signals: "event.created / event.updated",
+    produces: "events row (headline, sources, content_hash)",
+    typicalSec: 5,
+  },
+  "USDC Auction": {
+    what: "Open-bid auction where reference seeders + operators submit (bid, candidate_hash, stake).",
+    signals: "auction.opened → bid.submitted → auction.settled",
+    produces: "bids table + auction_winner; on-chain settle tx",
+    typicalSec: 30,
+  },
+  "Translation Pipeline": {
+    what: "Winner runs L1 Analysts → L2 Translators → L3 Critics → L4 Moderator → L5 Refine to produce the final question.",
+    signals: "translation.completed → critic.completed → moderator.verdict → refine.completed",
+    produces: "translations row (source, target, final_question)",
+    typicalSec: 60,
+  },
+  "11-Judge Panel": {
+    what: "3 translation judges (BLEU / COMET / MQM) + 8 style judges (D1–D8). Run in parallel via asyncio.gather.",
+    signals: "quality.verdict",
+    produces: "quality_scores row with verdict (PASS / BORDERLINE / FAIL) + overall_score in [0,1]",
+    typicalSec: 60,
+  },
+  "On-chain Anchor": {
+    what: "SHA256(candidate) committed to the Arc testnet — gives external verifiability of the question.",
+    signals: "onchain.committed",
+    produces: "anchors row (tx_hash, block, ipfs_cid?)",
+    typicalSec: 15,
+  },
+  "Polymarket V2 Submission": {
+    what: "Final question submitted to Polymarket V2 with builder_code so resolved markets stream builder fees back.",
+    signals: "polymarket.submitted",
+    produces: "polymarket_submissions row (market_id, market_url, is_simulated)",
+    typicalSec: 10,
+  },
+  "Streaming Revenue": {
+    what: "Builder fees stream in as the Polymarket market gets filled.",
+    signals: "builder_fee.accrued → event.finalized",
+    produces: "builder_fees rows; events.status → SETTLED",
+    typicalSec: 60,
+  },
+};
+
+function PhaseBodyHeader({ phase }: { phase: PhaseState }) {
+  const doc = PHASE_DOCS[phase.name];
+  if (!doc) return null;
+  return (
+    <div className="flex flex-col gap-2 border-b border-border/40 pb-3">
+      <div className="flex items-center gap-1.5">
+        <PhaseInfo
+          title={phase.name}
+          what={doc.what}
+          signals={doc.signals}
+          produces={doc.produces}
+        />
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          hover the (i) for what this phase does
+        </span>
+      </div>
+      {(phase.status === "running" || phase.status === "completed" || phase.status === "pending") && (
+        <ProgressIndicator
+          phaseName={phase.name}
+          status={phase.status}
+          startedAt={phase.startedAt}
+          completedAt={phase.completedAt}
+          typicalSeconds={doc.typicalSec}
+        />
+      )}
+    </div>
+  );
+}
+
 function renderPhaseBody(
   phase: PhaseState,
   idx: number,
@@ -151,10 +233,21 @@ function renderPhaseBody(
 ) {
   const phases = event.phases ?? [];
   const eventId = event.id;
+  const header = <PhaseBodyHeader phase={phase} />;
+  const accordion = (
+    <PhaseDetailsAccordion phase={phase} index={idx} event={event} />
+  );
+  const wrap = (body: React.ReactNode) => (
+    <div className="space-y-3">
+      {header}
+      {body}
+      {accordion}
+    </div>
+  );
 
   switch (phase.name) {
     case "Event Ingestion":
-      return (
+      return wrap(
         <div className="space-y-2 text-xs text-muted-foreground">
           <p>
             <span className="text-foreground/80">Source:</span> {event.source}
@@ -162,13 +255,13 @@ function renderPhaseBody(
           <p>
             <span className="text-foreground/80">Headline:</span> {event.headline}
           </p>
-        </div>
+        </div>,
       );
 
     case "USDC Auction": {
       const auctionDetails = detailsAt(phases, idx);
       const bids = event.bids ?? [];
-      return (
+      return wrap(
         <div className="space-y-2">
           {bids.length > 0 ? (
             <BidTable bids={bids} />
@@ -180,7 +273,7 @@ function renderPhaseBody(
               <TxLink txHash={auctionDetails.tx_hash} mode="live" label="settle tx" />
             </div>
           )}
-        </div>
+        </div>,
       );
     }
 
@@ -194,44 +287,51 @@ function renderPhaseBody(
         <SubPhaseChips phaseIndex={idx} phase={phase} subPhases={subPhases} />
       );
       if (!t) {
-        return (
+        return wrap(
           <div className="space-y-3">
             {subPhaseChips}
             <div className="space-y-1 text-xs text-muted-foreground">
               <p>winner · <span className="font-mono">{translationDetails.winner_address ?? "—"}</span></p>
-              {translationDetails.pipeline_trace_ipfs && (
-                <a
-                  href={`https://ipfs.io/ipfs/${translationDetails.pipeline_trace_ipfs}`}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
-                >
-                  ipfs · {translationDetails.pipeline_trace_ipfs.slice(0, 14)}…
-                  <ExternalLink className="h-3 w-3" aria-hidden />
-                </a>
-              )}
+              {translationDetails.pipeline_trace_ipfs && (() => {
+                // Strip `ipfs://` URI scheme prefix so we don't produce malformed URLs like
+                // `https://ipfs.io/ipfs/ipfs://mock/abc`. The gateway expects a bare CID/path.
+                const cid = translationDetails.pipeline_trace_ipfs.replace(/^ipfs:\/\//, "");
+                return (
+                  <a
+                    href={`https://ipfs.io/ipfs/${cid}`}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+                  >
+                    ipfs · {cid.slice(0, 14)}…
+                    <ExternalLink className="h-3 w-3" aria-hidden />
+                  </a>
+                );
+              })()}
             </div>
-          </div>
+          </div>,
         );
       }
-      return (
+      return wrap(
         <div className="space-y-3">
           {subPhaseChips}
           <PipelineLayerCard translation={t} />
-        </div>
+        </div>,
       );
     }
 
     case "11-Judge Panel": {
       if (!judges) {
-        return <p className="text-xs text-muted-foreground">awaiting verdict</p>;
+        return wrap(
+          <p className="text-xs text-muted-foreground">awaiting verdict</p>,
+        );
       }
-      return (
+      return wrap(
         <JudgePanel
           judges={judges}
           verdict={event.overallVerdict ?? (event as { verdict?: string }).verdict}
           reasoning={event.overallReasoning}
-        />
+        />,
       );
     }
 
@@ -240,9 +340,11 @@ function renderPhaseBody(
       const anchor = event.anchor;
       const txHash = anchor?.txHash ?? onchain.tx_hash;
       if (!txHash && !anchor?.contractAddress) {
-        return <p className="text-xs text-muted-foreground">awaiting anchor commit</p>;
+        return wrap(
+          <p className="text-xs text-muted-foreground">awaiting anchor commit</p>,
+        );
       }
-      return (
+      return wrap(
         <div className="space-y-2 text-xs">
           {txHash && (
             <TxLink
@@ -263,18 +365,24 @@ function renderPhaseBody(
               Block <span className="font-mono text-foreground/80">#{anchor.block}</span>
             </p>
           )}
-          {(anchor?.ipfsCid ?? onchain.reasoning_ipfs) && (
-            <a
-              href={`https://ipfs.io/ipfs/${anchor?.ipfsCid ?? onchain.reasoning_ipfs}`}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
-            >
-              reasoning · ipfs · {String(anchor?.ipfsCid ?? onchain.reasoning_ipfs).slice(0, 14)}…
-              <ExternalLink className="h-3 w-3" aria-hidden />
-            </a>
-          )}
-        </div>
+          {(anchor?.ipfsCid ?? onchain.reasoning_ipfs) && (() => {
+            // Strip `ipfs://` URI scheme prefix so we don't produce malformed URLs like
+            // `https://ipfs.io/ipfs/ipfs://mock/abc`. The gateway expects a bare CID/path.
+            const rawCid = String(anchor?.ipfsCid ?? onchain.reasoning_ipfs);
+            const cid = rawCid.replace(/^ipfs:\/\//, "");
+            return (
+              <a
+                href={`https://ipfs.io/ipfs/${cid}`}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+              >
+                reasoning · ipfs · {cid.slice(0, 14)}…
+                <ExternalLink className="h-3 w-3" aria-hidden />
+              </a>
+            );
+          })()}
+        </div>,
       );
     }
 
@@ -311,27 +419,27 @@ function renderPhaseBody(
         payload: event.polymarket?.payload,
         revenueStream: event.polymarket?.revenueStream ?? [],
       };
-      return <PolymarketDetail polymarket={merged} eventId={eventId} />;
+      return wrap(<PolymarketDetail polymarket={merged} eventId={eventId} />);
     }
 
     case "Streaming Revenue": {
       const stream = event.polymarket?.revenueStream;
       const fills = event.polymarket?.recentFills;
       if (!stream || stream.length === 0) {
-        return (
-          <p className="text-xs text-muted-foreground">no fees streamed yet</p>
+        return wrap(
+          <p className="text-xs text-muted-foreground">no fees streamed yet</p>,
         );
       }
-      return (
+      return wrap(
         <>
           <Separator />
           <BuilderFeeStream stream={stream} recentFills={fills} />
-        </>
+        </>,
       );
     }
 
     default:
-      return null;
+      return wrap(null);
   }
 }
 

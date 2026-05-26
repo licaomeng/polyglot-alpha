@@ -11,9 +11,25 @@ const config: Config = {
     container: {
       center: true,
       padding: "1rem",
-      screens: { "2xl": "1400px" },
+      // Allow `.container` to grow on very wide displays so 4K monitors
+      // (3840px) don't leave ~1200px of dead whitespace on each side.
+      // The Tailwind `container` utility caps width at the screen breakpoint
+      // matching the current viewport — adding 3xl/4xl steps lets the master
+      // architecture diagram and timeline use that extra horizontal space.
+      screens: {
+        "2xl": "1400px",
+        "3xl": "1800px",
+        "4xl": "2400px",
+      },
     },
     extend: {
+      // Custom breakpoints so `.container` and utility classes can target
+      // ultra-wide / 4K displays. Without these, `.container` is hard-capped
+      // at 1400px (2xl) and ~1200px of whitespace shows on each side at 3840px.
+      screens: {
+        "3xl": "1800px",
+        "4xl": "2400px",
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

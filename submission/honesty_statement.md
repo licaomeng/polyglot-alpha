@@ -10,7 +10,7 @@ A pre-submission audit (§5.47) catalogued 31 mock/stub paths across the codebas
 |-----------------------------|-------------------------------|-------------------------------------------------------------|
 | RSS ingestion               | Fixture events                | Real multi-source RSS pull (Caixin / Xinhua / Nikkei / etc) |
 | Auction transactions        | Mocked log lines              | Real Arc TXs against `TranslationAuction` (re-deployed)     |
-| Agent bids                  | Hard-coded LLM responses      | Real LLM calls per agent (DeepSeek / Gemini / Llama / Qwen) |
+| Agent bids                  | Hard-coded LLM responses      | Real LLM calls per seeder (3 personas, all on Anthropic Claude Haiku 4.5; prompts/temps/strategies differ — not the model) |
 | Judge panel                 | Stub scores                   | Real 11-judge LLM evaluation with hard / soft gates         |
 | On-chain anchor             | Mock TX hash                  | Real `QuestionRegistry.commitQuestion` on Arc               |
 | Polymarket submission       | Always-mock                   | Real Gamma API call in `dry_run` by default; opt-in real    |
@@ -38,7 +38,7 @@ These accept real calls, store real events, and can be independently queried. Ga
 
 ### Real off-chain
 
-- **Four translator agents with genuinely different LLM backbones.** DeepSeek-V3, Gemini-1.5-pro, Llama-3.3-70B via OpenRouter, Qwen-2.5. Each has its own wallet, its own prompt, its own deterministic bid strategy. The LLM bindings call real APIs; the bid strategies are coded (not random).
+- **Three reference seeder agents — same backbone, distinct personas.** Seeder Alpha (macro), Seeder Beta (geopolitics), Seeder Gamma (markets). All three run on Anthropic Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) via the Anthropic SDK direct; differentiation is by prompt, temperature, and bid-strategy heuristic. Each has its own wallet, its own deterministic bid strategy, and registers through the same public SDK that any external operator would use. Backbone homogeneity for the seeders is acceptable because the 11-judge panel is what enforces independence (heterogeneous judges: Haiku for MQM, sentence-transformers for D8, sacrebleu for BLEU, COMET QE). Legacy class names `GeminiAgent` / `DeepSeekAgent` / `QwenAgent` are re-exported from `polyglot_alpha.agents` so wallet derivation stays stable across the rename — they are not Gemini/DeepSeek/Qwen models.
 - **Eleven independent judges.** Three translation judges (BLEU-MQM, COMET reference-free, LLM-MQM) and eight style-alignment judges (D1–D8). Each judge is a separate Python module under `polyglot_alpha/judges/` with its own LLM binding or rule-based logic.
 - **5-layer translation pipeline.** Source Analysts → Debate → Synthesis → Risk Panel → Output. Implemented in `polyglot_alpha/translators.py`, `synthesizer.py`, `analysts.py`.
 - **Polymarket corpus (Component +11).** 5K+ questions scraped from gamma-api, embedded with `sentence-transformers/all-MiniLM-L6-v2`, FAISS-indexed, distilled into `style_guide.md` + `few_shots.json` + `patterns_report.md`. Rebuild scripts are in the repo.

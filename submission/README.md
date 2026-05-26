@@ -34,7 +34,7 @@ Single-person submission. Field 6 on the Google form = `1 (Solo)`.
 
 - **On-chain (Arc testnet, chain `5042002`):** 6 deployed Solidity contracts (`TranslationAuction`, `QuestionRegistry`, `BuilderFeeRouter`, `ReputationRegistry`, `JudgePanel`, `MockUSDC`) — all hardened with `ReentrancyGuard`. Toolchain: Foundry.
 - **Off-chain orchestrator:** Python 3.14, FastAPI, async asyncio state machine, SSE for live UI updates.
-- **Translator agents (4):** DeepSeek-V3, Gemini-1.5-pro, Llama-3.3-70B (via OpenRouter), Qwen-2.5 — each with its own wallet, prompt, and bid strategy.
+- **Reference seeder agents (3):** Seeder Alpha / Beta / Gamma — all on Anthropic Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) via the Anthropic SDK direct. Persona differentiation comes from distinct prompts, temperatures, and bid-strategy heuristics (macro / geopolitics / markets), not from model heterogeneity. The legacy file names `{gemini,deepseek,qwen}_agent.py` are retained so wallet derivation and persisted bid records stay stable across the rename to `SeederAlpha/Beta/Gamma`.
 - **11-judge panel:** 3 translation judges (BLEU-weighted MQM, COMET reference-free, LLM-MQM) + 8 style-alignment judges (D1 structural, D2 stylistic-embedding kNN, D3 framing, D4 granularity, D5 resolution clarity, D6 source reliability, D7 leading/leakage entropy, D8 duplicate FAISS kNN).
 - **Corpus (+11):** 5K+ Polymarket questions scraped from gamma-api, embedded with `sentence-transformers/all-MiniLM-L6-v2`, FAISS-indexed, distilled into `style_guide.md` + `few_shots.json` + `patterns_report.md`.
 - **UI:** Next.js 14 (App Router) + Tailwind + shadcn/ui + React Flow 12 (workflow DAG) + Framer Motion (7-phase timeline) + recharts + viem.
@@ -46,7 +46,7 @@ Single-person submission. Field 6 on the Google form = `1 (Solo)`.
 |-----|------------------------|---------------------------------|
 | 1   | Event Watcher          | Implemented (RSS + cross-ref)   |
 | 2   | TranslationAuction.sol | Deployed (Arc testnet)          |
-| 3   | Translator Agents (4)  | Implemented (mock-strategy bidders, real LLM bindings) |
+| 3   | Reference Seeders (3)  | Implemented — 3 personas, real Anthropic Claude Haiku 4.5 calls; external operators register via the public SDK |
 | 4   | 5-Layer Pipeline       | Implemented                     |
 | 5   | 11-Judge Panel         | Implemented                     |
 | 6   | QuestionRegistry.sol   | Deployed (Arc testnet)          |
@@ -79,8 +79,8 @@ Funded deployer / demo wallet: `0x928a7f8b37898e51E368D26869dc860DD7BF9390`
 | Field                 | URL                                              |
 |-----------------------|--------------------------------------------------|
 | GitHub source code    | `https://github.com/licaomeng/polyglot-alpha`    |
-| Live demo             | `TODO_VERCEL_URL` (Vercel deployment in progress)|
-| Loom video demo (≤3 min) | `TODO_LOOM_URL`                               |
+| Live demo             | Local-only for the hackathon submission — `http://localhost:3001` against the FastAPI orchestrator on `:8000`. Vercel deployment deferred to Phase 2 (requires hosted backend + secrets management). |
+| Video demo (≤3 min)   | `https://drive.google.com/file/d/19P5n295BI4Qkv64Bkv2Kk9u6HKg90yqI/view?usp=sharing` |
 
 ## Submission form quick-fill
 
@@ -92,10 +92,10 @@ Funded deployer / demo wallet: `0x928a7f8b37898e51E368D26869dc860DD7BF9390`
 | 7. Team Members Names     | `licaomeng`                                                                             |
 | 8. Problem Statement      | See `submission/qa.md` Q1                                                               |
 | 9. Project Description    | See this README + `submission/architecture.md`                                          |
-| 10. Traction              | 5 deployed Arc-testnet contracts; 4 multi-LLM agents bidding USDC; 11-judge attestation pipeline running end-to-end; UI deployed; corpus indexed (5K questions). See `submission/qa.md` Q4. |
+| 10. Traction              | 5 deployed Arc-testnet contracts (+ MockUSDC); 3 reference seeder agents bidding USDC on real auctions; 11-judge attestation pipeline running end-to-end; UI live locally with 7 routes; corpus indexed (75,897 historical Polymarket markets, FAISS). See `submission/qa.md` Q4. |
 | 11. Source Code           | `https://github.com/licaomeng/polyglot-alpha`                                            |
-| 12. Project Live          | `TODO_VERCEL_URL`                                                                       |
-| 13. Video Demo            | `TODO_LOOM_URL` (script in `submission/demo_script.md`)                                  |
+| 12. Project Live          | Local-only at submission time (`localhost:3001` UI + `localhost:8000` API); Vercel deferred to Phase 2 |
+| 13. Video Demo            | `https://drive.google.com/file/d/19P5n295BI4Qkv64Bkv2Kk9u6HKg90yqI/view?usp=sharing` (script in `submission/demo_script.md`) |
 | 14. Arc OSS opt-in        | ☑ Yes — MIT-licensed, reusable primitives exposed                                        |
 | 15. Arc OSS narrative     | Submit API spec + reputation EWMA + builder-fee router are forkable primitives. See `submission/qa.md` Q15. |
 

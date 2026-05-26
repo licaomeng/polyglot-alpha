@@ -50,20 +50,11 @@ export function TriggerButton() {
     if (fromLifecycle) setProgressLabel(fromLifecycle);
   }, [latest, busy]);
 
-  useEffect(() => {
-    if (!busy) return;
-    if (latest?.type === "event.finalized" && eventId) {
-      // Slight delay so the user sees the "Done" label before the route change.
-      navigateTimerRef.current = setTimeout(() => {
-        router.push(`/events/${eventId}`);
-        setBusy(false);
-        setTriggered(true);
-      }, 800);
-    }
-    return () => {
-      if (navigateTimerRef.current) clearTimeout(navigateTimerRef.current);
-    };
-  }, [busy, latest, eventId, router]);
+  // NOTE: removed the legacy `event.finalized → router.push` effect that used
+  // to do a delayed redirect to the triggered event. The click handler already
+  // navigates immediately after the POST returns (line 78+), and this effect
+  // was hijacking the URL whenever ANY event finalized while the user was
+  // browsing /operators / /leaderboard / etc. — see G1 finding C1.
 
   const label = useMemo(() => {
     if (!busy) return triggered ? "Triggered" : "Trigger live demo";

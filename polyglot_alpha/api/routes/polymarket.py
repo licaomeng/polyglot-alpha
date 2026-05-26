@@ -36,7 +36,7 @@ from ...persistence.models import (
     QualityScore,
     Translation,
 )
-from ..deps import get_db
+from ..deps import get_db, utc_iso
 
 logger = logging.getLogger(__name__)
 
@@ -252,11 +252,7 @@ async def submit_real(
             "market_url": submission.market_url,
             "status": submission.status,
             "is_simulated": submission.is_simulated,
-            "submitted_at": (
-                submission.submitted_at.isoformat()
-                if submission.submitted_at
-                else None
-            ),
+            "submitted_at": utc_iso(submission.submitted_at),
         },
         "mode": getattr(result, "mode", "real"),
         "payload": getattr(result, "payload", {}),

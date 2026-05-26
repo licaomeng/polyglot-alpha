@@ -18,7 +18,7 @@ from ...persistence.models import (
     Translation,
     Event,
 )
-from ..deps import get_db
+from ..deps import get_db, utc_iso as _utc_iso
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -59,8 +59,8 @@ def _serialize_event_summary(event: Event) -> dict[str, Any]:
         "language": event.language,
         "title": event.title,
         "headline": event.title,
-        "triggered_at": event.triggered_at.isoformat() if event.triggered_at else None,
-        "ingestedAt": event.triggered_at.isoformat() if event.triggered_at else None,
+        "triggered_at": _utc_iso(event.triggered_at),
+        "ingestedAt": _utc_iso(event.triggered_at),
         "status": event.status,
         "mode": "mock",
     }
@@ -155,22 +155,12 @@ def _build_phases(
         {"streaming": has_fee_event},
     ]
     timestamps: list[Optional[str]] = [
-        event.triggered_at.isoformat() if event.triggered_at else None,
-        auction.settled_at.isoformat()
-        if auction and auction.settled_at
-        else None,
-        translation.completed_at.isoformat()
-        if translation and translation.completed_at
-        else None,
-        quality.evaluated_at.isoformat()
-        if quality and quality.evaluated_at
-        else None,
-        question.committed_at.isoformat()
-        if question and question.committed_at
-        else None,
-        submission.submitted_at.isoformat()
-        if submission and submission.submitted_at
-        else None,
+        _utc_iso(event.triggered_at),
+        _utc_iso(auction.settled_at) if auction is not None else None,
+        _utc_iso(translation.completed_at) if translation is not None else None,
+        _utc_iso(quality.evaluated_at) if quality is not None else None,
+        _utc_iso(question.committed_at) if question is not None else None,
+        _utc_iso(submission.submitted_at) if submission is not None else None,
         None,
     ]
 
@@ -297,9 +287,7 @@ def _serialize_event_detail(
                     "stake_amount": b.stake_amount,
                     "candidate_hash": b.candidate_hash,
                     "tx_hash": b.tx_hash,
-                    "submitted_at": b.submitted_at.isoformat()
-                    if b.submitted_at
-                    else None,
+                    "submitted_at": _utc_iso(b.submitted_at),
                     "reputation": (
                         rep_by_address[b.agent_address].avg_quality
                         if b.agent_address in rep_by_address
@@ -375,7 +363,7 @@ def list_bids_for_event(
                 "stake_amount": b.stake_amount,
                 "candidate_hash": b.candidate_hash,
                 "tx_hash": b.tx_hash,
-                "submitted_at": b.submitted_at.isoformat() if b.submitted_at else None,
+                "submitted_at": _utc_iso(b.submitted_at),
             }
             for b in bids
         ],
@@ -419,7 +407,7 @@ def list_translations_for_event(
             "translator_address": t.translator_address,
             "pipeline_trace_ipfs": t.pipeline_trace_ipfs,
             "final_question_json": t.final_question_json,
-            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+            "completed_at": _utc_iso(t.completed_at),
         }
         for t in translations
     ]

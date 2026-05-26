@@ -105,7 +105,7 @@ export default function HomePage() {
       <section className="space-y-3">
         <div className="flex items-end justify-between">
           <div>
-            <h2 className="text-lg font-semibold">Pipeline architecture · 7 phases, 10+1 components</h2>
+            <h2 className="text-lg font-semibold">Pipeline architecture · 11 graph nodes across 7 lifecycle phases</h2>
             <p className="text-xs text-muted-foreground">
               Drag to pan, scroll to zoom. Nodes glow when their phase is running on the featured event.
             </p>
@@ -119,7 +119,7 @@ export default function HomePage() {
           <div>
             <h2 className="text-lg font-semibold">Featured events</h2>
             <p className="text-xs text-muted-foreground">
-              Most recent runs — tap to drill into the 7-phase timeline.
+              Most recent runs — tap to drill into the 7-phase lifecycle, 11-node workflow.
             </p>
           </div>
           <Button variant="ghost" size="sm" asChild>

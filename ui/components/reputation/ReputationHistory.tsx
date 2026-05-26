@@ -19,7 +19,16 @@ interface Point {
 }
 
 export function ReputationHistory({ data }: { data: Point[] }) {
-  if (!data?.length) return null;
+  if (!data?.length) {
+    return (
+      <div
+        className="flex h-64 items-center justify-center rounded-md border border-dashed border-border/60 bg-muted/10 text-center text-xs text-muted-foreground"
+        role="status"
+      >
+        No reputation history yet — this agent hasn&apos;t produced fills.
+      </div>
+    );
+  }
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">

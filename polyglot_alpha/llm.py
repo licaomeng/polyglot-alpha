@@ -161,6 +161,51 @@ _ANTHROPIC_SEMA: asyncio.Semaphore | None = None
 _RETRY_AFTER_FALLBACK_SECONDS = 2.0
 _RETRY_AFTER_MAX_RETRIES = 3
 
+# Adaptive-timeout policy: under load (>3 queued waiters) bump the per-call
+# wall-clock budget from the base 60s to a higher ceiling so judges queued
+# behind a full semaphore don't trip ``asyncio.wait_for`` before they ever
+# get a slot. See A2 incident clusters at 05:40:34 / 05:41:07.
+_ANTHROPIC_BASE_TIMEOUT_S = 60.0
+_ANTHROPIC_LOADED_TIMEOUT_S = 120.0
+_ANTHROPIC_QUEUE_DEPTH_THRESHOLD = 3
+_ANTHROPIC_INFLIGHT = 0
+_ANTHROPIC_QUEUED = 0
+
+
+def _anthropic_timeout_multiplier() -> float:
+    """Return ``ANTHROPIC_TIMEOUT_MULTIPLIER`` parsed as float, default 1.0.
+
+    Lets operators boost every Anthropic per-call timeout during high-load
+    demos (e.g. set to ``2.0`` to double everything) without a code change.
+    Invalid values silently fall back to ``1.0``.
+    """
+
+    raw = os.environ.get("ANTHROPIC_TIMEOUT_MULTIPLIER")
+    if not raw:
+        return 1.0
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return 1.0
+    return value if value > 0 else 1.0
+
+
+def _effective_anthropic_timeout() -> float:
+    """Pick base (60s) vs loaded (120s) timeout based on current queue depth.
+
+    If more than ``_ANTHROPIC_QUEUE_DEPTH_THRESHOLD`` callers are currently
+    waiting on the semaphore, the next call gets the loaded budget so a
+    judge stuck behind 5+ inflight calls doesn't time out before it ever
+    acquires a slot. ``ANTHROPIC_TIMEOUT_MULTIPLIER`` is applied last.
+    """
+
+    base = (
+        _ANTHROPIC_LOADED_TIMEOUT_S
+        if _ANTHROPIC_QUEUED > _ANTHROPIC_QUEUE_DEPTH_THRESHOLD
+        else _ANTHROPIC_BASE_TIMEOUT_S
+    )
+    return base * _anthropic_timeout_multiplier()
+
 
 def _get_anthropic_semaphore() -> asyncio.Semaphore:
     """Return the shared semaphore that throttles every Anthropic call.
@@ -299,33 +344,45 @@ class AnthropicLLM:
         # retry, which has historically over-fired (see event 159 log).
         sema = _get_anthropic_semaphore()
         last_exc: Exception | None = None
+        global _ANTHROPIC_INFLIGHT, _ANTHROPIC_QUEUED
         for attempt in range(_RETRY_AFTER_MAX_RETRIES + 1):
-            async with sema:
-                try:
-                    resp = await self._client.messages.create(
-                        model=self.model,
-                        max_tokens=max_tokens,
-                        temperature=temperature,
-                        system=system,
-                        messages=[{"role": "user", "content": user}],
-                    )
-                except Exception as exc:  # noqa: BLE001 - SDK has many error types
-                    status = getattr(exc, "status_code", None)
-                    if status != 429 or attempt >= _RETRY_AFTER_MAX_RETRIES:
-                        raise
-                    last_exc = exc
-                    retry_after = (
-                        _extract_retry_after_seconds(exc)
-                        or _RETRY_AFTER_FALLBACK_SECONDS
-                    )
-                    LOGGER.warning(
-                        "Anthropic 429 (attempt %d/%d) — sleeping %.2fs per Retry-After",
-                        attempt + 1,
-                        _RETRY_AFTER_MAX_RETRIES,
-                        retry_after,
-                    )
+            _ANTHROPIC_QUEUED += 1
+            acquired = False
+            try:
+                async with sema:
+                    _ANTHROPIC_QUEUED -= 1
+                    acquired = True
+                    _ANTHROPIC_INFLIGHT += 1
+                    try:
+                        resp = await self._client.messages.create(
+                            model=self.model,
+                            max_tokens=max_tokens,
+                            temperature=temperature,
+                            system=system,
+                            messages=[{"role": "user", "content": user}],
+                        )
+                    except Exception as exc:  # noqa: BLE001 - SDK has many error types
+                        status = getattr(exc, "status_code", None)
+                        if status != 429 or attempt >= _RETRY_AFTER_MAX_RETRIES:
+                            raise
+                        last_exc = exc
+                        retry_after = (
+                            _extract_retry_after_seconds(exc)
+                            or _RETRY_AFTER_FALLBACK_SECONDS
+                        )
+                        LOGGER.warning(
+                            "Anthropic 429 (attempt %d/%d) — sleeping %.2fs per Retry-After",
+                            attempt + 1,
+                            _RETRY_AFTER_MAX_RETRIES,
+                            retry_after,
+                        )
+                    else:
+                        return resp.content[0].text
+            finally:
+                if acquired:
+                    _ANTHROPIC_INFLIGHT -= 1
                 else:
-                    return resp.content[0].text
+                    _ANTHROPIC_QUEUED -= 1
             # Release the slot before sleeping so other coroutines can
             # make progress while we wait out the server-imposed pause.
             await asyncio.sleep(retry_after)
@@ -374,7 +431,7 @@ async def complete(
                     prompt,
                     temperature=temperature,
                 ),
-                timeout=timeout,
+                timeout=timeout * _anthropic_timeout_multiplier(),
             )
         except LLMError:
             # Fall through to the next backend so callers don't crash on

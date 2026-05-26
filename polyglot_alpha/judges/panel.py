@@ -36,6 +36,14 @@ logger = logging.getLogger(__name__)
 # JudgeResult for that one judge while the rest still aggregate.
 PER_JUDGE_TIMEOUT_S: float = float(os.environ.get("PER_JUDGE_TIMEOUT_S", "60"))
 
+# On a first-attempt timeout we retry once with a wider budget before
+# giving up. Under load, a judge can be stuck behind 5+ in-flight calls
+# on the shared Anthropic semaphore and trip ``PER_JUDGE_TIMEOUT_S`` before
+# ever issuing its request — see A2 incident clusters at 05:40:34 / 05:41:07.
+PER_JUDGE_TIMEOUT_RETRY_S: float = float(
+    os.environ.get("PER_JUDGE_TIMEOUT_RETRY_S", "90")
+)
+
 from polyglot_alpha.judges.style_alignment import (
     judge_d1_structural,
     judge_d2_stylistic,
@@ -210,42 +218,82 @@ async def evaluate(
 
     mqm_backend = mqm_llm_call or llm_call
 
-    tasks = {
-        "bleu": judge_bleu(question, reference_translation),
-        "comet": judge_comet(question),
-        "mqm_llm": judge_mqm_llm(question, llm_call=mqm_backend),
-        "d1_structural": judge_d1_structural(question, llm_call=llm_call),
-        "d2_stylistic": judge_d2_stylistic(question, llm_call=llm_call),
-        "d3_framing": judge_d3_framing(question, llm_call=llm_call),
-        "d4_granularity": judge_d4_granularity(question),
-        "d5_resolution_clarity": judge_d5_resolution_clarity(
+    # Coroutine *factories* (not coroutines) so we can re-invoke a judge on
+    # a timeout-retry without "cannot reuse already awaited coroutine".
+    task_factories: dict[str, Callable[[], Awaitable[Any]]] = {
+        "bleu": lambda: judge_bleu(question, reference_translation),
+        "comet": lambda: judge_comet(question),
+        "mqm_llm": lambda: judge_mqm_llm(question, llm_call=mqm_backend),
+        "d1_structural": lambda: judge_d1_structural(question, llm_call=llm_call),
+        "d2_stylistic": lambda: judge_d2_stylistic(question, llm_call=llm_call),
+        "d3_framing": lambda: judge_d3_framing(question, llm_call=llm_call),
+        "d4_granularity": lambda: judge_d4_granularity(question),
+        "d5_resolution_clarity": lambda: judge_d5_resolution_clarity(
             question, llm_call=llm_call
         ),
-        "d6_source_reliability": judge_d6_source_reliability(question, llm_call=llm_call),
-        "d7_leading_check": judge_d7_leading_check(question, llm_call=llm_call),
-        "d8_duplicate_detection": judge_d8_duplicate_detection(
+        "d6_source_reliability": lambda: judge_d6_source_reliability(
+            question, llm_call=llm_call
+        ),
+        "d7_leading_check": lambda: judge_d7_leading_check(
+            question, llm_call=llm_call
+        ),
+        "d8_duplicate_detection": lambda: judge_d8_duplicate_detection(
             question, index_path=d8_index_path
         ),
     }
+    # Best-effort event_id correlation for log lines; missing on bare
+    # PanelQuestion instances so the log just falls back to "?".
+    event_id = getattr(question, "event_id", None) or "?"
 
-    logger.info("panel.evaluate: dispatching %d judges", len(tasks))
+    logger.info(
+        "panel.evaluate: [event_id=%s] dispatching %d judges",
+        event_id,
+        len(task_factories),
+    )
 
-    async def _run_one(name: str, coro: Awaitable[Any]) -> Any:
+    async def _run_one(name: str, factory: Callable[[], Awaitable[Any]]) -> Any:
         """Cap a single judge at ``PER_JUDGE_TIMEOUT_S`` so one hung LLM /
-        model load cannot stall the whole panel."""
+        model load cannot stall the whole panel.
+
+        On a transient ``TimeoutError`` we retry **once** with the wider
+        ``PER_JUDGE_TIMEOUT_RETRY_S`` budget before falling back to the
+        soft-skip / hard-fail JudgeResult. This catches the common case
+        where a judge was queued behind a full Anthropic semaphore.
+        """
 
         try:
             res = await asyncio.wait_for(
-                _maybe_await(coro), timeout=PER_JUDGE_TIMEOUT_S
+                _maybe_await(factory()), timeout=PER_JUDGE_TIMEOUT_S
             )
-            logger.debug("panel.evaluate: judge=%s OK", name)
+            logger.debug("panel.evaluate: [event_id=%s] judge=%s OK", event_id, name)
             return res
         except asyncio.TimeoutError:
             logger.warning(
-                "panel.evaluate: judge=%s timed out after %.0fs",
+                "panel.evaluate: [event_id=%s] judge=%s timed out after %.0fs"
+                " — retrying once with %.0fs budget",
+                event_id,
                 name,
                 PER_JUDGE_TIMEOUT_S,
+                PER_JUDGE_TIMEOUT_RETRY_S,
             )
+            try:
+                res = await asyncio.wait_for(
+                    _maybe_await(factory()), timeout=PER_JUDGE_TIMEOUT_RETRY_S
+                )
+                logger.info(
+                    "panel.evaluate: [event_id=%s] judge=%s recovered on retry",
+                    event_id,
+                    name,
+                )
+                return res
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "panel.evaluate: [event_id=%s] judge=%s timed out again"
+                    " after %.0fs retry budget — soft-skip / hard-fail",
+                    event_id,
+                    name,
+                    PER_JUDGE_TIMEOUT_RETRY_S,
+                )
             # D8 (duplicate detection) and BLEU/COMET (translation gate is
             # "any of them") use external models / corpora that may be
             # unreachable in the demo environment. Treating a timeout as
@@ -260,24 +308,28 @@ async def evaluate(
                     score=1.0,
                     reason=(
                         f"judge timed out after {PER_JUDGE_TIMEOUT_S:.0f}s "
+                        f"+ {PER_JUDGE_TIMEOUT_RETRY_S:.0f}s retry "
                         "(soft-skip; model/corpus unreachable in demo env)"
                     ),
-                    evidence={"timeout": True, "soft_skip": True},
+                    evidence={"timeout": True, "soft_skip": True, "retried": True},
                 )
             return JudgeResult(
                 name=name,
                 passed=False,
                 score=0.0,
-                reason=f"judge timed out after {PER_JUDGE_TIMEOUT_S:.0f}s",
-                evidence={"timeout": True},
+                reason=(
+                    f"judge timed out after {PER_JUDGE_TIMEOUT_S:.0f}s "
+                    f"+ {PER_JUDGE_TIMEOUT_RETRY_S:.0f}s retry"
+                ),
+                evidence={"timeout": True, "retried": True},
             )
 
     awaited = await asyncio.gather(
-        *(_run_one(name, coro) for name, coro in tasks.items()),
+        *(_run_one(name, factory) for name, factory in task_factories.items()),
         return_exceptions=True,
     )
     results: dict[str, JudgeResult] = {}
-    for name, value in zip(tasks.keys(), awaited):
+    for name, value in zip(task_factories.keys(), awaited):
         if isinstance(value, Exception):
             logger.warning(
                 "panel.evaluate: judge=%s crashed: %r", name, value

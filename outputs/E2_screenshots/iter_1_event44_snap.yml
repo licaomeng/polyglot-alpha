@@ -1,0 +1,644 @@
+- generic [active] [ref=e1]:
+  - link "Skip to main content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - link "Polyglot Alpha home" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - img [ref=e8]
+          - generic [ref=e10]: POLYGLOT·α
+          - generic [ref=e11]: v2
+        - navigation "Primary" [ref=e12]:
+          - link "Overview" [ref=e13] [cursor=pointer]:
+            - /url: /
+          - link "Events" [ref=e14] [cursor=pointer]:
+            - /url: /events
+          - link "History" [ref=e15] [cursor=pointer]:
+            - /url: /history
+          - link "Leaderboard" [ref=e16] [cursor=pointer]:
+            - /url: /leaderboard
+          - link "Operators" [ref=e17] [cursor=pointer]:
+            - /url: /operators
+          - link "About" [ref=e18] [cursor=pointer]:
+            - /url: /about
+        - generic [ref=e23]: local-mock
+    - main [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - generic "Mock data" [ref=e28]: Mock
+            - 'generic "Status: Settled (SUBMITTED)" [ref=e30]': Settled
+            - generic [ref=e31]: ingested 8h ago
+            - generic [ref=e32]: sse connected
+          - heading "D1 SQLite pragma verification trigger" [level=1] [ref=e33]
+          - paragraph [ref=e34]: d1-test
+          - generic "Trust indicators" [ref=e35]:
+            - link "View anchor tx on Arc explorer" [ref=e37] [cursor=pointer]:
+              - /url: https://testnet.arcscan.app/tx/0x2726a1a77b4fb3616fd47073cdcd2795780d0656ea89c0dc84754b8d2a7a91cc
+              - generic [ref=e38]:
+                - img [ref=e39]
+                - text: on-chain verified
+                - img [ref=e42]
+            - link "View pipeline trace on IPFS" [ref=e47] [cursor=pointer]:
+              - /url: https://ipfs.io/ipfs/ipfs://pipeline/deepseek/e564b759246d
+              - generic [ref=e48]:
+                - img [ref=e49]
+                - text: ipfs pinned
+                - img [ref=e53]
+            - generic [ref=e58]:
+              - img [ref=e59]
+              - text: provenance
+        - application [ref=e63]:
+          - generic [ref=e65]:
+            - generic:
+              - generic:
+                - img
+                - img:
+                  - group "Edge from ingest to preproc"
+                - img:
+                  - group "Edge from preproc to auction"
+                - img:
+                  - group "Edge from auction to translate"
+                - img:
+                  - group "Edge from translate to debate"
+                - img:
+                  - group "Edge from debate to synth"
+                - img:
+                  - group "Edge from synth to judges"
+                - img:
+                  - group "Edge from judges to anchor"
+                - img:
+                  - group "Edge from anchor to pmsubmit"
+                - img:
+                  - group "Edge from pmsubmit to stream"
+                - img:
+                  - group "Edge from stream to rep"
+              - generic:
+                - group [ref=e66]:
+                  - 'generic "Phase 1: Event Ingest, status completed. Activate to jump to the timeline." [ref=e67] [cursor=pointer]':
+                    - generic [ref=e76]: STEP 01
+                    - generic [ref=e77]: Event Ingest
+                    - generic [ref=e80]: completed
+                - group [ref=e81]:
+                  - 'generic "Phase 2: Preprocess + NER, status completed. Activate to jump to the timeline." [ref=e82] [cursor=pointer]':
+                    - generic [ref=e91]: STEP 02
+                    - generic [ref=e92]: Preprocess + NER
+                    - generic [ref=e95]: completed
+                - group [ref=e96]:
+                  - 'generic "Phase 3: USDC Auction, status completed. Activate to jump to the timeline." [ref=e97] [cursor=pointer]':
+                    - generic [ref=e106]: STEP 03
+                    - generic [ref=e107]: USDC Auction
+                    - generic [ref=e110]: completed
+                - group [ref=e111]:
+                  - 'generic "Phase 4: Translation L1–L5, status completed. Activate to jump to the timeline." [ref=e112] [cursor=pointer]':
+                    - generic [ref=e121]: STEP 04
+                    - generic [ref=e122]: Translation L1–L5
+                    - generic [ref=e125]: completed
+                - group [ref=e126]:
+                  - 'generic "Phase 5: Analyst Debate, status completed. Activate to jump to the timeline." [ref=e127] [cursor=pointer]':
+                    - generic [ref=e136]: STEP 05
+                    - generic [ref=e137]: Analyst Debate
+                    - generic [ref=e140]: completed
+                - group [ref=e141]:
+                  - 'generic "Phase 6: Synthesizer, status completed. Activate to jump to the timeline." [ref=e142] [cursor=pointer]':
+                    - generic [ref=e151]: STEP 06
+                    - generic [ref=e152]: Synthesizer
+                    - generic [ref=e155]: completed
+                - group [ref=e156]:
+                  - 'generic "Phase 7: 11-Judge Panel, status completed. Activate to jump to the timeline." [ref=e157] [cursor=pointer]':
+                    - generic [ref=e166]: STEP 07
+                    - generic [ref=e167]: 11-Judge Panel
+                    - generic [ref=e170]: completed
+                - group [ref=e171]:
+                  - 'generic "Phase 8: Arc Anchor, status completed. Activate to jump to the timeline." [ref=e172] [cursor=pointer]':
+                    - generic [ref=e181]: STEP 08
+                    - generic [ref=e182]: Arc Anchor
+                    - generic [ref=e185]: completed
+                - group [ref=e186]:
+                  - 'generic "Phase 9: Polymarket Submit, status completed. Activate to jump to the timeline." [ref=e187] [cursor=pointer]':
+                    - generic [ref=e196]: STEP 09
+                    - generic [ref=e197]: Polymarket Submit
+                    - generic [ref=e200]: completed
+                - group [ref=e201]:
+                  - 'generic "Phase 10: Revenue Stream, status completed. Activate to jump to the timeline." [ref=e202] [cursor=pointer]':
+                    - generic [ref=e211]: STEP 10
+                    - generic [ref=e212]: Revenue Stream
+                    - generic [ref=e215]: completed
+                - group [ref=e216]:
+                  - 'generic "Phase 11: Reputation Update, status completed. Activate to jump to the timeline." [ref=e217] [cursor=pointer]':
+                    - generic [ref=e226]: STEP 11
+                    - generic [ref=e227]: Reputation Update
+                    - generic [ref=e230]: completed
+          - img
+          - generic "Control Panel" [ref=e231]:
+            - button "Zoom In" [ref=e232] [cursor=pointer]:
+              - img [ref=e233]
+            - button "Zoom Out" [ref=e235] [cursor=pointer]:
+              - img [ref=e236]
+            - button "Fit View" [ref=e238] [cursor=pointer]:
+              - img [ref=e239]
+        - generic [ref=e242]:
+          - heading "Phase timeline" [level=2] [ref=e243]
+          - list [ref=e244]:
+            - listitem [ref=e245]:
+              - generic [ref=e250]:
+                - button "Spotlight phase Event Ingestion on the DAG overview" [ref=e251] [cursor=pointer]:
+                  - generic [ref=e252]:
+                    - generic [ref=e253]:
+                      - generic [ref=e254]: "01"
+                      - heading "Event Ingestion" [level=3] [ref=e256]
+                    - generic [ref=e257]: Done
+                - generic [ref=e259]:
+                  - generic [ref=e260]:
+                    - generic [ref=e261]:
+                      - button "Explain phase Event Ingestion" [ref=e263] [cursor=pointer]:
+                        - img [ref=e264]
+                      - generic [ref=e266]: hover the (i) for what this phase does
+                    - generic "Event Ingestion progress" [ref=e267]:
+                      - generic [ref=e268]:
+                        - generic [ref=e269]:
+                          - img [ref=e270]
+                          - text: Event Ingestion · 0s elapsed
+                        - generic [ref=e273]: ~5s remaining
+                      - progressbar [ref=e274]
+                  - generic [ref=e275]:
+                    - paragraph [ref=e276]: "Source: d1-test"
+                    - paragraph [ref=e277]: "Headline: D1 SQLite pragma verification trigger"
+            - listitem [ref=e278]:
+              - generic [ref=e283]:
+                - button "Spotlight phase USDC Auction on the DAG overview" [ref=e284] [cursor=pointer]:
+                  - generic [ref=e285]:
+                    - generic [ref=e286]:
+                      - generic [ref=e287]: "02"
+                      - heading "USDC Auction" [level=3] [ref=e289]
+                    - generic [ref=e290]: Done
+                - generic [ref=e292]:
+                  - generic [ref=e293]:
+                    - generic [ref=e294]:
+                      - button "Explain phase USDC Auction" [ref=e296] [cursor=pointer]:
+                        - img [ref=e297]
+                      - generic [ref=e299]: hover the (i) for what this phase does
+                    - generic "USDC Auction progress" [ref=e300]:
+                      - generic [ref=e301]:
+                        - generic [ref=e302]:
+                          - img [ref=e303]
+                          - text: USDC Auction · 0s elapsed
+                        - generic [ref=e306]: ~30s remaining
+                      - progressbar [ref=e307]
+                  - generic [ref=e308]:
+                    - table "USDC auction bids" [ref=e310]:
+                      - rowgroup [ref=e311]:
+                        - row "Agent Bid (USDC) Rep." [ref=e312]:
+                          - columnheader "Agent" [ref=e313]
+                          - columnheader "Bid (USDC)" [ref=e314]
+                          - columnheader "Rep." [ref=e315]
+                          - columnheader [ref=e316]
+                      - rowgroup [ref=e317]:
+                        - row "0x5554…E7F6 $0.75 0.00" [ref=e318]:
+                          - cell "0x5554…E7F6" [ref=e319]
+                          - cell "$0.75" [ref=e320]
+                          - cell "0.00" [ref=e321]
+                          - cell [ref=e322]
+                        - row "0x396B…51f4 $0.65 0.00" [ref=e323]:
+                          - cell "0x396B…51f4" [ref=e324]
+                          - cell "$0.65" [ref=e325]
+                          - cell "0.00" [ref=e326]
+                          - cell [ref=e327]
+                        - row "0x144d…Eb4A $0.32 0.85 Auction winner" [ref=e328]:
+                          - cell "0x144d…Eb4A" [ref=e329]
+                          - cell "$0.32" [ref=e330]
+                          - cell "0.85" [ref=e331]
+                          - cell "Auction winner" [ref=e332]:
+                            - generic "Auction winner" [ref=e333]:
+                              - img [ref=e334]
+                              - text: Winner
+                    - generic [ref=e341]:
+                      - generic [ref=e342]: settle tx
+                      - link "View transaction 0x9551b1cc…e350b1 on Arc explorer (opens in new tab)" [ref=e343] [cursor=pointer]:
+                        - /url: https://testnet.arcscan.app/tx/0x9551b1ccaa1d0a5051d98b7ddebb2f1179313318b53e9aabaeadadf411e350b1
+                        - text: 0x9551b1cc…e350b1
+                        - img [ref=e344]
+                      - generic "Live data" [ref=e348]: Live
+            - listitem [ref=e350]:
+              - generic [ref=e355]:
+                - button "Spotlight phase Translation Pipeline on the DAG overview" [ref=e356] [cursor=pointer]:
+                  - generic [ref=e357]:
+                    - generic [ref=e358]:
+                      - generic [ref=e359]: "03"
+                      - heading "Translation Pipeline" [level=3] [ref=e361]
+                    - generic [ref=e362]: Done
+                - generic [ref=e364]:
+                  - generic [ref=e365]:
+                    - generic [ref=e366]:
+                      - button "Explain phase Translation Pipeline" [ref=e368] [cursor=pointer]:
+                        - img [ref=e369]
+                      - generic [ref=e371]: hover the (i) for what this phase does
+                    - generic "Translation Pipeline progress" [ref=e372]:
+                      - generic [ref=e373]:
+                        - generic [ref=e374]:
+                          - img [ref=e375]
+                          - text: Translation Pipeline · 0s elapsed
+                        - generic [ref=e378]: ~1m remaining
+                      - progressbar [ref=e379]
+                  - generic [ref=e380]:
+                    - list "Translation pipeline sub-phases" [ref=e381]:
+                      - listitem [ref=e382]: L1 Analysts
+                      - listitem [ref=e384]: L2 Translators
+                      - listitem [ref=e386]: L3 Critics
+                      - listitem [ref=e388]: L4 Moderator
+                      - listitem [ref=e390]: L5 Refine
+                    - generic [ref=e392]:
+                      - paragraph [ref=e393]: winner · —
+                      - link "ipfs · ipfs://pipelin…" [ref=e394] [cursor=pointer]:
+                        - /url: https://ipfs.io/ipfs/ipfs://pipeline/deepseek/e564b759246d
+                        - text: ipfs · ipfs://pipelin…
+                        - img [ref=e395]
+            - listitem [ref=e399]:
+              - generic [ref=e404]:
+                - button "Spotlight phase 11-Judge Panel on the DAG overview" [ref=e405] [cursor=pointer]:
+                  - generic [ref=e406]:
+                    - generic [ref=e407]:
+                      - generic [ref=e408]: "04"
+                      - heading "11-Judge Panel" [level=3] [ref=e410]
+                    - generic [ref=e411]: Done
+                - generic [ref=e413]:
+                  - generic [ref=e414]:
+                    - generic [ref=e415]:
+                      - button "Explain phase 11-Judge Panel" [ref=e417] [cursor=pointer]:
+                        - img [ref=e418]
+                      - generic [ref=e420]: hover the (i) for what this phase does
+                    - generic "11-Judge Panel progress" [ref=e421]:
+                      - generic [ref=e422]:
+                        - generic [ref=e423]:
+                          - img [ref=e424]
+                          - text: 11-Judge Panel · 0s elapsed
+                        - generic [ref=e427]: ~1m remaining
+                      - progressbar [ref=e428]
+                  - generic [ref=e429]:
+                    - generic [ref=e430]:
+                      - generic [ref=e431]: Translation quality (BLEU / COMET / MQM)
+                      - generic [ref=e432]:
+                        - generic [ref=e433]:
+                          - generic [ref=e434]:
+                            - generic [ref=e435]: JUDGE_1
+                            - generic [ref=e436]: "0.85"
+                          - generic [ref=e440]:
+                            - generic [ref=e441]: threshold 0.70
+                            - generic [ref=e442]: PASS
+                        - generic [ref=e443]:
+                          - generic [ref=e444]:
+                            - generic [ref=e445]: JUDGE_2
+                            - generic [ref=e446]: "0.85"
+                          - generic [ref=e450]:
+                            - generic [ref=e451]: threshold 0.70
+                            - generic [ref=e452]: PASS
+                        - generic [ref=e453]:
+                          - generic [ref=e454]:
+                            - generic [ref=e455]: JUDGE_3
+                            - generic [ref=e456]: "0.85"
+                          - generic [ref=e460]:
+                            - generic [ref=e461]: threshold 0.70
+                            - generic [ref=e462]: PASS
+                        - generic [ref=e463]:
+                          - generic [ref=e464]:
+                            - generic [ref=e465]: JUDGE_4
+                            - generic [ref=e466]: "0.85"
+                          - generic [ref=e470]:
+                            - generic [ref=e471]: threshold 0.70
+                            - generic [ref=e472]: PASS
+                        - generic [ref=e473]:
+                          - generic [ref=e474]:
+                            - generic [ref=e475]: JUDGE_5
+                            - generic [ref=e476]: "0.85"
+                          - generic [ref=e480]:
+                            - generic [ref=e481]: threshold 0.70
+                            - generic [ref=e482]: PASS
+                        - generic [ref=e483]:
+                          - generic [ref=e484]:
+                            - generic [ref=e485]: JUDGE_6
+                            - generic [ref=e486]: "0.85"
+                          - generic [ref=e490]:
+                            - generic [ref=e491]: threshold 0.70
+                            - generic [ref=e492]: PASS
+                        - generic [ref=e493]:
+                          - generic [ref=e494]:
+                            - generic [ref=e495]: JUDGE_7
+                            - generic [ref=e496]: "0.85"
+                          - generic [ref=e500]:
+                            - generic [ref=e501]: threshold 0.70
+                            - generic [ref=e502]: PASS
+                        - generic [ref=e503]:
+                          - generic [ref=e504]:
+                            - generic [ref=e505]: JUDGE_8
+                            - generic [ref=e506]: "0.85"
+                          - generic [ref=e510]:
+                            - generic [ref=e511]: threshold 0.70
+                            - generic [ref=e512]: PASS
+                    - generic [ref=e513]:
+                      - generic [ref=e515]:
+                        - text: Style + Alignment (D1–D8)
+                        - generic [ref=e516]:
+                          - img [ref=e517]
+                          - text: hard gate
+                      - generic [ref=e519]:
+                        - generic "STYLE_JUDGE_1 score 1.00" [ref=e520]:
+                          - button "STYLE_JUDGE_1" [ref=e521] [cursor=pointer]:
+                            - generic [ref=e522]: STYLE_JUDGE_1
+                            - img [ref=e523]
+                          - generic [ref=e525]:
+                            - generic [ref=e526]: "1.00"
+                            - generic [ref=e527]: pass
+                        - generic "STYLE_JUDGE_2 score 1.00" [ref=e528]:
+                          - button "STYLE_JUDGE_2" [ref=e529] [cursor=pointer]:
+                            - generic [ref=e530]: STYLE_JUDGE_2
+                            - img [ref=e531]
+                          - generic [ref=e533]:
+                            - generic [ref=e534]: "1.00"
+                            - generic [ref=e535]: pass
+                        - generic "STYLE_JUDGE_3 score 1.00" [ref=e536]:
+                          - button "STYLE_JUDGE_3" [ref=e537] [cursor=pointer]:
+                            - generic [ref=e538]: STYLE_JUDGE_3
+                            - img [ref=e539]
+                          - generic [ref=e541]:
+                            - generic [ref=e542]: "1.00"
+                            - generic [ref=e543]: pass
+                    - generic [ref=e544]: Closed IP — Judge weights and prompt internals are intentionally not exposed.
+                    - generic [ref=e545]:
+                      - img [ref=e546]
+                      - generic [ref=e550]: Verdict · PASS
+            - listitem [ref=e551]:
+              - generic [ref=e556]:
+                - button "Spotlight phase On-chain Anchor on the DAG overview" [ref=e557] [cursor=pointer]:
+                  - generic [ref=e558]:
+                    - generic [ref=e559]:
+                      - generic [ref=e560]: "05"
+                      - heading "On-chain Anchor" [level=3] [ref=e562]
+                    - generic [ref=e563]: Done
+                - generic [ref=e565]:
+                  - generic [ref=e566]:
+                    - generic [ref=e567]:
+                      - button "Explain phase On-chain Anchor" [ref=e569] [cursor=pointer]:
+                        - img [ref=e570]
+                      - generic [ref=e572]: hover the (i) for what this phase does
+                    - generic "On-chain Anchor progress" [ref=e573]:
+                      - generic [ref=e574]:
+                        - generic [ref=e575]:
+                          - img [ref=e576]
+                          - text: On-chain Anchor · 0s elapsed
+                        - generic [ref=e579]: ~15s remaining
+                      - progressbar [ref=e580]
+                  - generic [ref=e581]:
+                    - generic [ref=e582]:
+                      - generic [ref=e583]: anchor tx
+                      - link "View transaction 0x2726a1a7…7a91cc on Arc explorer (opens in new tab)" [ref=e584] [cursor=pointer]:
+                        - /url: https://testnet.arcscan.app/tx/0x2726a1a77b4fb3616fd47073cdcd2795780d0656ea89c0dc84754b8d2a7a91cc
+                        - text: 0x2726a1a7…7a91cc
+                        - img [ref=e585]
+                      - generic "Mock data" [ref=e589]: Mock
+                    - link "reasoning · ipfs · ipfs://pipelin…" [ref=e591] [cursor=pointer]:
+                      - /url: https://ipfs.io/ipfs/ipfs://pipeline/deepseek/e564b759246d
+                      - text: reasoning · ipfs · ipfs://pipelin…
+                      - img [ref=e592]
+            - listitem [ref=e596]:
+              - generic [ref=e601]:
+                - button "Spotlight phase Polymarket V2 Submission on the DAG overview" [ref=e602] [cursor=pointer]:
+                  - generic [ref=e603]:
+                    - generic [ref=e604]:
+                      - generic [ref=e605]: "06"
+                      - heading "Polymarket V2 Submission" [level=3] [ref=e607]
+                    - generic [ref=e608]: Done
+                - generic [ref=e610]:
+                  - generic [ref=e611]:
+                    - generic [ref=e612]:
+                      - button "Explain phase Polymarket V2 Submission" [ref=e614] [cursor=pointer]:
+                        - img [ref=e615]
+                      - generic [ref=e617]: hover the (i) for what this phase does
+                    - generic "Polymarket V2 Submission progress" [ref=e618]:
+                      - generic [ref=e619]:
+                        - generic [ref=e620]:
+                          - img [ref=e621]
+                          - text: Polymarket V2 Submission · 0s elapsed
+                        - generic [ref=e624]: ~10s remaining
+                      - progressbar [ref=e625]
+                  - generic [ref=e626]:
+                    - generic [ref=e627]:
+                      - generic "Dry-run submission (not on prod)" [ref=e628]: DRY_RUN
+                      - generic "Polymarket builder code 0xa93402f8ae6ac4a7b1d863d80145daa74f89cb4834fc0d86b36c1e4e1d6fbeb1" [ref=e630]:
+                        - img [ref=e631]
+                        - text: 0xa934…beb1
+                    - link "https://polymarket.com/dryrun/dryrun-b4286f8932cb" [ref=e634] [cursor=pointer]:
+                      - /url: https://polymarket.com/dryrun/dryrun-b4286f8932cb
+                      - text: https://polymarket.com/dryrun/dryrun-b4286f8932cb
+                      - img [ref=e635]
+                    - generic [ref=e640]:
+                      - img [ref=e641]
+                      - generic [ref=e643]:
+                        - paragraph [ref=e644]: This submission was simulated (dry-run). Promote it to Polymarket production?
+                        - button "Submit Real" [ref=e645] [cursor=pointer]
+            - listitem [ref=e646]:
+              - generic [ref=e651]:
+                - button "Spotlight phase Streaming Revenue on the DAG overview" [ref=e652] [cursor=pointer]:
+                  - generic [ref=e653]:
+                    - generic [ref=e654]:
+                      - generic [ref=e655]: "07"
+                      - heading "Streaming Revenue" [level=3] [ref=e657]
+                    - generic [ref=e658]: Done
+                - generic [ref=e660]:
+                  - generic [ref=e661]:
+                    - generic [ref=e662]:
+                      - button "Explain phase Streaming Revenue" [ref=e664] [cursor=pointer]:
+                        - img [ref=e665]
+                      - generic [ref=e667]: hover the (i) for what this phase does
+                    - generic "Streaming Revenue progress" [ref=e668]:
+                      - generic [ref=e669]:
+                        - generic [ref=e670]:
+                          - img [ref=e671]
+                          - text: Streaming Revenue · 0s elapsed
+                        - generic [ref=e674]: ~1m remaining
+                      - progressbar [ref=e675]
+                  - paragraph [ref=e676]: no fees streamed yet
+        - region "Agent debate" [ref=e678]:
+          - generic [ref=e679]:
+            - generic [ref=e680]:
+              - img [ref=e681]
+              - text: Agent debate (L3 Critics → L4 Moderator → L5 Refine) will appear here once the translation pipeline advances past L2.
+            - button "Show demo data" [ref=e683] [cursor=pointer]
+        - region "Auction explainer" [ref=e684]:
+          - heading "Auction · why this winner" [level=2] [ref=e685]
+          - region "Auction explainer" [ref=e686]:
+            - generic [ref=e687]:
+              - generic [ref=e688]:
+                - heading "USDC Auction · Bid math" [level=3] [ref=e689]
+                - button "Explain auction formula" [ref=e691] [cursor=pointer]:
+                  - img [ref=e692]
+              - paragraph [ref=e694]: Bids scored by reputation-adjusted price. Lowest score wins.
+            - generic [ref=e695]:
+              - generic [ref=e697]:
+                - generic [ref=e698]:
+                  - img "winner" [ref=e699]
+                  - generic [ref=e705]: 0x144d…Eb4A
+                  - generic [ref=e706]: winner
+                - generic [ref=e707]:
+                  - paragraph [ref=e708]: bid
+                  - paragraph [ref=e709]: $0.32
+                - generic [ref=e710]:
+                  - paragraph [ref=e711]: rep.
+                  - paragraph [ref=e712]: "0.85"
+                - generic [ref=e713]:
+                  - paragraph [ref=e714]: stake
+                  - paragraph [ref=e715]: $5.00
+                - generic [ref=e716]:
+                  - paragraph [ref=e717]: score
+                  - paragraph [ref=e718]: "0.3200"
+              - generic [ref=e720]:
+                - generic [ref=e722]: 0x396B…51f4
+                - generic [ref=e723]:
+                  - paragraph [ref=e724]: bid
+                  - paragraph [ref=e725]: $0.65
+                - generic [ref=e726]:
+                  - paragraph [ref=e727]: rep.
+                  - paragraph [ref=e728]: "0.00"
+                - generic [ref=e729]:
+                  - paragraph [ref=e730]: stake
+                  - paragraph [ref=e731]: $5.00
+                - generic [ref=e732]:
+                  - paragraph [ref=e733]: score
+                  - paragraph [ref=e734]: "0.6500"
+              - generic [ref=e736]:
+                - generic [ref=e738]: 0x5554…E7F6
+                - generic [ref=e739]:
+                  - paragraph [ref=e740]: bid
+                  - paragraph [ref=e741]: $0.75
+                - generic [ref=e742]:
+                  - paragraph [ref=e743]: rep.
+                  - paragraph [ref=e744]: "0.00"
+                - generic [ref=e745]:
+                  - paragraph [ref=e746]: stake
+                  - paragraph [ref=e747]: $5.00
+                - generic [ref=e748]:
+                  - paragraph [ref=e749]: score
+                  - paragraph [ref=e750]: "0.7500"
+            - generic [ref=e751]:
+              - paragraph [ref=e752]: Why this winner?
+              - paragraph [ref=e753]:
+                - text: 0x144d…Eb4A won with the lowest reputation-adjusted score ($0.32 /
+                - generic [ref=e754]: max(0.85, 1.0)
+                - text: = 0.3200).
+        - region "Judge breakdown" [ref=e755]:
+          - heading "11-Judge breakdown" [level=2] [ref=e756]
+          - region "11-judge breakdown" [ref=e757]:
+            - generic [ref=e758]:
+              - generic [ref=e759]:
+                - heading "11-Judge Panel · Breakdown" [level=3] [ref=e760]
+                - paragraph [ref=e761]: 3 translation judges (BLEU / COMET / MQM) + 8 style judges (D1–D8). Run in parallel via asyncio.gather.
+              - generic [ref=e762]:
+                - generic [ref=e763]: overall · 0.85
+                - generic [ref=e764]: verdict · PASS
+            - generic [ref=e765]:
+              - paragraph [ref=e766]: Translation judges
+              - generic [ref=e767]:
+                - generic [ref=e769]:
+                  - generic [ref=e770]:
+                    - generic [ref=e771]:
+                      - generic [ref=e772]: BLEU
+                      - button "Explain BLEU" [ref=e774] [cursor=pointer]:
+                        - img [ref=e775]
+                    - img "not available" [ref=e777]
+                  - paragraph [ref=e779]: n/a
+                  - paragraph [ref=e780]: no reference data
+                - generic [ref=e782]:
+                  - generic [ref=e783]:
+                    - generic [ref=e784]:
+                      - generic [ref=e785]: COMET
+                      - button "Explain COMET (Kiwi)" [ref=e787] [cursor=pointer]:
+                        - img [ref=e788]
+                    - img "not available" [ref=e790]
+                  - paragraph [ref=e792]: n/a
+                  - paragraph [ref=e793]: no reference data
+                - generic [ref=e795]:
+                  - generic [ref=e796]:
+                    - generic [ref=e797]:
+                      - generic [ref=e798]: MQM
+                      - button "Explain MQM (Multidimensional Quality Metric)" [ref=e800] [cursor=pointer]:
+                        - img [ref=e801]
+                    - img "not available" [ref=e803]
+                  - paragraph [ref=e805]: n/a
+                  - paragraph [ref=e806]: no reference data
+            - generic [ref=e807]:
+              - paragraph [ref=e808]: Style alignment judges
+              - generic [ref=e809]:
+                - generic [ref=e811]:
+                  - generic [ref=e812]:
+                    - generic [ref=e813]:
+                      - generic [ref=e814]: D1
+                      - button "Explain D1 · Structural" [ref=e816] [cursor=pointer]:
+                        - img [ref=e817]
+                    - img "D1 pending" [ref=e819]
+                  - paragraph [ref=e821]: pending
+                - generic [ref=e823]:
+                  - generic [ref=e824]:
+                    - generic [ref=e825]:
+                      - generic [ref=e826]: D2
+                      - button "Explain D2 · Stylistic" [ref=e828] [cursor=pointer]:
+                        - img [ref=e829]
+                    - img "D2 pending" [ref=e831]
+                  - paragraph [ref=e833]: pending
+                - generic [ref=e835]:
+                  - generic [ref=e836]:
+                    - generic [ref=e837]:
+                      - generic [ref=e838]: D3
+                      - button "Explain D3 · Framing" [ref=e840] [cursor=pointer]:
+                        - img [ref=e841]
+                    - img "D3 pending" [ref=e843]
+                  - paragraph [ref=e845]: pending
+                - generic [ref=e847]:
+                  - generic [ref=e848]:
+                    - generic [ref=e849]:
+                      - generic [ref=e850]: D4
+                      - button "Explain D4 · Granularity" [ref=e852] [cursor=pointer]:
+                        - img [ref=e853]
+                    - img "D4 pending" [ref=e855]
+                  - paragraph [ref=e857]: pending
+                - generic [ref=e859]:
+                  - generic [ref=e860]:
+                    - generic [ref=e861]:
+                      - generic [ref=e862]: D5
+                      - button "Explain D5 · Resolution Clarity" [ref=e864] [cursor=pointer]:
+                        - img [ref=e865]
+                    - img "D5 pending" [ref=e867]
+                  - paragraph [ref=e869]: pending· hard gate
+                - generic [ref=e871]:
+                  - generic [ref=e872]:
+                    - generic [ref=e873]:
+                      - generic [ref=e874]: D6
+                      - button "Explain D6 · Source Reliability" [ref=e876] [cursor=pointer]:
+                        - img [ref=e877]
+                    - img "D6 pending" [ref=e879]
+                  - paragraph [ref=e881]: pending
+                - generic [ref=e883]:
+                  - generic [ref=e884]:
+                    - generic [ref=e885]:
+                      - generic [ref=e886]: D7
+                      - button "Explain D7 · Leading" [ref=e888] [cursor=pointer]:
+                        - img [ref=e889]
+                    - img "D7 pending" [ref=e891]
+                  - paragraph [ref=e893]: pending
+                - generic [ref=e895]:
+                  - generic [ref=e896]:
+                    - generic [ref=e897]:
+                      - generic [ref=e898]: D8
+                      - button "Explain D8 · Duplicate Detection" [ref=e900] [cursor=pointer]:
+                        - img [ref=e901]
+                    - img "D8 pending" [ref=e903]
+                  - paragraph [ref=e905]: pending· hard gate
+            - generic [ref=e906]:
+              - paragraph [ref=e907]: Why this verdict?
+              - paragraph [ref=e908]: All hard gates (D5, D8) passed and the overall quality score cleared the PASS threshold.
+    - contentinfo [ref=e909]:
+      - generic [ref=e910]:
+        - paragraph [ref=e911]: Polyglot Alpha v2 — research demo. Closed-IP evaluators are intentionally redacted.
+        - paragraph [ref=e912]: "backend: http://localhost:8000"
+  - button "Open Next.js Dev Tools" [ref=e918] [cursor=pointer]:
+    - img [ref=e919]
+  - alert [ref=e922]

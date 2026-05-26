@@ -21,7 +21,7 @@ const MECHANISMS = [
   },
   {
     title: "3. Question authoring (operator-defined)",
-    body: "Auction winner authors the Polymarket question with any method — single-shot, multi-agent debate, RAG, fine-tuned LoRAs. Our 4 reference seeders use a critic-moderator-refine debate loop; externals are free to differ.",
+    body: "Auction winner authors the Polymarket question with any method — single-shot, multi-agent debate, RAG, fine-tuned LoRAs. Our 3 reference seeders (Claude Haiku 4.5 with distinct persona prompts) use a critic-moderator-refine debate loop; externals are free to differ.",
     ref: "thesis §5.11–5.18",
   },
   {
@@ -49,7 +49,7 @@ const MECHANISMS = [
 const COMPONENTS: { name: string; role: string }[] = [
   { name: "Event Ingestor", role: "Pulls Xinhua/Caixin RSS + manual triggers" },
   { name: "OperatorRegistry.sol", role: "Open-registration + 100 USDC stake gate" },
-  { name: "Reference Seeders (×4)", role: "Mistral / DeepSeek / Qwen / Llama (bootstrap)" },
+  { name: "Reference Seeders (×3)", role: "Claude Haiku 4.5 personas — Gemini / DeepSeek / Qwen (bootstrap)" },
   { name: "TranslationAuction.sol", role: "Sealed-bid USDC auction on Arc" },
   { name: "ReputationRegistry.sol", role: "Stores per-operator reputation EWMA" },
   { name: "JudgePanel.sol", role: "11-judge consensus aggregator" },
@@ -85,14 +85,15 @@ export default function AboutPage() {
         <p>
           The platform ships with{" "}
           <span className="font-medium text-foreground">
-            4 reference seeder agents
+            3 reference seeder agents
           </span>{" "}
-          (Mistral Large, DeepSeek V3, Qwen 2.5, Llama 3.3) only to bootstrap
-          the auction — they receive no protocol-level preference. Any
-          external operator that out-bids them wins. Our seeders happen to
-          use a critic-moderator-refine debate loop, but the protocol
-          imposes <em>no method requirement</em>: it verifies (bid +
-          candidate_hash + stake), not the path you took to author.
+          (Gemini / DeepSeek / Qwen personas, all backed by Claude Haiku 4.5
+          with distinct prompt + temperature profiles) only to bootstrap the
+          auction — they receive no protocol-level preference. Any external
+          operator that out-bids them wins. Our seeders happen to use a
+          critic-moderator-refine debate loop, but the protocol imposes{" "}
+          <em>no method requirement</em>: it verifies (bid + candidate_hash +
+          stake), not the path you took to author.
         </p>
         <p>
           What makes the auction tradeable rather than gameable is the{" "}
@@ -187,10 +188,10 @@ export default function AboutPage() {
             <p className="text-muted-foreground">
               Commercial license + operator registration:{" "}
               <a
-                href="mailto:licaomeng@gmail.com"
+                href="mailto:operators@polyglot-alpha.example"
                 className="font-mono text-primary hover:underline"
               >
-                licaomeng@gmail.com
+                operators@polyglot-alpha.example
               </a>
               . GitHub:{" "}
               <a

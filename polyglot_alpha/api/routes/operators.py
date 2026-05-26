@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from ...persistence.models import AgentReputation
-from ..deps import get_db
+from ..deps import get_db, utc_iso
 
 logger = logging.getLogger(__name__)
 
@@ -283,6 +283,19 @@ def list_operators(
         select(AgentReputation).order_by(AgentReputation.cumulative_fees.desc())
     ).all()
 
+    # Filter out synthetic mock-bid addresses (e.g. ``0xagent_lo``,
+    # ``0xagent_b``) that were inserted via the ``mock_bids`` trigger path
+    # in tests/smoke flows. These are not real on-chain operators and
+    # should never appear in the public /api/operators listing.
+    def _looks_like_real_address(addr: str) -> bool:
+        return (
+            isinstance(addr, str)
+            and addr.startswith("0x")
+            and "_" not in addr
+            and len(addr) == 42
+        )
+
+    rows = [r for r in rows if _looks_like_real_address(r.agent_address)]
     seen_addresses = {r.agent_address.lower() for r in rows}
     operators: list[dict[str, Any]] = []
 
@@ -297,7 +310,7 @@ def list_operators(
                 "total_bids": r.total_bids,
                 "total_wins": r.total_wins,
                 "cumulative_fees": r.cumulative_fees,
-                "last_updated": r.last_updated.isoformat() if r.last_updated else None,
+                "last_updated": utc_iso(r.last_updated),
             }
         )
 
@@ -349,9 +362,7 @@ def get_operator(
         "total_wins": rep.total_wins if rep else 0,
         "cumulative_fees": rep.cumulative_fees if rep else 0.0,
         "arc_explorer_url": arc_explorer_url,
-        "last_updated": rep.last_updated.isoformat()
-        if rep and rep.last_updated
-        else None,
+        "last_updated": utc_iso(rep.last_updated) if rep else None,
     }
 
 

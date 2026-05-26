@@ -14,6 +14,31 @@ router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
 
 SortKey = Literal["cumulative_fees", "avg_quality", "total_wins", "total_bids"]
 
+# Real on-chain operator addresses are 0x-prefixed 42-char checksum hex.
+# Mock-bid / smoke-test addresses (e.g. ``0xagent_a``, ``0xdead``) are
+# inserted via the ``mock_bids`` trigger path and must never appear in the
+# public leaderboard.
+_REAL_ADDRESS_LENGTH: int = 42
+_REAL_ADDRESS_PREFIX: str = "0x"
+
+
+def _looks_like_real_address(addr: str) -> bool:
+    """Return True for plausible on-chain operator addresses only."""
+
+    if not isinstance(addr, str):
+        return False
+    if not addr.startswith(_REAL_ADDRESS_PREFIX):
+        return False
+    if "_" in addr:
+        return False
+    if len(addr) != _REAL_ADDRESS_LENGTH:
+        return False
+    # Reject obvious test patterns even when length/format happens to match.
+    lower = addr.lower()
+    if lower.startswith("0xdead") or lower.startswith("0xagent"):
+        return False
+    return True
+
 
 def _win_rate(row: AgentReputation) -> float:
     if row.total_bids <= 0:
@@ -30,6 +55,7 @@ def leaderboard(
     """Return a bare JSON array of leaderboard entries (UI contract)."""
 
     rows = session.exec(select(AgentReputation)).all()
+    rows = [r for r in rows if _looks_like_real_address(r.agent_address)]
     key_map: dict[str, Any] = {
         "cumulative_fees": lambda r: r.cumulative_fees,
         "avg_quality": lambda r: r.avg_quality,

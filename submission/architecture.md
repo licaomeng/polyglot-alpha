@@ -8,7 +8,7 @@ Four Mermaid diagrams that render on GitHub. Together they cover the static comp
 graph LR
     subgraph OFFCHAIN["Off-chain (Python + Next.js)"]
         C1["1. Event Watcher<br/><i>polyglot_alpha/ingestion/</i><br/>RSS pool + cross-ref"]
-        C3["3. Translator Agents x4<br/>DeepSeek / Gemini / Llama / Qwen<br/><i>polyglot_alpha/agents/</i>"]
+        C3["3. Reference Seeders x3<br/>Alpha / Beta / Gamma — Claude Haiku 4.5<br/><i>polyglot_alpha/agents/</i>"]
         C4["4. 5-Layer Pipeline<br/>Source Analysts -> Debate -> Synth -> Risk -> Output<br/><i>polyglot_alpha/translators.py</i>"]
         C5["5. 11-Judge Panel<br/>3 translation MQM + 8 style D1-D8<br/><i>polyglot_alpha/judges/</i>"]
         C7["7. Polymarket V2 Client<br/><i>polyglot_alpha/polymarket/</i>"]
@@ -71,7 +71,7 @@ Reading the graph
 flowchart TD
     P0([Mandarin headline arrives])
     P1[Phase 1 - Event Ingestion<br/>multi-source RSS + cross-reference<br/>emit canonical event hash]
-    P2[Phase 2 - USDC Auction<br/>60s sealed-bid window<br/>4 agents bid, reputation-gated<br/>lowest qualified bid wins]
+    P2[Phase 2 - USDC Auction<br/>60s sealed-bid window<br/>3 seeders + N external operators bid, reputation-gated<br/>highest-score qualified bid wins]
     P3[Phase 3 - Translation Pipeline<br/>winning agent runs 5-layer pipeline<br/>K=5 framing variants emitted]
     P4[Phase 4 - 11-Judge Panel<br/>3 translation MQM judges<br/>8 style judges D1-D8<br/>aggregate score + verdict]
     GATE{Pass?<br/>MQM>=80<br/>3 hard gates<br/>4/5 soft gates}
@@ -172,9 +172,9 @@ sequenceDiagram
     O->>R: Fetch latest non-English event
     R-->>O: ConfirmedEvent (Caixin/Xinhua)
     O->>CT: openAuction (real Arc TX)
-    O->>A: 4 agents evaluate_event (real LLM calls)
-    A-->>CT: submitBid x4 (real Arc TX)
-    O->>CT: settleAuction → lowest qualified
+    O->>A: 3 seeders evaluate_event (real Claude Haiku 4.5 calls)
+    A-->>CT: submitBid x3 (real Arc TX)
+    O->>CT: settleAuction → highest reputation-adjusted score
     O->>A: Winner runs 5-layer pipeline (real LLM)
     A-->>O: final_question
     O->>J: evaluate via 11-judge (real LLM)
@@ -201,7 +201,7 @@ What this diagram shows that diagram 2 does not
 |-------------------|--------------------------------------------------------------|
 | 1. Event Watcher  | `polyglot_alpha/ingestion/`                                  |
 | 2. Auction        | `contracts/src/TranslationAuction.sol`                       |
-| 3. Agents         | `polyglot_alpha/agents/{deepseek,gemini,llama,qwen}_agent.py`|
+| 3. Agents         | `polyglot_alpha/agents/{gemini,deepseek,qwen}_agent.py` (3 files; classes aliased to `SeederAlpha`/`SeederBeta`/`SeederGamma`; all back on Claude Haiku 4.5) |
 | 4. Pipeline       | `polyglot_alpha/translators.py`, `synthesizer.py`, `analysts.py` |
 | 5. Judges         | `polyglot_alpha/judges/translation/`, `polyglot_alpha/judges/style_alignment/`, `polyglot_alpha/judges/panel.py` |
 | 6. QuestionRegistry | `contracts/src/QuestionRegistry.sol`                       |

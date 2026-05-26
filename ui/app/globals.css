@@ -73,37 +73,6 @@
     -webkit-overflow-scrolling: touch;
   }
 
-  /* ReactFlow's zoom/fit controls render at 24px square by default —
-     bump them to a touch-friendly 32px on small screens so they pass
-     the 44px guideline once the surrounding padding is included. */
-  @media (max-width: 639px) {
-    .react-flow__controls-button {
-      width: 32px !important;
-      height: 32px !important;
-    }
-  }
-
-  /* Dark-theme contrast for xyflow's zoom/fit controls. xyflow ships
-     light-mode defaults (white bg + dark glyphs); on our dark surface the
-     SVG glyphs were rendering near-white on a near-white button. Force a
-     dark button face + light glyph so the +/− icons are legible. */
-  .react-flow__controls-button {
-    background-color: hsl(var(--card)) !important;
-    border-color: hsl(var(--border) / 0.6) !important;
-    color: hsl(var(--foreground)) !important;
-  }
-  .react-flow__controls-button:hover {
-    background-color: hsl(var(--accent) / 0.5) !important;
-  }
-  .react-flow__controls-button svg,
-  .react-flow__controls-button svg path,
-  .react-flow__controls-button svg polyline,
-  .react-flow__controls-button svg polygon,
-  .react-flow__controls-button svg line {
-    fill: hsl(var(--foreground)) !important;
-    stroke: hsl(var(--foreground)) !important;
-  }
-
   /* Stop iOS auto-zoom on focus by ensuring text inputs render at
      >= 16px on small screens — they shrink back to xs at sm+. */
   @media (max-width: 639px) {
@@ -112,6 +81,50 @@
     select {
       font-size: 16px;
     }
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   xyflow (React Flow) Controls — dark-theme overrides.
+   Placed OUTSIDE @layer so Tailwind never tree-shakes the rules and
+   the chunk order can't lose to xyflow's own stylesheet.
+   ────────────────────────────────────────────────────────────────── */
+.react-flow__controls.react-flow__controls,
+.react-flow .react-flow__controls {
+  background-color: hsl(var(--card) / 0.85) !important;
+  border: 1px solid hsl(var(--border) / 0.6) !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+  box-shadow: none !important;
+}
+.react-flow .react-flow__controls-button,
+button.react-flow__controls-button {
+  background-color: hsl(var(--card)) !important;
+  border: none !important;
+  border-bottom: 1px solid hsl(var(--border) / 0.6) !important;
+  color: hsl(var(--foreground)) !important;
+}
+.react-flow .react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+.react-flow .react-flow__controls-button:hover,
+button.react-flow__controls-button:hover {
+  background-color: hsl(var(--accent) / 0.4) !important;
+}
+.react-flow .react-flow__controls-button svg,
+.react-flow .react-flow__controls-button svg *,
+button.react-flow__controls-button svg,
+button.react-flow__controls-button svg * {
+  fill: hsl(var(--foreground)) !important;
+  stroke: hsl(var(--foreground)) !important;
+}
+
+/* Touch-friendly size bump on small screens for the zoom/fit buttons. */
+@media (max-width: 639px) {
+  .react-flow .react-flow__controls-button,
+  button.react-flow__controls-button {
+    width: 32px !important;
+    height: 32px !important;
   }
 }
 

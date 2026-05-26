@@ -104,6 +104,10 @@ class Bid(SQLModel, table=True):
     stake_amount: float = 5.0
     candidate_hash: Optional[str] = None
     tx_hash: Optional[str] = None
+    # Reputation snapshot at bid-time (0-1). Populated from BidRecord so the
+    # historical view of "what reputation did this bidder have when they
+    # bid?" survives even if AgentReputation rolls forward later.
+    reputation: float = 1.0
     submitted_at: datetime = Field(default_factory=_utcnow, index=True)
 
 

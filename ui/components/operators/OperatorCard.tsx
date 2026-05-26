@@ -7,18 +7,26 @@ import { Cpu, Wallet, Award, TrendingUp } from "lucide-react";
  *
  * Displays the agent's display name + underlying model, wallet address,
  * reputation score, # bids won, and total builder-fee earnings. The `kind`
- * prop distinguishes the 4 in-house reference seeders from external
+ * prop distinguishes the 3 in-house reference seeders from external
  * marketplace participants (currently 0 of them).
+ *
+ * `reputation`, `wins`, and `totalFees` are sourced live from the backend
+ * `/leaderboard` endpoint (joined by wallet address). When the live value
+ * is not yet available — backend still warming up, or the agent has not
+ * appeared on the leaderboard yet — the field renders as "—" rather than a
+ * fabricated number. See `ui/app/operators/page.tsx` for the wiring.
  */
 export interface OperatorCardData {
   name: string;
   model: string;
   address: string;
-  reputation: number;
-  wins: number;
-  totalFees: number;
+  reputation?: number;
+  wins?: number;
+  totalFees?: number;
   kind: "reference" | "external";
 }
+
+const UNKNOWN_PLACEHOLDER = "—";
 
 function shortAddress(address: string): string {
   if (address.length <= 12) return address;
@@ -69,7 +77,9 @@ export function OperatorCard({ operator }: { operator: OperatorCardData }) {
               <Award className="h-2.5 w-2.5" aria-hidden /> Rep
             </p>
             <p className="font-mono text-sm font-semibold text-foreground">
-              {operator.reputation.toFixed(2)}
+              {typeof operator.reputation === "number"
+                ? operator.reputation.toFixed(2)
+                : UNKNOWN_PLACEHOLDER}
             </p>
           </div>
           <div className="rounded-md border border-border/40 bg-background/40 p-2">
@@ -77,7 +87,9 @@ export function OperatorCard({ operator }: { operator: OperatorCardData }) {
               Wins
             </p>
             <p className="font-mono text-sm font-semibold text-foreground">
-              {operator.wins}
+              {typeof operator.wins === "number"
+                ? operator.wins
+                : UNKNOWN_PLACEHOLDER}
             </p>
           </div>
           <div className="rounded-md border border-border/40 bg-background/40 p-2">
@@ -85,7 +97,9 @@ export function OperatorCard({ operator }: { operator: OperatorCardData }) {
               <TrendingUp className="h-2.5 w-2.5" aria-hidden /> Fees
             </p>
             <p className="font-mono text-sm font-semibold text-emerald-300">
-              ${operator.totalFees.toFixed(2)}
+              {typeof operator.totalFees === "number"
+                ? `$${operator.totalFees.toFixed(2)}`
+                : UNKNOWN_PLACEHOLDER}
             </p>
           </div>
         </div>

@@ -78,7 +78,7 @@ function getJson(url) {
   });
 }
 
-async function waitForTerminal(eventId, timeoutMs = 90000) {
+async function waitForTerminal(eventId, timeoutMs = 150000) {
   const t0 = Date.now();
   const terminal = new Set([
     "COMMITTED",
@@ -289,28 +289,62 @@ async function runCycle(browser, cycleN, spec) {
       await page.waitForTimeout(2500);
       await shot("event_detail");
 
-      // Try click any DAG node
+      // Try click any DAG node (visible elements only)
       const dagNodes = await page.$$('[data-testid^="dag-node"], .dag-node, svg g[data-id]');
       findings.push(`- Found ${dagNodes.length} DAG-ish nodes on /events/${eventId}.`);
-      if (dagNodes.length > 0) {
+      let dagClickedAny = false;
+      for (const n of dagNodes.slice(0, 5)) {
         try {
-          await dagNodes[0].click({ timeout: 3000 });
-          await page.waitForTimeout(800);
+          const vis = await n.isVisible();
+          if (!vis) continue;
+          await n.click({ timeout: 2000 });
+          dagClickedAny = true;
+          await page.waitForTimeout(500);
           await shot("dag_click");
+          break;
         } catch (e) {
-          findings.push(`- DAG node click failed: ${e.message}`);
+          /* try next */
         }
       }
+      findings.push(`- DAG click reached visible node: ${dagClickedAny}`);
 
-      // Check Timeline element presence
+      // Check Timeline test ID & sub-phase chips
       const tl = await page.$('[data-testid*="timeline"], .timeline, [class*="Timeline"]');
+      const subPhaseChips = await page.$('[data-testid="sub-phase-chips"]');
+      const debatePanel = await page.$('[data-testid="agent-debate-panel"], [data-testid="agent-debate-panel-empty"]');
       findings.push(`- Timeline element present: ${tl ? "yes" : "no"}`);
+      findings.push(`- sub-phase-chips present: ${subPhaseChips ? "yes" : "no"}`);
+      findings.push(`- agent-debate-panel present: ${debatePanel ? "yes" : "no"}`);
+
+      // Try clicking any tab/button to exercise interactivity
+      const buttons = await page.$$('button[role="tab"], [role="tab"]');
+      findings.push(`- Tabs found: ${buttons.length}`);
+      if (buttons.length > 1) {
+        try {
+          await buttons[1].click({ timeout: 2000 });
+          await page.waitForTimeout(500);
+          await shot("tab_click");
+        } catch (e) {
+          findings.push(`- Tab click failed: ${e.message}`);
+        }
+      }
 
       // Probe DOM for status text matching our final event
       if (finalEvent) {
         const html = await page.content();
         const seen = html.includes(finalEvent.status);
         findings.push(`- Final status \`${finalEvent.status}\` visible in DOM: ${seen}`);
+        // Cross-check phases page
+        const phasesResp = await getJson(
+          `${BASE_API}/events/${eventId}/phases`,
+        );
+        if (phasesResp.body && Array.isArray(phasesResp.body)) {
+          const completed = phasesResp.body.filter((p) => p.status === "completed").length;
+          const failed = phasesResp.body.filter((p) => p.status === "failed").length;
+          findings.push(
+            `- /phases API: ${phasesResp.body.length} total, ${completed} completed, ${failed} failed`,
+          );
+        }
       }
     }
 

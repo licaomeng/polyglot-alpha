@@ -63,7 +63,7 @@ export function SiteHeader() {
             );
           })}
         </nav>
-        <div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
+        <div className="hidden items-center gap-2 text-xs text-muted-foreground lg:flex">
           <span className="relative flex h-2 w-2">
             <span
               className={cn(

@@ -52,6 +52,7 @@ try:  # pragma: no cover - web3 is optional
 except ImportError:  # pragma: no cover
     pass
 
+from .logging_ctx import set_event_id
 from .persistence import session_scope
 from .persistence.models import (
     Auction,
@@ -431,8 +432,18 @@ async def _collect_bids(
     """
 
     if mock_bids is not None:
-        # Tests / demos hand us deterministic bids.
-        return list(mock_bids)
+        # Tests / demos hand us deterministic bids. Assign a deterministic
+        # stub tx_hash to any bid that doesn't already have one so the
+        # downstream UI / leaderboard always sees a non-None hash for the
+        # mock path (matches the mock-mode behavior of auction open/settle).
+        out: list[BidRecord] = []
+        for b in mock_bids:
+            if not b.tx_hash:
+                b.tx_hash = "0x" + hashlib.sha256(
+                    f"mockbid:{event_id}:{b.agent_address}".encode()
+                ).hexdigest()
+            out.append(b)
+        return out
 
     if auction_mode == "real" and event_dict is not None:
         dispatch = _get_dispatch()
@@ -747,9 +758,24 @@ async def _commit_question_onchain(
         # an on-chain tx hash.
         return f"pending-{event_id}", None
     try:
-        return await question_registry.commit_question(
-            event_id, candidate_hash, builder_code, pipeline_trace_ipfs
+        # Hard timeout of 90s so a stuck Arc RPC (sync wait_for_transaction_receipt
+        # blocking the event loop) doesn't pin the lifecycle semaphore forever.
+        # The web3 SDK's own timeout is 60s but it's a sync call inside an async
+        # function — wrapping with asyncio.wait_for at this level is the only
+        # way to guarantee the orchestrator can release the sema on hang.
+        return await asyncio.wait_for(
+            question_registry.commit_question(
+                event_id, candidate_hash, builder_code, pipeline_trace_ipfs
+            ),
+            timeout=90.0,
         )
+    except asyncio.TimeoutError:
+        logger.error(
+            "registerQuestion timed out after 90s (event_id=%s); "
+            "returning pending sentinel so lifecycle can release sema",
+            event_id,
+        )
+        return f"pending-{event_id}", None
     except _CHAIN_RUNTIME_ERRORS as exc:
         logger.error(
             "registerQuestion chain call failed (event_id=%s): %s; "
@@ -1387,6 +1413,10 @@ async def _run_lifecycle_inner(
     content_hash = compute_content_hash(event_dict)
     if precreated_event_id is not None:
         event_id = precreated_event_id
+        # Bind correlation id ASAP so every downstream log line in this
+        # async context (auction, judges, polymarket, fee router) gets
+        # the ``[event_id=N]`` prefix. See polyglot_alpha.logging_ctx.
+        set_event_id(event_id)
         phases_completed = 1
     else:
         with session_scope() as session:
@@ -1414,6 +1444,8 @@ async def _run_lifecycle_inner(
             event_id = event.id
             assert event_id is not None
 
+        # Bind correlation id for subsequent log lines in this lifecycle.
+        set_event_id(event_id)
         await publish(
             "event.created",
             {"event_id": event_id, "content_hash": content_hash},

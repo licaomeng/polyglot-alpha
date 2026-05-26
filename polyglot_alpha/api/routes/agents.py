@@ -14,7 +14,7 @@ from ...persistence.models import (
     BuilderFeeEvent,
     Translation,
 )
-from ..deps import get_db
+from ..deps import get_db, utc_iso
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -49,7 +49,7 @@ def _build_history(
 
     # Walk both streams to produce a unified history.
     for w in settled:
-        ts = w.settled_at.isoformat() if w.settled_at else None
+        ts = utc_iso(w.settled_at)
         while fee_iter and w.settled_at is not None and fee_iter[0][0] <= w.settled_at:
             cumulative_revenue += fee_iter.pop(0)[1]
         points.append(
@@ -64,7 +64,7 @@ def _build_history(
         cumulative_revenue += amount
         points.append(
             {
-                "ts": ts_dt.isoformat(),
+                "ts": utc_iso(ts_dt),
                 "reputation": min(1.0, 0.5 + 0.05 * (len(points) + 1)),
                 "revenue": cumulative_revenue,
             }
@@ -121,7 +121,7 @@ def get_agent(
         "avg_quality": rep.avg_quality,
         "cumulative_fees": rep.cumulative_fees,
         "total_revenue_usdc": rep.cumulative_fees,
-        "last_updated": rep.last_updated.isoformat() if rep.last_updated else None,
+        "last_updated": utc_iso(rep.last_updated),
     }
 
 
@@ -166,7 +166,7 @@ def get_agent_history(
             {
                 "event_id": b.event_id,
                 "bid_amount": b.bid_amount,
-                "submitted_at": b.submitted_at.isoformat() if b.submitted_at else None,
+                "submitted_at": utc_iso(b.submitted_at),
             }
             for b in bids
         ],
@@ -174,14 +174,14 @@ def get_agent_history(
             {
                 "event_id": w.event_id,
                 "winning_bid": w.winning_bid,
-                "settled_at": w.settled_at.isoformat() if w.settled_at else None,
+                "settled_at": utc_iso(w.settled_at),
             }
             for w in wins
         ],
         "translations": [
             {
                 "event_id": t.event_id,
-                "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+                "completed_at": utc_iso(t.completed_at),
                 "pipeline_trace_ipfs": t.pipeline_trace_ipfs,
             }
             for t in translations
@@ -192,7 +192,7 @@ def get_agent_history(
                 "fee_amount": f.fee_amount,
                 "fill_amount": f.fill_amount,
                 "is_simulated": f.is_simulated,
-                "timestamp": f.timestamp.isoformat() if f.timestamp else None,
+                "timestamp": utc_iso(f.timestamp),
             }
             for f in fees
         ],

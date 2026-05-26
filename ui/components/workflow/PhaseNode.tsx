@@ -25,6 +25,7 @@ export function PhaseNode({ data }: { data: NodeData }) {
         data.isActive && "scale-105 border-accent ring-2 ring-accent/60",
       )}
       title="Click to jump to this phase in the timeline"
+      aria-label={`Phase ${data.index ?? "?"}: ${data.label}, status ${status}. Activate to jump to the timeline.`}
     >
       {/* 4-side handles so the snake-pattern grid (row 0 → right, row 1 →
           left, row 2 → right) can connect cleanly: vertical hops use

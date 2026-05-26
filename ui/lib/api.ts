@@ -191,6 +191,14 @@ export interface LeaderboardEntry {
   reputation: number;
   revenueUsd: number;
   winRate: number;
+  // Extra fields returned by the v2 backend `/leaderboard` endpoint. The
+  // primary leaderboard table uses the legacy camelCase fields above; the
+  // operators page consumes the snake_case fields directly to surface
+  // total bids / wins / cumulative builder fees as live, non-mock counts.
+  total_bids?: number;
+  total_wins?: number;
+  avg_quality?: number;
+  cumulative_fees?: number;
 }
 
 export interface TriggerPayload {

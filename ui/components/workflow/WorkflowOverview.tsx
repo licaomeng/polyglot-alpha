@@ -140,7 +140,7 @@ export function WorkflowOverview({ phases }: { phases?: PhaseState[] }) {
   );
 
   return (
-    <div className="h-[420px] w-full rounded-xl border border-border/60 bg-card/40 grid-bg sm:h-[520px] md:h-[600px]">
+    <div className="relative h-[420px] w-full rounded-xl border border-border/60 bg-card/40 grid-bg sm:h-[520px] md:h-[600px]">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -151,7 +151,11 @@ export function WorkflowOverview({ phases }: { phases?: PhaseState[] }) {
         minZoom={0.4}
         maxZoom={1.5}
         panOnDrag
-        zoomOnScroll
+        zoomOnScroll={false}
+        zoomOnPinch={true}
+        panOnScroll={false}
+        preventScrolling={false}
+        edgesFocusable={false}
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={24} color="hsl(var(--border))" />
@@ -160,6 +164,12 @@ export function WorkflowOverview({ phases }: { phases?: PhaseState[] }) {
           className="!rounded-md !border !border-border/60 !bg-card/80"
         />
       </ReactFlow>
+      <div className="absolute top-2 right-2 z-10 text-[9px] uppercase tracking-wider text-muted-foreground/60 pointer-events-none">
+        scroll page · drag to pan · ⌘+wheel to zoom
+      </div>
+      <div className="absolute top-2 left-2 z-10 text-[9px] uppercase tracking-wider text-muted-foreground/60 pointer-events-none">
+        11 graph nodes across 7 lifecycle phases
+      </div>
     </div>
   );
 }

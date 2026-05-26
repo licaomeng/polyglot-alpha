@@ -222,34 +222,63 @@ async def record_fill_with_split(
     if not (0.0 < winner_share < 1.0):
         raise ValueError("winner_share must be in (0, 1)")
 
-    winner_amount = max(_MIN_FILL_USDC, fill_amount_usdc * winner_share)
-    treasury_amount = max(_MIN_FILL_USDC, fill_amount_usdc * (1.0 - winner_share))
+    # Compute both legs symmetrically off the constants so floating-point
+    # rounding is deterministic and we never have a "subtract the other leg"
+    # IEEE-754 artifact (e.g. 0.1 - 1e-17 == 0.09999999999999998). Round to
+    # 8 decimal places (well below 1e-6 USDC base unit) for clean logging and
+    # to keep the floor (_MIN_FILL_USDC) effective.
+    treasury_share = 1.0 - winner_share
+    winner_amount = max(_MIN_FILL_USDC, round(fill_amount_usdc * winner_share, 8))
+    treasury_amount = max(_MIN_FILL_USDC, round(fill_amount_usdc * treasury_share, 8))
 
     client = onchain or OnChainClient()
 
+    # Issue both legs concurrently. They share the operator's signing wallet,
+    # so the per-address nonce lock in ``send_with_nonce_lock`` will still
+    # serialize the actual broadcast — but Python overhead (contract handle
+    # construction, building the tx dict outside the lock, executor
+    # scheduling, post-broadcast logging) does overlap, shaving a small
+    # amount of latency. ``return_exceptions=True`` preserves the prior
+    # best-effort semantics where one leg can fail without aborting the other.
+    winner_result, treasury_result = await asyncio.gather(
+        record_fill(market_id, winner_amount, winner, onchain=client),
+        record_fill(market_id, treasury_amount, treasury, onchain=client),
+        return_exceptions=True,
+    )
+
     winner_tx: Optional[str] = None
     treasury_tx: Optional[str] = None
-    try:
-        winner_tx = await record_fill(
-            market_id, winner_amount, winner, onchain=client
-        )
-    except Exception as exc:  # pragma: no cover - best-effort, mirrors record_fill semantics
+
+    if isinstance(winner_result, BaseException):
         logger.error(
             "record_fill_with_split: winner leg failed (market=%s winner=%s): %s",
             market_id,
             winner,
-            exc,
+            winner_result,
         )
-    try:
-        treasury_tx = await record_fill(
-            market_id, treasury_amount, treasury, onchain=client
+    else:
+        winner_tx = winner_result
+        logger.info(
+            "recordFill leg %s amount=%s usdc tx=%s",
+            winner,
+            winner_amount,
+            winner_tx,
         )
-    except Exception as exc:  # pragma: no cover
+
+    if isinstance(treasury_result, BaseException):
         logger.error(
             "record_fill_with_split: treasury leg failed (market=%s treasury=%s): %s",
             market_id,
             treasury,
-            exc,
+            treasury_result,
+        )
+    else:
+        treasury_tx = treasury_result
+        logger.info(
+            "recordFill leg %s amount=%s usdc tx=%s",
+            treasury,
+            treasury_amount,
+            treasury_tx,
         )
 
     logger.info(

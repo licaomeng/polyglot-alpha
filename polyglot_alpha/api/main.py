@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from typing import AsyncIterator
 
 from fastapi import FastAPI
@@ -12,9 +13,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi import _rate_limit_exceeded_handler
+from sqlmodel import select
 
 from ..llm import shutdown_anthropic
-from ..persistence import init_db
+from ..logging_ctx import install_event_id_filter
+from ..persistence import init_db, session_scope
+from ..persistence.models import Event, EventStatus
 from ..pubsub import get_pubsub
 from .rate_limit import limiter
 from .routes import (
@@ -29,6 +33,66 @@ from .routes import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# Non-terminal lifecycle statuses. If an event row is still in any of these
+# states on backend startup and is older than the recovery cutoff, the
+# previous backend process almost certainly crashed mid-lifecycle and the
+# in-memory orchestrator task is gone — sweep these rows to FAILED so the
+# UI doesn't display perpetual "running" badges.
+_NON_TERMINAL_STATUSES: tuple[str, ...] = (
+    EventStatus.PENDING.value,
+    EventStatus.AUCTION_OPEN.value,
+    EventStatus.AUCTION_SETTLED.value,
+    EventStatus.TRANSLATING.value,
+    EventStatus.EVALUATING.value,
+)
+
+
+def _sweep_stuck_events() -> int:
+    """Mark crashed-in-flight events as FAILED on startup.
+
+    A previous backend process that crashed (OOM, restart, panic) cannot
+    finish the lifecycle task it owned. Any row still in a non-terminal
+    status that is older than ``2 * AUCTION_WINDOW_SECONDS +
+    PANEL_TIMEOUT_SECONDS`` is past every legitimate phase budget and must
+    be flipped to ``FAILED`` so /events views don't show a stuck row.
+
+    Returns the number of rows updated. Best-effort: any exception is
+    logged and swallowed so a sweep failure cannot block app startup.
+    """
+
+    try:
+        auction_s = float(os.environ.get("AUCTION_WINDOW_SECONDS", "60"))
+        panel_s = float(os.environ.get("PANEL_TIMEOUT_SECONDS", "120"))
+        # 2 * auction (open + settle drift) + panel + a small slack so we
+        # never race a still-healthy lifecycle that's near its tail.
+        cutoff_seconds = 2.0 * auction_s + panel_s
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=cutoff_seconds)
+
+        swept = 0
+        with session_scope() as session:
+            stmt = select(Event).where(
+                Event.status.in_(_NON_TERMINAL_STATUSES),  # type: ignore[attr-defined]
+                Event.triggered_at < cutoff,
+            )
+            for row in session.exec(stmt).all():
+                row.status = EventStatus.FAILED.value
+                session.add(row)
+                swept += 1
+        if swept:
+            logger.warning(
+                "startup_recovery: swept %d stuck event(s) to FAILED "
+                "(cutoff=%.0fs, reason=startup_recovery)",
+                swept,
+                cutoff_seconds,
+            )
+        else:
+            logger.info("startup_recovery: no stuck events found")
+        return swept
+    except Exception:  # noqa: BLE001 — best-effort, must not block startup
+        logger.exception("startup_recovery sweep failed; continuing startup")
+        return 0
 
 
 # Safe default origins for local development. Production deployments must
@@ -55,7 +119,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
 
     logger.info("polyglot_alpha: starting up; initializing DB")
+    # Install the [event_id=N] correlation-id filter on the root logger so
+    # every subsystem's log line carries the active lifecycle id (see
+    # polyglot_alpha.logging_ctx). No-op if already installed.
+    install_event_id_filter()
     init_db()
+    # Recover any events left in non-terminal states by a previously
+    # crashed/restarted backend process before warming pub/sub.
+    _sweep_stuck_events()
     get_pubsub()
     try:
         yield

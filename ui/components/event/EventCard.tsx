@@ -31,6 +31,7 @@ export function EventCard({ event }: { event: EventSummary }) {
             />
           </div>
           <h3
+            dir="auto"
             className={
               event.headline
                 ? "mt-3 text-base font-semibold leading-snug text-balance"
@@ -40,7 +41,9 @@ export function EventCard({ event }: { event: EventSummary }) {
             {event.headline || "(no headline)"}
           </h3>
           <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-            <span>{event.source || <span className="italic opacity-70">unknown source</span>}</span>
+            <span dir="auto">
+              {event.source || <span className="italic opacity-70">unknown source</span>}
+            </span>
             <span className="font-mono">{relativeTime(event.ingestedAt)}</span>
           </div>
         </CardContent>

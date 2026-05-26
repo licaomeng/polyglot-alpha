@@ -5,33 +5,28 @@ import { ContractAddressDisplay } from "@/components/onchain/ContractAddressDisp
 import { formatUsd } from "@/lib/utils";
 
 /**
- * Per-LLM metadata shown as a badge strip next to the alias. The four canonical
- * translator agents in the demo each bind to a distinct provider and prompt
- * style, and evaluators consistently asked which model was behind which
- * address — so this metadata is surfaced explicitly instead of being implicit
- * in the wallet name.
+ * Per-persona metadata shown as a badge strip next to the alias. The three
+ * canonical reference seeders in the demo all route through Claude Haiku 4.5
+ * on the wire — they differ via system-prompt and temperature profile only
+ * (see polyglot_alpha/llm.py). Persona names are kept so evaluators can map
+ * each wallet to its behavioural fingerprint.
  */
 const AGENT_META: Record<
   string,
   { provider: string; specialty: string; strategy: string }
 > = {
   qwen: {
-    provider: "Qwen 2.5 72B",
+    provider: "Claude Haiku 4.5 · Qwen persona",
     specialty: "Mandarin → English macro",
     strategy: "Aggressive low-bid, fast settle",
   },
   gemini: {
-    provider: "Gemini 2.0 Flash",
+    provider: "Claude Haiku 4.5 · Gemini persona",
     specialty: "General-purpose, fast",
     strategy: "Mid-band bid, high COMET",
   },
-  llama: {
-    provider: "Llama 3.3 70B (OpenRouter)",
-    specialty: "Multi-domain reasoning",
-    strategy: "Mid-band bid, high MQM",
-  },
   deepseek: {
-    provider: "DeepSeek V3",
+    provider: "Claude Haiku 4.5 · DeepSeek persona",
     specialty: "Reasoning-heavy translations",
     strategy: "Aggressive low-bid, slow settle",
   },
@@ -75,7 +70,7 @@ export function AgentProfile({ agent }: { agent: AgentProfileType }) {
             {meta.strategy}
           </div>
         )}
-        <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="grid grid-cols-2 gap-2 text-center lg:grid-cols-3">
           <Stat
             label="Reputation"
             value={agent.reputation.toFixed(2)}

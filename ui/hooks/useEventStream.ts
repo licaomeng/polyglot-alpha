@@ -160,12 +160,29 @@ function applyEvent(
     };
   } else if (type === "quality.verdict") {
     const verdict = String(data.verdict ?? "");
+    const lifecycleRejected = verdict !== "" && verdict !== "PASS";
+    // Judge phase ran successfully — it produced a verdict. The phase
+    // itself is "completed" regardless of which way the verdict went.
+    // This matches the REST /events snapshot (phase 4 status=completed,
+    // top-level status=REJECTED) and is what the user sees when they
+    // reload the page after lifecycle terminates.
     base[idx] = {
       ...base[idx],
-      status: verdict && verdict !== "PASS" ? "failed" : "completed",
+      status: "completed",
       completedAt: now,
       details: { ...(base[idx].details ?? {}), ...data },
     };
+    // If the judges rejected, the downstream phases (Anchor / Polymarket /
+    // Streaming) are failed at the lifecycle level even though the backend
+    // still emits onchain.committed / polymarket.submitted signals for
+    // bookkeeping. Pre-mark them "failed" so the sticky `nextStatus` rule
+    // (failed-wins) keeps them visually correct when those follow-up
+    // events arrive.
+    if (lifecycleRejected) {
+      for (let i = idx + 1; i < base.length; i += 1) {
+        base[i] = { ...base[i], status: "failed", completedAt: now };
+      }
+    }
   } else if (type === "onchain.committed") {
     base[idx] = {
       ...base[idx],
@@ -183,14 +200,19 @@ function applyEvent(
   } else if (type === "builder_fee.accrued") {
     base[idx] = {
       ...base[idx],
-      status: "running",
+      status: nextStatus(base[idx].status, "running"),
       startedAt: base[idx].startedAt ?? now,
       details: { ...(base[idx].details ?? {}), ...data },
     };
   } else if (type === "event.finalized") {
+    // `event.finalized` only flips the phase to "completed" when the
+    // lifecycle ended cleanly. If the judges already marked this phase
+    // failed (because verdict ≠ PASS), the sticky-failed rule in
+    // nextStatus keeps it failed — matching what the REST /events
+    // endpoint returns and the user-visible REJECTED badge.
     base[idx] = {
       ...base[idx],
-      status: "completed",
+      status: nextStatus(base[idx].status, "completed"),
       completedAt: now,
       details: { ...(base[idx].details ?? {}), ...data },
     };
