@@ -454,6 +454,51 @@ async def _drive_agent_bid(
             balance_eth=balance_eth,
         )
 
+    # ------------------------------------------------------------------
+    # W15 bug-C fix: pre-flight reputation gate check.
+    # ------------------------------------------------------------------
+    # The on-chain ``submitBid`` reverts with ``"reputation gate"`` when
+    # the bidder's score is below ``MIN_REPUTATION_TO_BID`` (0.7e18). The
+    # legacy fallback path then recorded the reverted tx hash as if it
+    # had succeeded, which surfaced as the misleading
+    # ``"on-chain getBid(...) returned 0 even though dispatch tx_hash=X
+    # mined status=1"`` reconciliation warning (the receipt status was
+    # never actually checked here). Short-circuit doomed bids with a
+    # clear, actionable diagnostic so the operator can rotate seeders.
+    if not is_mock_mode():
+        try:
+            loop = asyncio.get_running_loop()
+            rep_score = await loop.run_in_executor(
+                None, agent.onchain.get_reputation, wallet.address
+            )
+        except Exception as exc:  # pragma: no cover - RPC dependent
+            logger.warning(
+                "agent=%s reputation lookup failed (%s); skipping bid",
+                agent_name,
+                exc,
+            )
+            return BidSkipped(
+                agent_name=agent_name,
+                agent_address=wallet.address,
+                reason="reputation_lookup_failed",
+            )
+        if rep_score < MIN_QUALIFIED_REPUTATION:
+            logger.warning(
+                "orchestrator.bid_skipped: agent=%s address=%s "
+                "reputation=%.4f threshold=%.4f reason=reputation_gate "
+                "(submitBid would revert with 'reputation gate'; rotate "
+                "seeder identity or restore reputation off-band)",
+                agent_name,
+                wallet.address,
+                rep_score,
+                MIN_QUALIFIED_REPUTATION,
+            )
+            return BidSkipped(
+                agent_name=agent_name,
+                agent_address=wallet.address,
+                reason="reputation_gate",
+            )
+
     try:
         await agent.ensure_registered()
     except Exception as exc:  # pragma: no cover - RPC dependent
@@ -499,6 +544,40 @@ async def _drive_agent_bid(
         )
         return None
 
+    # ------------------------------------------------------------------
+    # W15 bug-C fix: confirm receipt status before recording the bid.
+    # ------------------------------------------------------------------
+    # Before this fix the legacy fallback path returned ``BidRecord``
+    # unconditionally on a non-empty tx_hash — even when the tx mined
+    # with ``status=0`` (e.g. reputation gate / window closed / not
+    # registered). The orchestrator's downstream ``getBid`` reconciliation
+    # then printed "mined status=1; dropping" which was simply false —
+    # the receipt was never inspected on this path. Mirror the dispatch
+    # path's :func:`agents.dispatch._confirm_bid_tx` semantics so the
+    # bid pool only contains txs that landed in
+    # ``TranslationAuction.auctions[eventId].bids[bidder]`` storage.
+    if not is_mock_mode():
+        try:
+            confirmed, revert_reason = await _confirm_bid_receipt(
+                agent.onchain.w3, tx_hash
+            )
+        except Exception as exc:  # pragma: no cover - RPC noise
+            logger.warning(
+                "agent=%s submit_bid receipt lookup failed (%s); dropping bid",
+                agent_name,
+                exc,
+            )
+            return None
+        if not confirmed:
+            logger.warning(
+                "agent=%s submit_bid REVERTED on chain (tx=%s reason=%s); "
+                "dropping bid (not present in TranslationAuction storage)",
+                agent_name,
+                tx_hash,
+                revert_reason or "unknown",
+            )
+            return None
+
     logger.info(
         "agent=%s bid=%.4f USDC tx=%s",
         agent_name,
@@ -513,6 +592,53 @@ async def _drive_agent_bid(
         tx_hash=tx_hash,
         reputation=evaluation.estimated_quality,
     )
+
+
+async def _confirm_bid_receipt(
+    w3: Any, tx_hash: str, *, timeout_s: float = 30.0
+) -> tuple[bool, Optional[str]]:
+    """Block on ``eth_getTransactionReceipt`` and return ``(success, reason)``.
+
+    ``success`` is ``True`` iff ``receipt.status == 1``. When the tx
+    reverted (``status == 0``) we replay the call via ``eth_call`` at
+    ``blockNumber - 1`` to extract the require/revert reason string —
+    that turns "submitBid mined status=1; dropping" (a lie) into
+    "reverted on chain (reason=reputation gate)" (actionable).
+    """
+
+    loop = asyncio.get_running_loop()
+
+    def _wait_and_explain() -> tuple[bool, Optional[str]]:
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=timeout_s)
+        if int(getattr(receipt, "status", 0)) == 1:
+            return True, None
+        # Best-effort revert reason extraction. Failure here is non-fatal —
+        # we still report the bid as reverted.
+        try:
+            tx = w3.eth.get_transaction(tx_hash)
+            call_obj = {
+                "from": tx["from"],
+                "to": tx["to"],
+                "data": tx["input"],
+                "value": tx.get("value", 0),
+                "gas": tx["gas"],
+            }
+            w3.eth.call(call_obj, block_identifier=tx["blockNumber"] - 1)
+            return False, None
+        except Exception as exc:
+            # web3 returns ``execution reverted: <reason>`` in the message.
+            msg = str(exc)
+            marker = "execution reverted:"
+            if marker in msg:
+                reason = msg.split(marker, 1)[1].strip().strip("'").strip()
+                # Trim trailing tuple payload if present
+                if "," in reason and reason.startswith("'") is False:
+                    reason = reason.split(",", 1)[0].strip()
+                reason = reason.strip("' ").strip(")").strip("'")
+                return False, reason
+            return False, msg[:120]
+
+    return await loop.run_in_executor(None, _wait_and_explain)
 
 
 # ---------------------------------------------------------------------------
@@ -611,6 +737,13 @@ async def _drive_real_auction(
             len(skips) == len(agent_names)
             and all(s.reason == "low_gas" for s in skips)
         )
+        # W15 bug-C: surface the reputation-gate failure mode so the UI
+        # can render a "rotate seeder identity" panel instead of a
+        # generic ``no_bids`` failure.
+        all_reputation_gated = (
+            len(skips) == len(agent_names)
+            and all(s.reason == "reputation_gate" for s in skips)
+        )
         _AUCTION_DIAGNOSTICS[event_id] = {
             "partial_auction": bool(bids) and bool(skips),
             "skipped_bidders": skipped_bidders,
@@ -618,6 +751,8 @@ async def _drive_real_auction(
             "balances_eth": balances_eth,
             "threshold_eth": MIN_SEEDER_GAS_WEI / _WEI_PER_ETH,
             "all_seeders_low_gas": all_low_gas,
+            "all_seeders_reputation_gated": all_reputation_gated,
+            "min_reputation_threshold": MIN_QUALIFIED_REPUTATION,
         }
     logger.info(
         "real-auction: %d/%d agents bid successfully (%d skipped)",
@@ -790,9 +925,19 @@ async def _collect_bids(
                     reconciled.append(bid)
                     continue
                 if int(bid_units) <= 0:
+                    # W15 bug-C: this previously claimed "mined status=1"
+                    # but the legacy fallback path (_drive_agent_bid) never
+                    # actually checked the receipt status. The receipt
+                    # check now happens at the source so a bid only
+                    # reaches reconciliation if its tx mined with
+                    # status=1. Reaching this branch with status=1 means
+                    # a real chain-vs-Python encoding drift or the bidder
+                    # is not stored under the queried eventId — log
+                    # enough context to triage.
                     logger.warning(
-                        "on-chain getBid(%s, %s) returned 0 even though "
-                        "dispatch tx_hash=%s mined status=1; dropping",
+                        "on-chain getBid(event_id=%s, bidder=%s) returned 0 "
+                        "for tx_hash=%s; dropping bid (chain state does not "
+                        "match dispatch tx — possible bytes32 encoding drift)",
                         event_id,
                         bid.agent_address,
                         bid.tx_hash,
