@@ -788,27 +788,102 @@ function RevenueDetails({ event }: { event: EventDetail }) {
   const marketId = event.polymarket?.marketId ?? event.market_id;
   const stream = event.polymarket?.revenueStream ?? [];
   const total = stream.reduce((acc, row) => acc + (row.usd ?? 0), 0);
+  const hasStream = stream.length > 0;
   return (
     <div className="space-y-3">
       <IOSection
         inputs={[
           {
             label: "market_id",
-            value: marketId ? <span className="font-mono">{marketId}</span> : "—",
+            value: marketId ? <span className="font-mono">{marketId}</span> : DASH,
           },
           { label: "fill events", value: "Polygon `MarketFilled` logs" },
         ]}
         outputs={[
           {
             label: "builder_fee_events rows",
-            value: stream.length > 0 ? `${stream.length} entries` : "—",
+            value: hasStream ? `${stream.length} entries` : DASH,
           },
           {
             label: "cumulative fee",
-            value: total > 0 ? `$${total.toFixed(2)}` : "$0.00",
+            value: total > 0 ? formatUsd(total) : "$0.00",
           },
         ]}
       />
+      {hasStream ? (
+        <Card className="border-border/60">
+          <CardContent className="space-y-2 p-3">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              revenue stream · per-leg disbursement
+            </p>
+            <ul
+              className="divide-y divide-border/40 rounded-md border border-border/40 bg-card/40"
+              aria-label="Builder fee disbursement legs"
+            >
+              {stream.map((leg, i) => (
+                <li
+                  key={`${leg.arcTxHash ?? leg.recipient ?? "leg"}-${i}`}
+                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 text-xs"
+                >
+                  <span
+                    className="font-mono text-foreground/85"
+                    title={leg.recipient ?? undefined}
+                  >
+                    {shortAddr(leg.recipient ?? null)}
+                  </span>
+                  <span className="font-mono text-emerald-400">
+                    {formatUsd(leg.usd)}
+                  </span>
+                  {leg.arcTxHash ? (
+                    <a
+                      href={arcTxUrl(leg.arcTxHash)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 font-mono text-[10px] text-primary hover:underline"
+                      aria-label={`Arc transaction ${leg.arcTxHash}`}
+                    >
+                      {leg.arcTxHash.slice(0, 10)}…
+                      <ExternalLink className="h-3 w-3" aria-hidden />
+                    </a>
+                  ) : (
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      {DASH}
+                    </span>
+                  )}
+                  {leg.isSimulated !== undefined && (
+                    <Badge
+                      className={cn(
+                        "font-mono text-[9px] uppercase tracking-wider",
+                        leg.isSimulated
+                          ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                          : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+                      )}
+                    >
+                      {leg.isSimulated ? "sim" : "real"}
+                    </Badge>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap items-baseline justify-between gap-2 pt-1">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Entries: {stream.length}
+              </span>
+              <span className="font-mono text-foreground/90">
+                Total disbursed: {formatUsd(total)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-border/60">
+          <CardContent className="p-3 text-xs">
+            <p className="font-mono text-[10px] text-muted-foreground">
+              Awaiting first fill — fees stream after Polymarket market resolution
+            </p>
+          </CardContent>
+        </Card>
+      )}
       <Card className="border-border/60">
         <CardContent className="space-y-1 p-3 text-xs">
           <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">

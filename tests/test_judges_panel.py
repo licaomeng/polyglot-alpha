@@ -529,6 +529,72 @@ async def test_panel_soft_gate_threshold_four_of_five(
 
 
 @pytest.mark.asyncio
+async def test_panel_budget_partial_aggregation_soft_skips_d8(
+    good_question: PanelQuestion, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If d8 exceeds ``PANEL_BUDGET_S`` the panel must still aggregate the
+    other 10 judges and mark d8 as a soft-skip (passed=True) — this is
+    the event-112 fix: graceful degradation instead of a whole-panel
+    timeout that falls back to a mock verdict.
+    """
+
+    from polyglot_alpha.judges import panel as panel_mod
+    from polyglot_alpha.judges.style_alignment import d8_duplicate_detection
+    from polyglot_alpha.judges.types import JudgeResult
+
+    # Tight panel budget so a single slow judge can blow past it without
+    # the test waiting on the per-judge retry path (60s + 90s).
+    monkeypatch.setattr(panel_mod, "PANEL_BUDGET_S", 1.0)
+    monkeypatch.setattr(panel_mod, "PER_JUDGE_TIMEOUT_S", 5.0)
+    monkeypatch.setattr(panel_mod, "PER_JUDGE_TIMEOUT_RETRY_S", 5.0)
+
+    async def slow_d8(*args: Any, **kwargs: Any) -> JudgeResult:
+        await asyncio.sleep(30.0)  # never returns within the budget
+        return JudgeResult(
+            name="d8_duplicate_detection",
+            passed=True,
+            score=1.0,
+            reason="unreachable",
+        )
+
+    monkeypatch.setattr(
+        d8_duplicate_detection,
+        "judge_d8_duplicate_detection",
+        slow_d8,
+    )
+    # The panel imports the symbol directly, so patch that binding too.
+    monkeypatch.setattr(panel_mod, "judge_d8_duplicate_detection", slow_d8)
+
+    async def style_backend(prompt: str) -> str:
+        return json.dumps(_GOOD_STYLE_PAYLOAD)
+
+    async def mqm_backend(prompt: str) -> str:
+        return _GOOD_MQM_PAYLOAD
+
+    verdict = await panel_mod.evaluate(
+        good_question, llm_call=style_backend, mqm_llm_call=mqm_backend
+    )
+
+    # d8 must have been marked partial / soft-skip; other 10 judges must
+    # still be present in the aggregated verdict.
+    d8 = next(
+        jr for jr in verdict.judge_results if jr.name == "d8_duplicate_detection"
+    )
+    assert d8.evidence.get("partial") is True
+    assert d8.evidence.get("panel_budget_exceeded") is True
+    assert d8.evidence.get("soft_skip") is True
+    # d8 is a hard gate; soft-skip means style_alignment_passes['d8'] is True
+    # so the rest of the panel can still anchor.
+    assert verdict.style_alignment_passes["d8"] is True
+    # The verdict must carry a "Panel partial:" note for audit.
+    assert any("Panel partial" in n for n in verdict.notes)
+    # And critically: this is NOT the mock verdict (mock returns
+    # overall_score == 0.85 / 85 on the 0-100 scale and lacks notes).
+    assert verdict.overall_score >= 0
+    assert verdict.overall_score <= 100
+
+
+@pytest.mark.asyncio
 async def test_mqm_judge_records_provider_label() -> None:
     """MQM judge evidence must carry a provider label for audit trail."""
 
