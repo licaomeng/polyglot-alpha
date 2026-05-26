@@ -21,9 +21,14 @@ from .qwen_agent import QwenAgent, SeederGamma
 # deterministic wallet derivation, persisted bid records, and the
 # orchestrator's agent_names tuple stay stable across the rename.
 AGENT_REGISTRY: dict[str, type[BaseTranslatorAgent]] = {
-    "gemini": SeederAlpha,
-    "deepseek": SeederBeta,
-    "qwen": SeederGamma,
+    # W16-B identity rotation (2026-05-27): the original slots
+    # ("gemini"/"deepseek"/"qwen") carried on-chain reputation below the
+    # 0.7 ``submitBid`` gate, which the W14-C EMA bug prevents from
+    # recovering. The "-v2" suffix derives a fresh wallet address that
+    # starts at the initial reputation (1.0).
+    "gemini-v2": SeederAlpha,
+    "deepseek-v2": SeederBeta,
+    "qwen-v2": SeederGamma,
 }
 
 # Tuple form used by call sites that want to iterate the seeder classes

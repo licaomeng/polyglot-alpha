@@ -86,18 +86,20 @@ def _load_wallet_map() -> dict[str, str]:
 
 
 def resolve_agent_name(agent_address: str) -> str:
-    """Map a winner address back to a seeder slot (``gemini`` / ``deepseek`` / ``qwen``).
+    """Map a winner address back to a seeder slot.
 
-    Falls back to ``"gemini"`` (Seeder Alpha) so the pipeline always has
-    a valid model binding even if the on-chain winner is an unregistered
-    demo address. The slot names are kept as pre-rename identifiers so
-    historical wallet derivation continues to work.
+    Falls back to ``"gemini-v2"`` (Seeder Alpha) so the pipeline always
+    has a valid model binding even if the on-chain winner is an
+    unregistered demo address. The "-v2" suffix is the W16-B rotation
+    (2026-05-27): pre-rotation slots had on-chain reputation below the
+    auction's 0.7 ``submitBid`` gate.
     """
 
+    default = "gemini-v2"
     if not agent_address:
-        return "gemini"
+        return default
     wallets = _load_wallet_map()
-    return wallets.get(agent_address.lower(), "gemini")
+    return wallets.get(agent_address.lower(), default)
 
 
 # ---------------------------------------------------------------------------
@@ -238,7 +240,7 @@ async def _run_pipeline_schema(
     ``llm_factory`` injection point for tests.
     """
 
-    cls = AGENT_REGISTRY.get(agent_name) or AGENT_REGISTRY["gemini"]
+    cls = AGENT_REGISTRY.get(agent_name) or AGENT_REGISTRY["gemini-v2"]
     model_id = cls.MODEL_ID
     factory = llm_factory or (lambda: make_llm(model_id))
     llm = factory()

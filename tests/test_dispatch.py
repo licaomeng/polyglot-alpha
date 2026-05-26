@@ -77,7 +77,7 @@ def mock_llm_factory():
 def test_all_seeders_instantiate_without_real_wallet() -> None:
     """The three reference seeders must construct with a throwaway PK."""
 
-    assert set(AGENT_REGISTRY.keys()) == {"gemini", "deepseek", "qwen"}
+    assert set(AGENT_REGISTRY.keys()) == {"gemini-v2", "deepseek-v2", "qwen-v2"}
     for name, cls in AGENT_REGISTRY.items():
         pk = dispatch._throwaway_pk()
         agent = cls(wallet_pk=pk)
@@ -101,7 +101,7 @@ async def test_collect_bids_inline_returns_three_distinct_bids(
 
     assert len(bids) == 3
     names = {b["agent_name"] for b in bids}
-    assert names == {"gemini", "deepseek", "qwen"}, (
+    assert names == {"gemini-v2", "deepseek-v2", "qwen-v2"}, (
         f"unexpected agent_name values: {names}"
     )
     bid_amounts = [b["bid_amount"] for b in bids]
@@ -194,7 +194,7 @@ async def test_run_pipeline_returns_polymarket_question(
 
     question = await dispatch.run_pipeline(
         sample_event,
-        winner_agent_name="gemini",
+        winner_agent_name="gemini-v2",
         llm_factory=mock_llm_factory,
     )
 
@@ -214,13 +214,13 @@ async def test_run_pipeline_layer_trace_populated(
 
     question = await dispatch.run_pipeline(
         sample_event,
-        winner_agent_name="deepseek",
+        winner_agent_name="deepseek-v2",
         llm_factory=mock_llm_factory,
     )
 
     layer_trace = getattr(question, "layer_trace", None)
     assert layer_trace is not None, "layer_trace attribute missing"
-    assert layer_trace["winner_agent"] == "deepseek"
+    assert layer_trace["winner_agent"] == "deepseek-v2"
     assert "synthesized" in layer_trace
     assert layer_trace["quality_score"] >= 0.0
     assert layer_trace["confidence"] >= 0.0

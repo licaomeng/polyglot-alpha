@@ -1,14 +1,14 @@
 {
-  "gemini": {
-    "address": "0x396B8578a34517eb0A6968A1798703eD5c6D51f4",
-    "env_var": "GEMINI_WALLET_PRIVATE_KEY"
+  "gemini-v2": {
+    "address": "0x17f54a73c6253d5aa2d073b5E1212a46434F6EE3",
+    "env_var": "GEMINI_V2_WALLET_PRIVATE_KEY"
   },
-  "deepseek": {
-    "address": "0x144ddfDb9129FA11F1041bF2349F6193f818Eb4A",
-    "env_var": "DEEPSEEK_WALLET_PRIVATE_KEY"
+  "deepseek-v2": {
+    "address": "0xeeD3C2e21F1f0d6fadf6b9000D707CBe9d84a8E8",
+    "env_var": "DEEPSEEK_V2_WALLET_PRIVATE_KEY"
   },
-  "qwen": {
-    "address": "0x5554a1Ce6C0085ca54A8b9f2E50b1D1548CDE7F6",
-    "env_var": "QWEN_WALLET_PRIVATE_KEY"
+  "qwen-v2": {
+    "address": "0x79596CCC975Ef4b08186105481E369ff3F68dF43",
+    "env_var": "QWEN_V2_WALLET_PRIVATE_KEY"
   }
 }

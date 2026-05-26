@@ -1060,6 +1060,17 @@ cast wallet new
 
 The seeder wallets are persisted to `outputs/agent_wallets.json` (public addresses only); their private keys live in `<AGENT>_WALLET_PRIVATE_KEY` env vars.
 
+##### Recovering from the reputation gate (identity rotation)
+
+`TranslationAuction.submitBid` reverts with `"reputation gate"` once a seeder's on-chain EWMA score drops below `0.7`. The current EWMA formula (W14-C contract-prep work in progress) does not allow seeders to recover their score above `0.5` from authorized calls alone, so once a seeder has racked up enough lossy events its wallet is effectively bricked for bidding. When that happens, rotate the seeder slot names to derive fresh wallet addresses (each new address starts at the initial reputation of `1.0`) and re-fund + re-register them:
+
+1. Rename the slots in [`polyglot_alpha/agents/wallets.py`](./polyglot_alpha/agents/wallets.py) `AGENT_NAMES`, [`polyglot_alpha/agents/__init__.py`](./polyglot_alpha/agents/__init__.py) `AGENT_REGISTRY`, and the `agent_names` tuple in [`polyglot_alpha/orchestrator.py`](./polyglot_alpha/orchestrator.py) (one canonical convention is appending a `-vN` suffix, e.g. `gemini-v2` → `gemini-v3`). Wallet derivation is `sha256(operator_pk + ":" + slot_name)` so any new string yields a new address.
+2. Fund + register the new wallets in one shot: `.venv/bin/python scripts/fund_seeder_wallets_v2.py`. The script is idempotent (skips already-funded wallets and already-registered agents) and tops each new wallet up with 0.05 ETH + 20 MockUSDC, then calls `registerAgent` with the 5 USDC anti-Sybil stake.
+3. Refresh the address map: `.venv/bin/python -c 'from polyglot_alpha.agents.wallets import derive_all_wallets, persist_public_addresses; persist_public_addresses(derive_all_wallets())'` writes the new public addresses into `outputs/agent_wallets.json` (where `resolve_agent_name` reads them back to map winning addresses to seeder slots).
+4. Restart the backend so the rotated names are picked up.
+
+The `-v2` rotation shipped in W16-B (2026-05-27) was triggered because the original `gemini`/`deepseek`/`qwen` wallets had decayed to 0.61–0.69. **Note:** because the EWMA bug also affects the new wallets, the rotation buys ~3 live events before the new slots also fall below the gate; the permanent fix lives in W14-CONTRACT-PREP.
+
 #### 4. Run the stack
 
 ```bash

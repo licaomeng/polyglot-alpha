@@ -37,7 +37,7 @@ from eth_account.signers.local import LocalAccount
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 WALLETS_PATH = _REPO_ROOT / "outputs" / "agent_wallets.json"
 
-AGENT_NAMES: tuple[str, ...] = ("gemini", "deepseek", "qwen")
+AGENT_NAMES: tuple[str, ...] = ("gemini-v2", "deepseek-v2", "qwen-v2")
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,10 @@ class AgentWallet:
 
 
 def _env_var(name: str) -> str:
-    return f"{name.upper()}_WALLET_PRIVATE_KEY"
+    # Normalize hyphens (e.g. "gemini-v2") to underscores so the env var
+    # form is shell-legal (POSIX-portable identifier).
+    safe = name.upper().replace("-", "_")
+    return f"{safe}_WALLET_PRIVATE_KEY"
 
 
 def derive_agent_private_key(operator_pk: str, agent_name: str) -> str:

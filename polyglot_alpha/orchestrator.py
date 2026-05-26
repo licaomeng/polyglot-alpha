@@ -650,9 +650,9 @@ async def _confirm_bid_receipt(
 # valid 0x-hex 20-byte addresses so the downstream 90/10 fee-split path
 # (which checks ``len(addr) == 42``) treats them like real wallets.
 _MOCK_SEEDER_ADDRESSES: tuple[tuple[str, str], ...] = (
-    ("gemini",   "0x" + "10" * 20),
-    ("deepseek", "0x" + "20" * 20),
-    ("qwen",     "0x" + "30" * 20),
+    ("gemini-v2",   "0x" + "10" * 20),
+    ("deepseek-v2", "0x" + "20" * 20),
+    ("qwen-v2",     "0x" + "30" * 20),
 )
 
 
@@ -700,7 +700,9 @@ async def _drive_real_auction(
     ``partial_auction`` / ``all_seeders_low_gas`` to the UI.
     """
 
-    agent_names = ("gemini", "deepseek", "qwen")
+    # W16-B identity rotation (2026-05-27): "-v2" slot wallets bypass the
+    # reputation-gate revert that legacy slots are stuck on.
+    agent_names = ("gemini-v2", "deepseek-v2", "qwen-v2")
     bid_tasks = [
         asyncio.create_task(_drive_agent_bid(event_dict, event_id, name))
         for name in agent_names
