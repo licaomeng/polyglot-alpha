@@ -29,6 +29,7 @@ from ..llm import (
     MODERATOR_MAX_TOKENS,
     make_llm,
 )
+from ..models import MODEL_MODERATOR, CLAUDE_HAIKU
 from .critics import CritiqueResult
 
 logger = logging.getLogger(__name__)
@@ -56,12 +57,13 @@ class ModeratorVerdict:
 # --------------------------------------------------------------------------- #
 
 
-# Claude Sonnet 4.5 is the strongest moderator at reasonable cost. Routed
-# through the Anthropic SDK by default via :func:`make_llm`; the factory
-# falls back to MockLLM when no API key is configured, which keeps tests
-# deterministic.
-MODERATOR_MODEL = CLAUDE_SONNET
-MODERATOR_MODEL_FALLBACK = "claude-haiku-4-5-20251001"
+# Sonnet-grade by default. The actual snapshot is configured by
+# :data:`polyglot_alpha.models.MODEL_MODERATOR` (env var ``MODEL_MODERATOR``,
+# defaulting to ``MODEL_SONNET``). Routed through the Anthropic SDK via
+# :func:`make_llm`; the factory falls back to MockLLM when no API key is
+# configured, which keeps tests deterministic.
+MODERATOR_MODEL = MODEL_MODERATOR
+MODERATOR_MODEL_FALLBACK = CLAUDE_HAIKU
 
 _MODERATOR_TIMEOUT_S = 60.0
 

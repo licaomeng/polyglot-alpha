@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
 from polyglot_alpha.judges.types import PanelQuestion
+from polyglot_alpha.models import MODEL_STYLE_JUDGE
 
 LlmCall = Callable[[str], Awaitable[str]]
 
@@ -33,8 +34,9 @@ LLM_COST_LOG_PATH = Path("outputs/llm_cost_log.jsonl")
 # Per-dimension provider mapping. After the 2026-05 single-provider
 # consolidation every dimension is served by Anthropic Claude Haiku 4.5;
 # this dict is retained so callers / tests that key off the label still
-# resolve, but the label is identical for every entry.
-_DEFAULT_PROVIDER_LABEL = "anthropic:claude-haiku-4-5-20251001"
+# resolve, but the label is identical for every entry. The actual snapshot
+# is configured by ``MODEL_STYLE_JUDGE`` in ``.env``.
+_DEFAULT_PROVIDER_LABEL = f"anthropic:{MODEL_STYLE_JUDGE}"
 PROVIDER_FOR_DIMENSION: dict[str, str] = {
     "d2": _DEFAULT_PROVIDER_LABEL,
     "d3": _DEFAULT_PROVIDER_LABEL,
@@ -173,9 +175,9 @@ async def _call_default_backend(prompt: str, dimension: str) -> str:
             "No LLM backend reachable: set ANTHROPIC_API_KEY."
         )
 
-    from polyglot_alpha.llm import AnthropicLLM, CLAUDE_HAIKU
+    from polyglot_alpha.llm import AnthropicLLM
 
-    llm = AnthropicLLM(model=CLAUDE_HAIKU)
+    llm = AnthropicLLM(model=MODEL_STYLE_JUDGE)
     return await llm.complete(
         system="Return ONLY a JSON object — no prose, no markdown fences.",
         user=prompt,

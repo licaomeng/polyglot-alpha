@@ -30,9 +30,12 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
 from polyglot_alpha.judges.types import JudgeResult, PanelQuestion
+from polyglot_alpha.models import MODEL_MQM_JUDGE
 
 JUDGE_NAME = "mqm_llm"
-PROVIDER_LABEL = "anthropic:claude-haiku-4-5-20251001"
+# Provider tag recorded in evidence JSON. Tracks ``MODEL_MQM_JUDGE`` so
+# downstream cost logs group by the configured snapshot.
+PROVIDER_LABEL = f"anthropic:{MODEL_MQM_JUDGE}"
 LLM_COST_LOG_PATH = Path("outputs/llm_cost_log.jsonl")
 
 
@@ -166,9 +169,9 @@ async def _call_anthropic_haiku(prompt: str) -> str:
     if not anthropic_key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set")
 
-    from polyglot_alpha.llm import AnthropicLLM, CLAUDE_HAIKU
+    from polyglot_alpha.llm import AnthropicLLM
 
-    llm = AnthropicLLM(model=CLAUDE_HAIKU, api_key=anthropic_key)
+    llm = AnthropicLLM(model=MODEL_MQM_JUDGE, api_key=anthropic_key)
     return await llm.complete(
         system=(
             "You are an MQM annotator. Return ONLY a JSON object —"

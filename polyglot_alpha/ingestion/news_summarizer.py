@@ -42,11 +42,14 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from ..models import MODEL_NEWS_SCORER
+
 LOGGER = logging.getLogger(__name__)
 
-# Pinned Haiku version. 8x cheaper than Sonnet at the same throughput
-# floor for ~1k-token scoring tasks.
-HAIKU_MODEL: str = "claude-haiku-4-5-20251001"
+# News-scorer model. Configured by :data:`polyglot_alpha.models.MODEL_NEWS_SCORER`
+# (env var ``MODEL_NEWS_SCORER``, default Haiku 4.5 — ~8x cheaper than
+# Sonnet at the same throughput floor for ~1k-token scoring tasks).
+HAIKU_MODEL: str = MODEL_NEWS_SCORER
 
 # Hard caps so a runaway feed does not blow up the prompt.
 MAX_ARTICLES: int = 20

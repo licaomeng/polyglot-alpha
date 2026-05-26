@@ -38,6 +38,7 @@ from polyglot_alpha.judges.style_alignment.llm_batch import (
     _call_default_backend,
     _log_llm_call,
 )
+from polyglot_alpha.models import MODEL_STYLE_JUDGE
 from polyglot_alpha.judges.types import JudgeResult, PanelQuestion
 
 JUDGE_NAME = "d5_resolution_clarity"
@@ -207,7 +208,7 @@ async def judge_d5_resolution_clarity(
 
     backend = llm_call
     provider = "injected" if backend is not None else PROVIDER_FOR_DIMENSION.get(
-        "d5", "anthropic:claude-haiku-4-5-20251001"
+        "d5", f"anthropic:{MODEL_STYLE_JUDGE}"
     )
 
     if backend is None:

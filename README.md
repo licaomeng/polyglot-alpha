@@ -1064,12 +1064,26 @@ Visit `http://localhost:3001` and click **Trigger live demo** — the event appe
 
 #### 5. Swap LLM provider (future-ready)
 
-The system uses **Anthropic Claude Haiku 4.5** by default, but the LLM layer is provider-agnostic (`polyglot_alpha/llm.py`). To swap in OpenAI, Gemini, OpenRouter, etc:
+The system uses **Anthropic Claude Haiku 4.5** by default, but the LLM layer is provider-agnostic (`polyglot_alpha/llm.py`) AND every model snapshot is externalized via env vars — never hard-coded in source. The single registry is `polyglot_alpha/models.py`.
+
+To pin a different snapshot (same provider), just set the env var:
+
+```bash
+MODEL_HAIKU=claude-haiku-4-5-20251001     # base cheap snapshot
+MODEL_SONNET=claude-sonnet-4-5-20250929   # base strong snapshot
+MODEL_MODERATOR=                          # OPTIONAL per-role override; defaults to MODEL_SONNET
+MODEL_REFINE=                             # OPTIONAL; defaults to MODEL_HAIKU
+MODEL_MQM_JUDGE=                          # OPTIONAL; defaults to MODEL_HAIKU
+# ... (see .env.example for the full list of MODEL_* knobs)
+```
+
+To swap providers entirely (e.g. OpenAI, Gemini, OpenRouter):
 
 1. Write a class implementing the `LLMCallable` protocol in `polyglot_alpha/llm.py`
 2. Add a factory function to the `_LLM_FACTORIES` registry (lines ~410 of `llm.py`)
 3. Set `LLM_BACKEND=<your-provider>` in `.env` + the new API key env var
-4. No orchestrator / agent / judge code changes needed — the protocol absorbs the swap
+4. Override `MODEL_HAIKU` / `MODEL_SONNET` (and any per-role `MODEL_*` you care about) with the new provider's snapshots — e.g. `MODEL_HAIKU=gpt-4o-mini`, `MODEL_SONNET=gpt-4o`
+5. No orchestrator / agent / judge code changes needed — the protocol absorbs the swap
 
 #### Env variable reference
 

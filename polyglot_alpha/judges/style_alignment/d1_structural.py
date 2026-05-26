@@ -35,6 +35,7 @@ from polyglot_alpha.judges.style_alignment.llm_batch import (
     _log_llm_call,
 )
 from polyglot_alpha.judges.types import JudgeResult, PanelQuestion
+from polyglot_alpha.models import MODEL_STYLE_JUDGE
 
 LlmCall = Callable[[str], Awaitable[str]]
 
@@ -198,7 +199,7 @@ async def _run_llm_fallback(
             return None
 
     prompt = _build_llm_fallback_prompt(title)
-    provider = "injected" if backend is not None else "anthropic:claude-haiku-4-5-20251001"
+    provider = "injected" if backend is not None else f"anthropic:{MODEL_STYLE_JUDGE}"
     try:
         if backend is not None:
             raw = await backend(prompt)

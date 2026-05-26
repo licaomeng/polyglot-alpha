@@ -34,7 +34,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from ..llm import CLAUDE_HAIKU, LLMCallable, make_llm
+from ..llm import LLMCallable, make_llm
+from ..models import MODEL_REFINE
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +59,9 @@ EDITABLE_FIELDS: tuple[str, ...] = (
 DEFAULT_REFINE_TIMEOUT_S: float = 45.0
 
 # Fallback model when neither the candidate nor the caller specifies one.
-# Anthropic Haiku 4.5 is the cheapest current Claude snapshot, matching the
-# seeders' default backing model.
-_FALLBACK_MODEL_ID: str = CLAUDE_HAIKU
+# Configured via :data:`polyglot_alpha.models.MODEL_REFINE` (env var
+# ``MODEL_REFINE``, default Haiku 4.5).
+_FALLBACK_MODEL_ID: str = MODEL_REFINE
 
 # Heuristic markers that indicate the resolution_criteria gained precision.
 _PRECISION_MARKERS: tuple[str, ...] = (

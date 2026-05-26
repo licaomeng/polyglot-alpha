@@ -37,13 +37,15 @@ from typing import Any, Dict, List, Optional
 # now fail by design — see the consolidation report.
 import httpx  # noqa: F401 — legacy test-fixture attribute, see comment above
 
-from .llm import AnthropicLLM, CLAUDE_HAIKU, LLMError
+from .llm import AnthropicLLM, LLMError
+from .models import MODEL_SYNTHESIZER
 from .schemas import NewsEvent, Question, TranslationCandidate
 
 logger = logging.getLogger(__name__)
 
-# Anthropic Haiku 4.5 is the cheap workhorse for the merge call.
-DEFAULT_SYNTHESIZER_MODEL = CLAUDE_HAIKU
+# Synthesizer model is sourced from :data:`polyglot_alpha.models.MODEL_SYNTHESIZER`
+# (env var ``MODEL_SYNTHESIZER``, default Haiku 4.5 — the cheap workhorse).
+DEFAULT_SYNTHESIZER_MODEL = MODEL_SYNTHESIZER
 _DEFAULT_TIMEOUT_SECONDS = 20.0
 
 # Required keys on the merged dict — anything missing forces a fallback to

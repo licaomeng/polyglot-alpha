@@ -119,8 +119,12 @@ async def shutdown_anthropic() -> None:
 
 # Anthropic direct snapshots. The 4-5 family is the cheapest current Claude
 # tier and is what every Polyglot-Alpha LLM call now defaults to.
-CLAUDE_HAIKU = "claude-haiku-4-5-20251001"
-CLAUDE_SONNET = "claude-sonnet-4-5-20250929"
+#
+# Both snapshots are sourced from :mod:`polyglot_alpha.models`, which is the
+# single registry that ``.env`` (``MODEL_HAIKU`` / ``MODEL_SONNET``) feeds
+# into. Re-exported here so legacy imports of ``from .llm import CLAUDE_HAIKU``
+# keep working without churn across the codebase and tests.
+from .models import CLAUDE_HAIKU, CLAUDE_SONNET  # noqa: F401 — public re-export
 
 DEFAULT_TIMEOUT = 30.0
 
