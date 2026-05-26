@@ -1,0 +1,140 @@
+{
+  "audit_date": "2026-05-26",
+  "audit_type": "2nd-pass-verification",
+  "baseline_findings": {
+    "critical": 1,
+    "high": 3
+  },
+  "checks": {
+    "npm_audit": {
+      "scope": "ui/ runtime deps (--omit=dev)",
+      "before": {
+        "critical": 1,
+        "high": 0,
+        "moderate": 1,
+        "low": 0,
+        "notes": "Next.js 14.2.18 critical"
+      },
+      "after": {
+        "critical": 0,
+        "high": 0,
+        "moderate": 2,
+        "low": 0,
+        "notes": "Both moderates are postcss<8.5.10 (XSS via unescaped </style>) — one transitive via next, one in dev surface. Next is now ^15.5.18 (no critical CVE). Runtime impact: requires malicious CSS input being stringified by postcss + browser HTML context; not present in this app (no user-controlled CSS authoring). Acceptable for demo."
+      },
+      "status": "PASS"
+    },
+    "pip_audit": {
+      "scope": "Python runtime venv",
+      "before": {"vulns": 2, "notes": "2 transformers CVEs"},
+      "after": {"vulns": 0, "notes": "pip-audit --strict reports: 'No known vulnerabilities found'"},
+      "status": "PASS"
+    },
+    "slither": {
+      "scope": "contracts/src/ (project Solidity)",
+      "before": {"high": 0, "medium": 9, "notes": "6 div-before-mul + 3 reentrancy in project code"},
+      "after_unfiltered": {
+        "high": 1,
+        "medium": 9,
+        "notes": "All 1 High + 8 of 9 Medium originate in lib/openzeppelin-contracts/contracts/utils/math/Math.sol (the canonical mulDiv assembly impl flagged by slither). These are unavoidable when using OZ Math and represent the FIX, not a bug."
+      },
+      "after_filtered_lib": {
+        "high": 0,
+        "medium": 0,
+        "low": 13,
+        "informational": 10,
+        "notes": "Project code only (--filter-paths lib/): 0 High, 0 Medium. ReentrancyGuard + nonReentrant applied to TranslationAuction, JudgePanel, BuilderFeeRouter. The 1 remaining reentrancy-* finding in project code is correctly guarded by nonReentrant modifiers (defense-in-depth)."
+      },
+      "status": "PASS (project code 0 Medium / 0 High; OZ lib findings are accepted false positives)"
+    },
+    "secret_scan": {
+      "scope": ".env values searched in *.py, *.ts, *.tsx, *.md, *.json, *.sol",
+      "leaks_in_committed_files": 0,
+      "leaks_in_untracked_outputs": 1,
+      "details": {
+        "untracked_leak_files": [
+          "outputs/perf_llm.json",
+          "outputs/perf_benchmark.json"
+        ],
+        "leaked_value": "GEMINI_API_KEY (AIzaSy...) embedded in Gemini 429 error URL captured to file",
+        "git_state": "Files are untracked. .gitignore does NOT exclude outputs/. Any blanket `git add .` would commit them.",
+        "severity": "MEDIUM (timebomb)",
+        "remediation": "Add `outputs/perf_*.json` to .gitignore OR scrub the URLs OR delete the two files. Rotate the Gemini key if these have ever been pushed/shared."
+      },
+      "status": "FAIL (1 new finding)"
+    },
+    "cors_evil_origin": {
+      "request": "OPTIONS http://localhost:8000/events  Origin: http://evil.com",
+      "response_status": 400,
+      "body": "Disallowed CORS origin",
+      "access_control_allow_origin_header": "NOT PRESENT",
+      "status": "PASS"
+    },
+    "rate_limit": {
+      "endpoint": "POST /trigger/event",
+      "burst": 12,
+      "result": {"2xx_or_409": 10, "429": 2},
+      "expected": "~10 then 429",
+      "status": "PASS"
+    },
+    "submit_real_safety": {
+      "no_confirm": {"status_code": 400, "detail": "confirm_real_submission=true required", "status": "PASS"},
+      "low_quality_with_confirm": {
+        "event_id": 110,
+        "overall_score": 0.690,
+        "status_code": 400,
+        "detail": "overall_score 0.690 below REAL_QUALITY_GATE 0.80",
+        "status": "PASS"
+      },
+      "daily_cap": {
+        "code_constant": "MAX_REAL_SUBMISSIONS_PER_DAY",
+        "verified_in_code": "polyglot_alpha/api/routes/polymarket.py:174-183 enforces _count_real_submissions_last_24h",
+        "status": "PASS (code review; not exercised against live counter)"
+      }
+    },
+    "wallet_key_handling": {
+      "frontend_pk_refs": 0,
+      "committed_64hex_strings_in_outputs": "tx hashes only (0x2ddc..., 0xb0e7...)",
+      "private_key_in_git_tree": false,
+      "status": "PASS"
+    },
+    "closed_ip_boundary": {
+      "committed_files_in_judges_and_corpus": 33,
+      "includes_proprietary_md": true,
+      "note": "PROPRIETARY.md headers present in both dirs; full implementation is in the tree. README's closed-IP framing is an org/legal posture not a security gate.",
+      "status": "INFO (not a security issue, business decision)"
+    },
+    "backend_log_credential_leak": {
+      "log_file": "/tmp/polyglot-backend.log",
+      "lines": 248,
+      "credential_matches": 0,
+      "status": "PASS"
+    },
+    "new_dangerous_patterns": {
+      "python_eval_exec_shell": "0 (session.exec is SQLModel — not Python exec)",
+      "python_fstring_sql": "1 (PRAGMA busy_timeout=<int constant> — safe)",
+      "subprocess_shell": "0",
+      "dangerouslySetInnerHTML": "0",
+      "status": "PASS"
+    }
+  },
+  "new_issues": [
+    {
+      "id": "SEC2-001",
+      "severity": "MEDIUM",
+      "category": "secret-leak-risk",
+      "title": "Gemini API key embedded in outputs/perf_*.json (untracked)",
+      "files": ["outputs/perf_llm.json", "outputs/perf_benchmark.json"],
+      "evidence": "Gemini 429 response URL contains ?key=AIza... and was serialized into JSON files. outputs/ is not gitignored, so a `git add .` would commit the key.",
+      "remediation": "1) Add output/perf_*.json (or outputs/) to .gitignore. 2) Delete or scrub these two files. 3) Rotate GEMINI_API_KEY if those files ever left this machine."
+    }
+  ],
+  "previous_findings_status": {
+    "critical_cors_wildcard": "FIXED (allow_origins from CORS_ORIGINS env; wildcard rejected with warning; evil.com returns 400)",
+    "high_no_auth_on_submit_real": "FIXED (confirm_real_submission flag required + quality gate + daily cap)",
+    "high_no_rate_limit": "FIXED (slowapi installed; 100/min default, 10/min on /trigger/event; verified 11th req gets 429)",
+    "high_solidity_reentrancy": "FIXED (ReentrancyGuard + nonReentrant on TranslationAuction, JudgePanel, BuilderFeeRouter; remaining slither reentrancy-* in project code is benign + defended)",
+    "high_division_before_mul": "FIXED (migrated to OZ Math.mulDiv; slither High/Medium in dependency are OZ lib false positives)"
+  },
+  "demo_readiness": "GREEN"
+}

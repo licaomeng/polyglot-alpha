@@ -12,12 +12,20 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" dir="ltr" className="dark" suppressHydrationWarning>
       <body className="min-h-screen bg-background font-sans antialiased">
         <Providers>
+          <a
+            href="#main-content"
+            className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          >
+            Skip to main content
+          </a>
           <div className="relative flex min-h-screen flex-col">
             <SiteHeader />
-            <main className="flex-1">{children}</main>
+            <main id="main-content" className="flex-1">
+              {children}
+            </main>
             <SiteFooter />
           </div>
         </Providers>

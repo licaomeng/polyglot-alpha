@@ -19,7 +19,12 @@ from typing import Optional
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 
-from ..onchain import OnChainClient, reputation_to_float, usdc_to_units
+from ..onchain import (
+    OnChainClient,
+    reputation_to_float,
+    send_with_nonce_lock,
+    usdc_to_units,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,14 +80,13 @@ async def _send_update(
 ) -> str:
     account = _operator_account()
     fn = getattr(client.reputation.functions, fn_name)
-    loop = asyncio.get_running_loop()
 
     def _send() -> str:
         base = client._build_base_txn(account)
         txn = fn(*args).build_transaction({**base, "gas": 200_000})
         return client._send(txn, account)
 
-    tx_hash = await loop.run_in_executor(None, _send)
+    tx_hash = await send_with_nonce_lock(account, _send)
     if not tx_hash.startswith("0x"):
         tx_hash = "0x" + tx_hash
     logger.info("%s(%s) tx=%s", fn_name, args, tx_hash)

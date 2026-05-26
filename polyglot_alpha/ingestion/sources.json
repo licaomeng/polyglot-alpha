@@ -1,6 +1,27 @@
 {
   "sources": [
     {
+      "name": "Xinhua",
+      "url": "http://www.xinhuanet.com/world/news_world.xml",
+      "language": "zh",
+      "category": "geopolitics",
+      "fetch_interval_seconds": 300
+    },
+    {
+      "name": "BBC Chinese",
+      "url": "https://feeds.bbci.co.uk/zhongwen/simp/rss.xml",
+      "language": "zh",
+      "category": "geopolitics",
+      "fetch_interval_seconds": 300
+    },
+    {
+      "name": "RFI Chinese",
+      "url": "https://www.rfi.fr/cn/rss",
+      "language": "zh",
+      "category": "geopolitics",
+      "fetch_interval_seconds": 300
+    },
+    {
       "name": "Caixin",
       "url": "https://www.caixinglobal.com/rss/news.xml",
       "language": "zh",
@@ -8,17 +29,10 @@
       "fetch_interval_seconds": 300
     },
     {
-      "name": "Xinhua",
-      "url": "http://www.xinhuanet.com/english/rss/worldrss.xml",
-      "language": "zh",
-      "category": "geopolitics",
-      "fetch_interval_seconds": 300
-    },
-    {
-      "name": "People's Daily",
-      "url": "http://en.people.cn/rss/90000.xml",
-      "language": "zh",
-      "category": "policy",
+      "name": "SCMP",
+      "url": "https://www.scmp.com/rss/91/feed",
+      "language": "en",
+      "category": "china-watching",
       "fetch_interval_seconds": 300
     },
     {
@@ -26,13 +40,6 @@
       "url": "https://www.asahi.com/rss/asahi/newsheadlines.rdf",
       "language": "ja",
       "category": "japan-macro",
-      "fetch_interval_seconds": 300
-    },
-    {
-      "name": "SCMP",
-      "url": "https://www.scmp.com/rss/91/feed",
-      "language": "en",
-      "category": "china-watching",
       "fetch_interval_seconds": 300
     },
     {
@@ -47,13 +54,6 @@
       "url": "https://rss.dw.com/rdf/rss-en-all",
       "language": "de",
       "category": "europe",
-      "fetch_interval_seconds": 300
-    },
-    {
-      "name": "Reuters",
-      "url": "https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best",
-      "language": "en",
-      "category": "global-benchmark",
       "fetch_interval_seconds": 300
     }
   ]

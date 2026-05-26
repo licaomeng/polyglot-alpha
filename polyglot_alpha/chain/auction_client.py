@@ -24,6 +24,7 @@ from eth_account.signers.local import LocalAccount
 from ..onchain import (
     OnChainClient,
     event_id_from_event,
+    send_with_nonce_lock,
     units_to_usdc,
     usdc_to_units,
 )
@@ -138,12 +139,11 @@ class AuctionClient:
         eid = _event_id_bytes(event_id)
         chash = _content_hash_bytes(candidate_hash)
         amount_units = usdc_to_units(max(0.0, bid_amount_usdc))
-        loop = asyncio.get_running_loop()
 
         def _send() -> str:
             return self._onchain.submit_bid(account, eid, amount_units, chash)
 
-        tx_hash = await loop.run_in_executor(None, _send)
+        tx_hash = await send_with_nonce_lock(account, _send)
         if not tx_hash.startswith("0x"):
             tx_hash = "0x" + tx_hash
         logger.info(
@@ -170,7 +170,6 @@ class AuctionClient:
             raise ValueError("agent_pk is required to sign registerAgent")
         account = Account.from_key(agent_pk)
         stake_units = usdc_to_units(max(0.0, stake_usdc))
-        loop = asyncio.get_running_loop()
 
         def _send() -> str:
             # Best-effort approve; ignore failure (already approved).
@@ -180,7 +179,7 @@ class AuctionClient:
                 logger.exception("register_agent: approve_usdc failed; continuing")
             return self._onchain.register_agent(account)
 
-        tx_hash = await loop.run_in_executor(None, _send)
+        tx_hash = await send_with_nonce_lock(account, _send)
         if not tx_hash.startswith("0x"):
             tx_hash = "0x" + tx_hash
         logger.info(
@@ -197,7 +196,6 @@ class AuctionClient:
         if not agent_pk:
             raise ValueError("agent_pk is required to sign withdrawStake")
         account = Account.from_key(agent_pk)
-        loop = asyncio.get_running_loop()
 
         def _send() -> str:
             base = self._onchain._build_base_txn(account)
@@ -206,7 +204,7 @@ class AuctionClient:
             )
             return self._onchain._send(txn, account)
 
-        tx_hash = await loop.run_in_executor(None, _send)
+        tx_hash = await send_with_nonce_lock(account, _send)
         if not tx_hash.startswith("0x"):
             tx_hash = "0x" + tx_hash
         logger.info("withdrawStake(agent=%s) tx=%s", account.address, tx_hash)
@@ -230,7 +228,6 @@ async def open_auction(
     account = _operator_account()
     eid = _event_id_bytes(event_id)
     ehash = _content_hash_bytes(content_hash)
-    loop = asyncio.get_running_loop()
 
     def _send() -> str:
         base = client._build_base_txn(account)
@@ -239,7 +236,7 @@ async def open_auction(
         )
         return client._send(txn, account)
 
-    tx_hash = await loop.run_in_executor(None, _send)
+    tx_hash = await send_with_nonce_lock(account, _send)
     if not tx_hash.startswith("0x"):
         tx_hash = "0x" + tx_hash
     logger.info("openAuction(event_id=%s) tx=%s", event_id, tx_hash)
@@ -339,7 +336,6 @@ async def settle_auction(
     client = onchain or OnChainClient()
     account = _operator_account()
     eid = _event_id_bytes(event_id)
-    loop = asyncio.get_running_loop()
 
     def _send() -> str:
         base = client._build_base_txn(account)
@@ -348,7 +344,7 @@ async def settle_auction(
         )
         return client._send(txn, account)
 
-    tx_hash = await loop.run_in_executor(None, _send)
+    tx_hash = await send_with_nonce_lock(account, _send)
     if not tx_hash.startswith("0x"):
         tx_hash = "0x" + tx_hash
     winner_addr = getattr(winner, "agent_address", str(winner))

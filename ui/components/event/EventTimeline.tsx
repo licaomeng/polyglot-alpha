@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 import { PhaseCard } from "./PhaseCard";
-import type { EventDetail, JudgeScore, PhaseState } from "@/lib/api";
+import type { EventDetail, JudgeScore, PhaseState, PhaseStatus } from "@/lib/api";
+import { SUB_PHASES_BY_PHASE } from "@/lib/api";
 import { BidTable } from "@/components/auction/BidTable";
 import { PipelineLayerCard } from "@/components/pipeline/PipelineLayerCard";
 import { JudgePanel } from "@/components/judge/JudgePanel";
@@ -186,25 +187,39 @@ function renderPhaseBody(
     case "Translation Pipeline": {
       const translationDetails = detailsAt(phases, idx);
       const t = event.translation;
+      const subPhases = (phase.details?.subPhases as
+        | Record<string, PhaseStatus>
+        | undefined) ?? undefined;
+      const subPhaseChips = (
+        <SubPhaseChips phaseIndex={idx} phase={phase} subPhases={subPhases} />
+      );
       if (!t) {
         return (
-          <div className="space-y-1 text-xs text-muted-foreground">
-            <p>winner · <span className="font-mono">{translationDetails.winner_address ?? "—"}</span></p>
-            {translationDetails.pipeline_trace_ipfs && (
-              <a
-                href={`https://ipfs.io/ipfs/${translationDetails.pipeline_trace_ipfs}`}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
-              >
-                ipfs · {translationDetails.pipeline_trace_ipfs.slice(0, 14)}…
-                <ExternalLink className="h-3 w-3" aria-hidden />
-              </a>
-            )}
+          <div className="space-y-3">
+            {subPhaseChips}
+            <div className="space-y-1 text-xs text-muted-foreground">
+              <p>winner · <span className="font-mono">{translationDetails.winner_address ?? "—"}</span></p>
+              {translationDetails.pipeline_trace_ipfs && (
+                <a
+                  href={`https://ipfs.io/ipfs/${translationDetails.pipeline_trace_ipfs}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+                >
+                  ipfs · {translationDetails.pipeline_trace_ipfs.slice(0, 14)}…
+                  <ExternalLink className="h-3 w-3" aria-hidden />
+                </a>
+              )}
+            </div>
           </div>
         );
       }
-      return <PipelineLayerCard translation={t} />;
+      return (
+        <div className="space-y-3">
+          {subPhaseChips}
+          <PipelineLayerCard translation={t} />
+        </div>
+      );
     }
 
     case "11-Judge Panel": {
@@ -265,16 +280,32 @@ function renderPhaseBody(
 
     case "Polymarket V2 Submission": {
       const pmDetails = detailsAt(phases, idx);
+      // Backend exposes `builder_code` at the top level of `EventDetail`
+      // (snake_case) in addition to the phase-level details payload, so we
+      // also consult that field as a fallback before falling back to the
+      // literal "polyglot_alpha" placeholder.
+      const topLevelBuilderCode = event.builder_code;
+      const topLevelMarketId = event.market_id;
+      const topLevelMarketUrl = event.market_url;
+      const topLevelIsSimulated = event.is_simulated;
       // Merge phase-level details into the top-level polymarket object so we
       // always have a market_url/builder_code to render — even when the
       // canonical `event.polymarket` is missing.
       const merged = {
         builderCode:
-          event.polymarket?.builderCode ?? pmDetails.builder_code ?? "polyglot_alpha",
-        marketId: event.polymarket?.marketId ?? pmDetails.market_id,
-        marketUrl: event.polymarket?.marketUrl ?? pmDetails.market_url,
+          event.polymarket?.builderCode ??
+          pmDetails.builder_code ??
+          topLevelBuilderCode ??
+          "polyglot_alpha",
+        marketId:
+          event.polymarket?.marketId ?? pmDetails.market_id ?? topLevelMarketId,
+        marketUrl:
+          event.polymarket?.marketUrl ?? pmDetails.market_url ?? topLevelMarketUrl,
         submissionTx: event.polymarket?.submissionTx,
-        isSimulated: event.polymarket?.isSimulated ?? pmDetails.is_simulated,
+        isSimulated:
+          event.polymarket?.isSimulated ??
+          pmDetails.is_simulated ??
+          topLevelIsSimulated,
         mode: event.polymarket?.mode,
         status: event.polymarket?.status,
         payload: event.polymarket?.payload,
@@ -302,4 +333,75 @@ function renderPhaseBody(
     default:
       return null;
   }
+}
+
+/**
+ * Progressive-disclosure chips for the agent-debate sub-phases nested under
+ * phase 2. Each chip flips from `pending → running → completed` as the
+ * matching SSE event (`translation.completed`, `critic.completed`,
+ * `moderator.verdict`, `refine.completed`) arrives.
+ */
+function SubPhaseChips({
+  phaseIndex,
+  phase,
+  subPhases,
+}: {
+  phaseIndex: number;
+  phase: PhaseState;
+  subPhases: Record<string, PhaseStatus> | undefined;
+}) {
+  const names = SUB_PHASES_BY_PHASE[phaseIndex];
+  if (!names || names.length === 0) return null;
+
+  // Infer per-chip status: explicit override → otherwise derive from parent
+  // phase state (parent `completed` ⇒ all chips completed; parent `pending`
+  // ⇒ all pending; otherwise the first chip runs).
+  const inferred = (name: string, idx: number): PhaseStatus => {
+    const explicit = subPhases?.[name];
+    if (explicit) return explicit;
+    if (phase.status === "completed") return "completed";
+    if (phase.status === "failed" && idx === 0) return "failed";
+    if (phase.status === "running" && idx === 0) return "running";
+    return "pending";
+  };
+
+  return (
+    <ol
+      className="flex flex-wrap gap-1.5"
+      aria-label="Translation pipeline sub-phases"
+      data-testid="sub-phase-chips"
+    >
+      {names.map((name, idx) => {
+        const status = inferred(name, idx);
+        const tone =
+          status === "completed"
+            ? "border-emerald-500/40 bg-emerald-500/[0.06] text-emerald-300"
+            : status === "running"
+              ? "border-primary/50 bg-primary/[0.06] text-primary"
+              : status === "failed"
+                ? "border-destructive/50 bg-destructive/[0.06] text-destructive"
+                : "border-border/60 bg-muted/20 text-muted-foreground";
+        return (
+          <li
+            key={name}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider ${tone}`}
+          >
+            <span
+              className={
+                status === "running"
+                  ? "h-1.5 w-1.5 animate-pulse rounded-full bg-primary"
+                  : status === "completed"
+                    ? "h-1.5 w-1.5 rounded-full bg-emerald-400"
+                    : status === "failed"
+                      ? "h-1.5 w-1.5 rounded-full bg-destructive"
+                      : "h-1.5 w-1.5 rounded-full bg-muted-foreground/60"
+              }
+              aria-hidden
+            />
+            {name}
+          </li>
+        );
+      })}
+    </ol>
+  );
 }

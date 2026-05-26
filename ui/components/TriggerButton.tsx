@@ -78,31 +78,27 @@ export function TriggerButton() {
           setBusy(true);
           setTriggered(false);
           setProgressLabel(FALLBACK_INITIAL_LABEL);
+          // Backend now pre-creates the event row and schedules the 60-90s
+          // lifecycle in a BackgroundTask, so the POST returns event_id in
+          // ~10 ms. Navigate straight to the detail page and let the
+          // page's SSE subscription animate the Timeline.
           try {
             const result = await triggerEvent();
             if (result?.event_id) {
               setEventId(String(result.event_id));
-              // Navigate immediately so the user watches the 60-75s lifecycle
-              // progress on the event-detail page rather than staring at a
-              // spinner button. The detail page's own useEventStream hook
-              // drives the Timeline animation in real time.
               router.push(`/events/${result.event_id}`);
               setBusy(false);
               setTriggered(true);
             } else {
-              // Backend returned without an id — fall back to events list.
-              setTimeout(() => {
-                router.push(`/events`);
-                setBusy(false);
-                setTriggered(true);
-              }, 600);
+              router.push(`/events`);
+              setBusy(false);
+              setTriggered(true);
             }
           } catch {
-            // Backend down or rate-limited — surface error state.
-            setProgressLabel("Backend unreachable — see /events for cached runs.");
-            setTimeout(() => {
-              setBusy(false);
-            }, 1500);
+            setProgressLabel(
+              "Backend unreachable — see /events for cached runs.",
+            );
+            setBusy(false);
           }
         }}
         aria-label="Trigger a live demo event"

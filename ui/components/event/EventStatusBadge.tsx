@@ -1,16 +1,28 @@
 import { Badge } from "@/components/ui/badge";
 import type { EventSummary } from "@/lib/api";
+import { statusInfo } from "@/lib/status";
 
-const MAP: Record<string, { label: string; variant: "info" | "warning" | "success" | "secondary" | "destructive" }> = {
-  live: { label: "LIVE", variant: "info" },
-  running: { label: "Running", variant: "info" },
-  pending: { label: "Queued", variant: "secondary" },
-  completed: { label: "Settled", variant: "success" },
-  failed: { label: "Failed", variant: "destructive" },
-  historical: { label: "Historical", variant: "secondary" },
-};
-
+/**
+ * Render a coloured pill for the event status.
+ *
+ * The backend emits uppercase canonical statuses (`PENDING`, `SUBMITTED`,
+ * `EVALUATING`, `REJECTED`, `FAILED`, etc.); historical SSE replay still
+ * emits lowercase short-hand (`running` / `live`). Both flow through
+ * `statusInfo` (single source of truth in `lib/status.ts`) so the badge
+ * always shows a friendly label and a tone that actually matches the phase
+ * — rather than falling back to raw SCREAMING_SNAKE_CASE — and the
+ * underlying canonical enum stays available as a `title` tooltip and
+ * `aria-label` for screen readers.
+ */
 export function EventStatusBadge({ status }: { status: EventSummary["status"] }) {
-  const m = MAP[status] ?? { label: status, variant: "secondary" as const };
-  return <Badge variant={m.variant}>{m.label}</Badge>;
+  const info = statusInfo(status);
+  return (
+    <Badge
+      variant={info.variant}
+      title={`Backend status: ${status}`}
+      aria-label={`Status: ${info.label} (${status})`}
+    >
+      {info.label}
+    </Badge>
+  );
 }

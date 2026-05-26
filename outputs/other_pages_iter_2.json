@@ -1,0 +1,78 @@
+{
+  "iteration": 2,
+  "date": "2026-05-25T21:12Z",
+  "scope": "post-fix verification: events/history filters + leaderboard tooltips + agent profile + about page",
+  "fixes_applied": [
+    "Added centralized lib/status.ts mapping all 9 canonical EventStatus + 6 legacy lowercase strings into 5 UI buckets (all/pending/running/completed/failed).",
+    "EventStatusBadge now uses statusInfo() so uppercase backend statuses render as friendly labels ('Queued', 'Judging', 'Anchored', 'Settled', 'Rejected', 'Failed').",
+    "Events page filter buttons use shared bucketMatches() — Completed/Settled now returns 29 of 50 events instead of 0.",
+    "History page status filter dropdown uses same bucket taxonomy + EventStatusBadge in the row.",
+    "Events page header now shows 'Showing N of M events' counter with isFetching indicator.",
+    "Leaderboard table th elements get tooltips explaining Reputation (EWMA α=0.85, closed-IP), Revenue (0.4% builder fee), Win rate.",
+    "Leaderboard page header gains 3-bullet glossary explaining each ranking metric + thesis §5.27 reference.",
+    "Leaderboard agent alias derived from address (Qwen agent, Gemini agent, Llama agent, DeepSeek agent) so seed rows are no longer em-dashes.",
+    "Agent profile shows provider badge ('Qwen 2.5 72B'), specialty badge ('Mandarin → English macro'), bid-strategy line, reputation decay rate hint, slashing history.",
+    "Agent profile now includes 'Recent events' card (8 events) linking each to /events/{id} with friendly status badge.",
+    "About page expanded: 7 phases now reference §5.x sections; added 11-component grid (10+1 SSE bus); added License + contact card with BUSL-1.1 + closed-IP + builder code badges and licaomeng@gmail.com mailto."
+  ],
+  "section_A_events_after_fix": {
+    "filter_All_count": 50,
+    "filter_Settled_count": 29,
+    "filter_Failed_count": 14,
+    "filter_Queued_count": 4,
+    "showing_counter_visible": true,
+    "badge_friendly_label": "PASS (PENDING -> 'Queued', SUBMITTED -> 'Settled', EVALUATING -> 'Judging', REJECTED -> 'Rejected')",
+    "tooltips_on_filter_buttons": "PASS (BUCKET_TOOLTIP applied as title attribute)",
+    "console_errors": 0
+  },
+  "section_B_leaderboard_after_fix": {
+    "rows": 20,
+    "headerTooltips": [
+      "Rep. — Reputation score in [0, 1]. EWMA over recent fills with closed-IP weighting (thesis §5.27)",
+      "Revenue — Cumulative builder-fee revenue (USDC). 0.4% maker fee per Polymarket fill routes to the producing agent",
+      "Win rate — Auctions won divided by auctions entered. Lowest qualified bid wins"
+    ],
+    "aliases_derived": ["Agent", "Qwen agent", "agent a", "Gemini agent", "Agent"],
+    "header_bullets": 3
+  },
+  "section_C_agent_profile_after_fix": {
+    "provider_badge": "Qwen 2.5 72B",
+    "specialty_badge": "Mandarin → English macro",
+    "bid_strategy_line": "PASS",
+    "decay_rate_hint": "PASS (EWMA α=0.85)",
+    "slash_history_line": "PASS (testnet 0 events)",
+    "recent_events_list_count": 8,
+    "recent_events_with_status_badge": true
+  },
+  "section_D_history_after_fix": {
+    "status_filter_options": ["All status", "Queued", "Running", "Settled", "Failed"],
+    "rows_default": 50,
+    "first_row_status_badge": "Judging (friendly label for EVALUATING)",
+    "counter_visible": true
+  },
+  "section_E_about_after_fix": {
+    "headings": ["Mechanism design", "Seven runtime phases", "10+1 components", "License + contact"],
+    "section_count": 3,
+    "has_license_badge": true,
+    "has_contact_email": true,
+    "has_11_components": true,
+    "has_builder_code": true,
+    "has_thesis_cross_refs": true
+  },
+  "tests": {
+    "tsc_noemit": "PASS (no errors)",
+    "jest_run": "PASS (8 suites, 36 tests, all green)"
+  },
+  "summary": {
+    "fixes_landed": 11,
+    "regressions": 0,
+    "remaining_low_priority": [
+      "No pagination on events / history (50-row API cap)",
+      "Leaderboard does not collapse to cards on mobile (only revenue bar hidden)",
+      "No language filter on history",
+      "No date-range filter on history",
+      "Sort columns not available on events / history",
+      "Indicator-clarity items 73-78 (BLEU/COMET/MQM/D5/question_id/overall_score) belong to event-detail page which is owned by a parallel agent"
+    ]
+  }
+}

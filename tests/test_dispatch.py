@@ -131,11 +131,18 @@ async def test_collect_bids_inline_returns_four_distinct_bids(
 
 
 @pytest.mark.asyncio
-async def test_collect_bids_inline_tolerates_agent_failure(
+async def test_collect_bids_inline_drops_failed_agents(
     sample_event: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """One failing agent must not kill the auction; we still get 4 bids."""
+    """A failing agent must NOT yield a synthetic bid.
+
+    Previous contract: each failing agent contributed a hardcoded 1.0 USDC
+    fallback bid with ``candidate_hash="0x0"`` and an ``_error`` key. That
+    placeholder bid then went on-chain as if it were a real auction vote.
+    The new contract is: propagate failures so the orchestrator records
+    only the agents that actually produced a valid evaluation.
+    """
 
     from polyglot_alpha.agents.base import BaseTranslatorAgent
 
@@ -154,11 +161,12 @@ async def test_collect_bids_inline_tolerates_agent_failure(
     )
 
     bids = await dispatch.collect_bids_inline(sample_event, window_seconds=10.0)
-    assert len(bids) == 4
-    failing = [b for b in bids if "_error" in b]
-    assert len(failing) == 1
-    assert failing[0]["bid_amount"] > 0  # safe-default bid still emitted
-    assert failing[0]["candidate_hash"] == "0x0"
+    # Only 3 agents successfully bid; the failing one is dropped entirely
+    # so no synthetic placeholder enters the auction.
+    assert len(bids) == 3
+    for bid in bids:
+        assert "_error" not in bid
+        assert bid["candidate_hash"] != "0x0"
 
 
 @pytest.mark.asyncio
@@ -243,12 +251,21 @@ async def test_run_pipeline_unknown_agent_falls_back_to_gemini(
 @pytest.mark.asyncio
 async def test_run_for_winner_returns_pipeline_result(
     sample_event: dict[str, Any],
+    mock_llm_factory,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The orchestrator-facing entry point must always return a PipelineResult.
+    """The orchestrator-facing entry point must return a PipelineResult.
 
-    Even without LLM keys, ``make_llm`` returns ``MockLLM`` so the pipeline
-    completes deterministically.
+    The dispatch no longer has a fallback path that masks LLM failures,
+    so we force ``make_llm`` to return ``MockLLM`` for this test instead
+    of relying on the absence of API keys (the test environment may load
+    ``.env`` and pick up a stale or credit-exhausted key).
     """
+
+    monkeypatch.setattr(
+        "polyglot_alpha.agents.dispatch.make_llm",
+        lambda model_id: mock_llm_factory(),
+    )
 
     result = await dispatch.run_for_winner(sample_event, winner_address="0xdead")
     assert isinstance(result, dispatch.PipelineResult)

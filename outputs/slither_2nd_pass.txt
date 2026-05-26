@@ -1,0 +1,221 @@
+'forge clean' running (wd: /Users/messili/codebase/polyglot-alpha/contracts)
+'forge config --json' running
+'forge build --build-info src' running (wd: /Users/messili/codebase/polyglot-alpha/contracts)
+INFO:Printers:
+Compiled with Foundry
+Total number of contracts in source files: 10
+Number of contracts in dependencies: 5
+Source lines of code (SLOC) in source files: 661
+Source lines of code (SLOC) in dependencies: 879
+Number of  assembly lines: 0
+Number of optimization issues: 1
+Number of informational issues: 33
+Number of low issues: 13
+Number of medium issues: 9
+Number of high issues: 1
+
++---------------------+-------------+------+------------+--------------+--------------------+
+| Name                | # functions | ERCS | ERC20 info | Complex code | Features           |
++---------------------+-------------+------+------------+--------------+--------------------+
+| IERC20              | 3           |      |            | No           |                    |
+| IReputationRegistry | 1           |      |            | No           |                    |
+| BuilderFeeRouter    | 16          |      |            | No           | Tokens interaction |
+| IERC20              | 3           |      |            | No           |                    |
+| JudgePanel          | 15          |      |            | No           | Tokens interaction |
+| QuestionRegistry    | 2           |      |            | No           |                    |
+| ReputationRegistry  | 12          |      |            | No           |                    |
+| IERC20              | 3           |      |            | No           |                    |
+| IReputationRegistry | 2           |      |            | No           |                    |
+| TranslationAuction  | 19          |      |            | Yes          | Tokens interaction |
++---------------------+-------------+------+------------+--------------+--------------------+
+INFO:Slither:src/ analyzed (15 contracts)
+'forge clean' running (wd: /Users/messili/codebase/polyglot-alpha/contracts)
+'forge config --json' running
+'forge build --build-info src' running (wd: /Users/messili/codebase/polyglot-alpha/contracts)
+INFO:Detectors:
+Detector: incorrect-exp
+Math.mulDiv(uint256,uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#206-277) has bitwise-xor operator ^ instead of the exponentiation operator **: 
+	 - inverse = (3 * denominator) ^ 2 (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#259)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#incorrect-exponentiation
+INFO:Detectors:
+Detector: divide-before-multiply
+Math.mulDiv(uint256,uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#206-277) performs a multiplication on the result of a division:
+	- denominator = denominator / twos (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#244)
+	- inverse = (3 * denominator) ^ 2 (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#259)
+Math.mulDiv(uint256,uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#206-277) performs a multiplication on the result of a division:
+	- denominator = denominator / twos (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#244)
+	- inverse *= 2 - denominator * inverse (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#263)
+Math.mulDiv(uint256,uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#206-277) performs a multiplication on the result of a division:
+	- denominator = denominator / twos (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#244)
+	- inverse *= 2 - denominator * inverse (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#264)
+Math.mulDiv(uint256,uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#206-277) performs a multiplication on the result of a division:
+	- denominator = denominator / twos (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#244)
+	- inverse *= 2 - denominator * inverse (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#265)
+Math.mulDiv(uint256,uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#206-277) performs a multiplication on the result of a division:
+	- denominator = denominator / twos (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#244)
+	- inverse *= 2 - denominator * inverse (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#266)
+Math.mulDiv(uint256,uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#206-277) performs a multiplication on the result of a division:
+	- denominator = denominator / twos (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#244)
+	- inverse *= 2 - denominator * inverse (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#267)
+Math.mulDiv(uint256,uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#206-277) performs a multiplication on the result of a division:
+	- denominator = denominator / twos (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#244)
+	- inverse *= 2 - denominator * inverse (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#268)
+Math.mulDiv(uint256,uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#206-277) performs a multiplication on the result of a division:
+	- low = low / twos (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#247)
+	- result = low * inverse (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#274)
+Math.invMod(uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#317-363) performs a multiplication on the result of a division:
+	- quotient = gcd / remainder (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#339)
+	- (gcd,remainder) = (remainder,gcd - remainder * quotient) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#341-348)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#divide-before-multiply
+INFO:Detectors:
+Detector: events-access
+BuilderFeeRouter.transferOperator(address) (src/BuilderFeeRouter.sol#96-99) should emit an event for: 
+	- operator = newOperator (src/BuilderFeeRouter.sol#98) 
+JudgePanel.transferOperator(address) (src/JudgePanel.sol#89-92) should emit an event for: 
+	- operator = newOperator (src/JudgePanel.sol#91) 
+TranslationAuction.transferOperator(address) (src/TranslationAuction.sol#156-159) should emit an event for: 
+	- operator = newOperator (src/TranslationAuction.sol#158) 
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#missing-events-access-control
+INFO:Detectors:
+Detector: calls-loop
+TranslationAuction.settleAuction(bytes32) (src/TranslationAuction.sol#247-301) has external calls inside a loop: rep = reputation.getReputation(bidder) (src/TranslationAuction.sol#261-263)
+TranslationAuction.settleAuction(bytes32) (src/TranslationAuction.sol#247-301) has external calls inside a loop: reputation.updateOnAuction(bidder_scope_1,bidder_scope_1 == bestBidder) (src/TranslationAuction.sol#284)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation/#calls-inside-a-loop
+INFO:Detectors:
+Detector: reentrancy-benign
+Reentrancy in TranslationAuction.settleAuction(bytes32) (src/TranslationAuction.sol#247-301):
+	External calls:
+	- reputation.updateOnAuction(bidder_scope_1,bidder_scope_1 == bestBidder) (src/TranslationAuction.sol#284)
+	State variables written after the call(s):
+	- reputationStakeUnlockAt[eventId] = unlockAt (src/TranslationAuction.sol#293)
+	- stakeUnlockAt[bestBidder] = unlockAt (src/TranslationAuction.sol#295)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#reentrancy-vulnerabilities-3
+INFO:Detectors:
+Detector: reentrancy-events
+Reentrancy in BuilderFeeRouter.recordFill(string,uint256,address) (src/BuilderFeeRouter.sol#122-144):
+	External calls:
+	- reputation.updateOnFee(translator,fillAmount) (src/BuilderFeeRouter.sol#140)
+	Event emitted after the call(s):
+	- PayoutAccrued(translator,marketId,fillAmount,cumulativeFees[translator]) (src/BuilderFeeRouter.sol#143)
+Reentrancy in TranslationAuction.settleAuction(bytes32) (src/TranslationAuction.sol#247-301):
+	External calls:
+	- reputation.updateOnAuction(bidder_scope_1,bidder_scope_1 == bestBidder) (src/TranslationAuction.sol#284)
+	Event emitted after the call(s):
+	- AuctionSettled(eventId,bestBidder,bestBid) (src/TranslationAuction.sol#300)
+	- SlashableWindowOpened(eventId,bestBidder,unlockAt) (src/TranslationAuction.sol#297)
+Reentrancy in JudgePanel.withdrawJudge(address) (src/JudgePanel.sol#166-175):
+	External calls:
+	- ok = usdc.transfer(judge,amount) (src/JudgePanel.sol#172)
+	Event emitted after the call(s):
+	- JudgeWithdrew(judge,amount) (src/JudgePanel.sol#174)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#reentrancy-vulnerabilities-4
+INFO:Detectors:
+Detector: timestamp
+TranslationAuction.withdrawStake() (src/TranslationAuction.sol#187-198) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(block.timestamp >= unlockAt,slashable window open) (src/TranslationAuction.sol#189)
+TranslationAuction.openAuction(bytes32,bytes32) (src/TranslationAuction.sol#204-211) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(! a.opened,already opened) (src/TranslationAuction.sol#206)
+TranslationAuction.submitBid(bytes32,uint256,bytes32) (src/TranslationAuction.sol#219-242) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(a.opened,not opened) (src/TranslationAuction.sol#221)
+	- require(bool,string)(! a.settled,settled) (src/TranslationAuction.sol#222)
+	- require(bool,string)(block.timestamp < a.deadline,window closed) (src/TranslationAuction.sol#223)
+TranslationAuction.settleAuction(bytes32) (src/TranslationAuction.sol#247-301) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(a.opened,not opened) (src/TranslationAuction.sol#249)
+	- require(bool,string)(! a.settled,already settled) (src/TranslationAuction.sol#250)
+	- require(bool,string)(block.timestamp >= a.deadline,window open) (src/TranslationAuction.sol#251)
+	- unlockAt > stakeUnlockAt[bestBidder] (src/TranslationAuction.sol#294)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#block-timestamp
+INFO:Detectors:
+Detector: assembly
+Panic.panic(uint256) (lib/openzeppelin-contracts/contracts/utils/Panic.sol#50-56) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/Panic.sol#51-55)
+StorageSlot.getAddressSlot(bytes32) (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#66-70) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#67-69)
+StorageSlot.getBooleanSlot(bytes32) (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#75-79) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#76-78)
+StorageSlot.getBytes32Slot(bytes32) (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#84-88) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#85-87)
+StorageSlot.getUint256Slot(bytes32) (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#93-97) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#94-96)
+StorageSlot.getInt256Slot(bytes32) (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#102-106) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#103-105)
+StorageSlot.getStringSlot(bytes32) (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#111-115) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#112-114)
+StorageSlot.getStringSlot(string) (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#120-124) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#121-123)
+StorageSlot.getBytesSlot(bytes32) (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#129-133) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#130-132)
+StorageSlot.getBytesSlot(bytes) (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#138-142) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#139-141)
+Math.add512(uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#25-30) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#26-29)
+Math.mul512(uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#37-46) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#41-45)
+Math.tryMul(uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#73-84) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#76-80)
+Math.tryDiv(uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#89-97) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#92-95)
+Math.tryMod(uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#102-110) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#105-108)
+Math.mulDiv(uint256,uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#206-277) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#229-236)
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#242-251)
+Math.tryModExp(uint256,uint256,uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#411-435) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#413-434)
+Math.tryModExp(bytes,bytes,bytes) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#451-473) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#463-472)
+Math._zeroBytes(bytes) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#478-490) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#482-484)
+Math.log2(uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#619-658) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#655-657)
+SafeCast.toUint(bool) (lib/openzeppelin-contracts/contracts/utils/math/SafeCast.sol#1157-1161) uses assembly
+	- INLINE ASM (lib/openzeppelin-contracts/contracts/utils/math/SafeCast.sol#1158-1160)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#assembly-usage
+INFO:Detectors:
+Detector: solc-version
+Version constraint ^0.8.20 contains known severe issues (https://solidity.readthedocs.io/en/latest/bugs.html)
+	- VerbatimInvalidDeduplication
+	- FullInlinerNonExpressionSplitArgumentEvaluationOrder
+	- MissingSideEffectsOnSelectorAccess.
+It is used by:
+	- ^0.8.20 (lib/openzeppelin-contracts/contracts/utils/Panic.sol#4)
+	- ^0.8.20 (lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol#4)
+	- ^0.8.20 (lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol#5)
+	- ^0.8.20 (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#4)
+	- ^0.8.20 (lib/openzeppelin-contracts/contracts/utils/math/SafeCast.sol#5)
+	- ^0.8.20 (src/BuilderFeeRouter.sol#2)
+	- ^0.8.20 (src/JudgePanel.sol#2)
+	- ^0.8.20 (src/QuestionRegistry.sol#2)
+	- ^0.8.20 (src/ReputationRegistry.sol#2)
+	- ^0.8.20 (src/TranslationAuction.sol#2)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#incorrect-versions-of-solidity
+INFO:Detectors:
+Detector: missing-inheritance
+ReputationRegistry (src/ReputationRegistry.sol#13-310) should inherit from IReputationRegistry (src/BuilderFeeRouter.sol#12-14)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#missing-inheritance
+INFO:Detectors:
+Detector: naming-convention
+Parameter BuilderFeeRouter.setReputationRegistry(address)._reputation (src/BuilderFeeRouter.sol#90) is not in mixedCase
+Parameter QuestionRegistry.registerQuestion(bytes32,bytes32,string,uint256,string,string)._titleHash (src/QuestionRegistry.sol#32) is not in mixedCase
+Parameter QuestionRegistry.registerQuestion(bytes32,bytes32,string,uint256,string,string)._sourceNewsHash (src/QuestionRegistry.sol#33) is not in mixedCase
+Parameter QuestionRegistry.registerQuestion(bytes32,bytes32,string,uint256,string,string)._resolutionSource (src/QuestionRegistry.sol#34) is not in mixedCase
+Parameter QuestionRegistry.registerQuestion(bytes32,bytes32,string,uint256,string,string)._cutoffTs (src/QuestionRegistry.sol#35) is not in mixedCase
+Parameter QuestionRegistry.registerQuestion(bytes32,bytes32,string,uint256,string,string)._category (src/QuestionRegistry.sol#36) is not in mixedCase
+Parameter QuestionRegistry.registerQuestion(bytes32,bytes32,string,uint256,string,string)._winningTranslator (src/QuestionRegistry.sol#37) is not in mixedCase
+Parameter QuestionRegistry.getQuestion(uint256)._id (src/QuestionRegistry.sol#53) is not in mixedCase
+Parameter TranslationAuction.setReputationRegistry(address)._reputation (src/TranslationAuction.sol#150) is not in mixedCase
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#conformance-to-solidity-naming-conventions
+INFO:Detectors:
+Detector: too-many-digits
+Math.log2(uint256) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#619-658) uses literals with too many digits:
+	- r = r | byte(uint256,uint256)(x >> r,0x0000010102020202030303030303030300000000000000000000000000000000) (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#656)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#too-many-digits
+INFO:Detectors:
+Detector: immutable-states
+ReputationRegistry.owner (src/ReputationRegistry.sol#58) should be immutable 
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#state-variables-that-could-be-declared-immutable
+INFO:Slither:src/ analyzed (15 contracts with 101 detectors), 57 result(s) found

@@ -12,12 +12,13 @@ import { useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { relativeTime } from "@/lib/utils";
 import { usePhaseState } from "@/hooks/usePhaseState";
-import { SSE_TO_PHASE_INDEX, type SseEventType } from "@/lib/api";
+import { SSE_TO_PHASE_INDEX, type AnySseEventType } from "@/lib/api";
+import { AgentDebatePanel } from "@/components/event/AgentDebatePanel";
 
 export default function EventDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params?.id ?? "";
-  const { data: event, isLoading, isError } = useEvent(id);
+  const { data: event, isLoading, isError, error } = useEvent(id);
   const { phases: livePhases, connected, latest } = useEventStream(id);
   const { setActivePhase } = usePhaseState();
 
@@ -26,7 +27,7 @@ export default function EventDetailPage() {
   useEffect(() => {
     if (!latest) return;
     if (latest.type === "hello" || latest.type === "heartbeat") return;
-    const idx = SSE_TO_PHASE_INDEX[latest.type as SseEventType];
+    const idx = SSE_TO_PHASE_INDEX[latest.type as AnySseEventType];
     if (idx !== undefined) setActivePhase(idx);
   }, [latest, setActivePhase]);
 
@@ -60,12 +61,31 @@ export default function EventDetailPage() {
     );
   }
   if (isError || !merged) {
+    // The api helper throws `Error("API 404: …")` on non-2xx responses, so we
+    // sniff the code to distinguish "event genuinely missing" (404) from a
+    // transient network/timeout error and tailor the recovery hint.
+    const errMsg = error instanceof Error ? error.message : "";
+    const is404 = errMsg.includes("404");
     return (
-      <div className="container py-8">
+      <div className="container space-y-4 py-8">
         <EmptyState
-          title="Event not found"
-          description={`No event matches id "${id}". The backend may be unreachable or the event has not been persisted yet.`}
+          title={is404 ? "Event not found" : isError ? "Couldn't load this event" : "Event not found"}
+          description={
+            is404
+              ? `No event with id "${id}" exists in the backend. It may have been deleted or the link is malformed.`
+              : isError
+                ? `Backend at http://localhost:8000 didn't respond for id "${id}". It may be restarting or busy running the pipeline for another event.`
+                : `No event matches id "${id}". The backend may be unreachable or the event has not been persisted yet.`
+          }
         />
+        <div className="flex justify-center gap-2">
+          <a
+            href="/events"
+            className="text-xs text-primary underline-offset-2 hover:underline"
+          >
+            ← Back to events list
+          </a>
+        </div>
       </div>
     );
   }
@@ -103,6 +123,10 @@ export default function EventDetailPage() {
       <section className="space-y-3">
         <h2 className="text-base font-semibold">Phase timeline</h2>
         <EventTimeline event={merged} />
+      </section>
+
+      <section className="space-y-3">
+        <AgentDebatePanel event={merged} />
       </section>
     </div>
   );

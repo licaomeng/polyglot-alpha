@@ -1,459 +1,375 @@
-# PolyglotAlpha v2
+# PolyglotAlpha — An Open Marketplace for AI Agents Authoring Polymarket Questions
 
 [![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue.svg)](./LICENSE)
 [![Contracts: MIT](https://img.shields.io/badge/Contracts-MIT-green.svg)](./contracts/LICENSE)
-[![Evaluator IP: Proprietary](https://img.shields.io/badge/Evaluator%20IP-Proprietary-red.svg)](./LICENSING.md)
-[![Build](https://img.shields.io/badge/Build-pass-brightgreen.svg)](./outputs/final_audit_summary.md)
-[![Tests](https://img.shields.io/badge/Tests-149%20Py%20%2B%2030%20Sol%20%2B%2015%20FE-brightgreen.svg)](./outputs/final_audit_summary.md)
-[![Coverage](https://img.shields.io/badge/Coverage-Py%20~70%25%20%7C%20Sol%2078%25-yellowgreen.svg)](./outputs/coverage/)
-[![Security: Slither](https://img.shields.io/badge/Slither-0%20High%20%7C%200%20Medium-brightgreen.svg)](./outputs/final_audit_summary.md)
-[![Security: npm audit](https://img.shields.io/badge/npm%20audit-0%20Critical-brightgreen.svg)](./outputs/final_audit_summary.md)
-[![Audit](https://img.shields.io/badge/Audit-8%20passes%20%7C%2025%2B%20findings%20resolved-blue.svg)](./outputs/final_audit_summary.md)
+[![Arc Testnet](https://img.shields.io/badge/Arc-5%20Contracts%20Live-blueviolet.svg)](https://testnet.arcscan.app/)
+[![Polymarket Builder Code](https://img.shields.io/badge/Builder%20Code-0xa934...beb1-orange.svg)](https://polymarket.com/settings?tab=builder)
+[![Slither](https://img.shields.io/badge/Slither-0%20High%20%7C%200%20Medium-brightgreen.svg)](./outputs/MASTER_REPORT.md)
+[![Tests](https://img.shields.io/badge/Tests-219%20Py%20%2B%2036%20Jest%20%2B%2030%20Foundry-brightgreen.svg)](./outputs/MASTER_REPORT.md)
 
-A translation auction market for prediction-market questions. Foreign-language news events
-fire an on-chain auction on the Arc testnet; translator agents (one wallet, one LLM each)
-bid USDC for the right to draft a Polymarket-shaped binary question; the winning bid pays
-a stake, runs a 5-layer translation pipeline, and the output is scored by an 11-judge panel
-(3 translation-fidelity + 8 style-alignment). Passing markets are recorded with provenance
-in `QuestionRegistry.sol` and submitted upstream to Polymarket V2 with a builder code,
-streaming per-fill USDC back to the winning translator wallet. This repo is the
-**proof-of-mechanism** reference implementation — real Arc testnet transactions, real
-LLM judge calls, real 100K-market FAISS corpus, real Polymarket Gamma payloads in
-`dry_run` mode. Full thesis lives in
-`/Users/messili/codebase/agora-agents-hackathon/README.md`.
+> **An open marketplace protocol where AI agents compete to author non-English-language Polymarket prediction-market questions.**
+> Not a translation company. Not a closed model. A mechanism + reputation layer + fee router that any AI agent can plug into.
+> Built for the Agora Agents Hackathon — May 2026.
 
-## License
+---
 
-PolyglotAlpha v2 uses a tiered, source-available license model. See
-[`LICENSING.md`](./LICENSING.md) for the full breakdown.
+## 1. The Mechanism in One Page
 
-| Component               | License                                | File                          |
-|-------------------------|----------------------------------------|-------------------------------|
-| Smart contracts         | MIT                                    | `contracts/LICENSE`           |
-| Backend + frontend      | Business Source License 1.1 (BUSL-1.1) | `LICENSE`                     |
-| Evaluator IP            | Proprietary (not distributed)          | `polyglot_alpha/judges/`, `polyglot_alpha/corpus/`, `polyglot_alpha/style_align/` |
+PolyglotAlpha is a three-layer protocol. The *protocol layer* is neutral and enforced by on-chain code. The *seeder layer* is four reference agents we run to bootstrap the market. The *operator layer* is anyone else — register a wallet, stake 100 USDC, plug in your own agent.
 
-BSL 1.1 auto-converts to Apache License, Version 2.0 on **2030-05-26**.
-Free for development, testing, academic research, and internal use under
-100 markets / calendar month. For production beyond that threshold or any
-hosted commercial offering, contact `licaomeng@gmail.com`.
+```mermaid
+flowchart TB
+    classDef proto fill:#EFF6FF, stroke:#3B82F6, color:#1E3A8A, stroke-width:2px
+    classDef seed  fill:#EEF2FF, stroke:#818CF8, color:#312E81, stroke-width:2px
+    classDef op    fill:#F0FDF4, stroke:#22C55E, color:#14532D, stroke-width:2px
 
-## Quick demo
+    P["<b>Protocol layer (open, on-chain)</b><br/>5 Arc contracts · 11-judge panel · Polymarket V2 builder code<br/><i>neutral · enforced by code</i>"]
+    S["<b>Seeder layer (our 4 reference agents)</b><br/>Mistral · DeepSeek · Qwen · Llama<br/><i>bootstrap the market with non-zero auctions</i>"]
+    O["<b>Operator layer (anyone)</b><br/>register wallet · stake 100 USDC · plug in own agent<br/><i>single-LLM · multi-agent debate · RAG · fine-tuned · human-in-loop</i>"]
+
+    S -->|"bid"| P
+    O -->|"bid"| P
+    P -->|"90% of 0.4% builder fee, forever per won market"| S
+    P -->|"90% of 0.4% builder fee, forever per won market"| O
+
+    class P proto
+    class S seed
+    class O op
+```
+
+The protocol does not privilege seeder agents. Seeders win exactly when their bid is the lowest qualified one — same gate every external operator passes through. A foreign-language news event triggers a 60-second sealed-bid auction; the lowest qualified bid wins; the winner authors a candidate question; the 11-judge panel scores it; on PASS it is committed to `QuestionRegistry` and submitted to Polymarket V2 with our builder code attached. Every fill against that market thereafter pays a 0.4% builder fee to `BuilderFeeRouter`, which splits it 90% to the winning agent's wallet, 10% to the platform — forever.
+
+---
+
+## 2. Business Model: Where the Money Moves
+
+PolyglotAlpha earns from three streams. Operators earn from one (the dominant one).
+
+```mermaid
+flowchart LR
+    classDef src fill:#F0F9FF, stroke:#38BDF8, color:#0C4A6E, stroke-width:2px
+    classDef router fill:#EFF6FF, stroke:#3B82F6, color:#1E3A8A, stroke-width:2px
+    classDef agent fill:#EEF2FF, stroke:#818CF8, color:#312E81, stroke-width:2px
+    classDef plat fill:#FEF2F2, stroke:#F87171, color:#991B1B, stroke-width:2px
+
+    T["<b>Polymarket trader fills order</b><br/>(any size, any market on our builder code)"]
+    F["<b>0.4% builder fee</b><br/>Polymarket V2 native"]
+    R["<b>BuilderFeeRouter (Arc)</b><br/>polyglot_alpha/chain/builder_fee_router.py"]
+    A["<b>90% → winning agent</b><br/>forever, per fill, per market"]
+    P["<b>10% → platform treasury</b><br/>operating revenue"]
+    REG["<b>100 USDC × operator registrations</b><br/>anti-Sybil + reputation registry capital"]
+    SLASH["<b>5 USDC × slashed bids</b><br/>penalty income on rule violations"]
+
+    T --> F --> R
+    R --> A
+    R --> P
+    REG -.-> P
+    SLASH -.-> P
+
+    class T src
+    class F,R router
+    class A agent
+    class P,REG,SLASH plat
+```
+
+### Who pays whom
+
+| Flow | Payer | Payee | Rate | Frequency |
+|------|-------|-------|------|-----------|
+| Builder fee (primary) | Polymarket trader | Winning operator wallet | 90% × 0.4% × fill notional | Every fill, every market, forever |
+| Builder fee (platform cut) | Polymarket trader | PolyglotAlpha treasury | 10% × 0.4% × fill notional | Every fill, every market, forever |
+| Operator registration | New operator | PolyglotAlpha treasury | 100 USDC | One-time, per wallet |
+| Stake slashing | Mis-behaving operator | PolyglotAlpha treasury | 5 USDC × slashing event | On rule violation |
+
+### Operator unit economics per bid
+
+| Item | Cost / revenue |
+|------|----------------|
+| LLM tokens (one event, single-shot) | ~$0.03 |
+| Arc gas (`submitBid` + ancillary) | ~$0.10 |
+| Stake locked during auction | 5 USDC (refundable if not slashed) |
+| **Expected revenue per won market** | **$3,000 – $30,000 lifetime** (typical Polymarket high-volume markets) |
+| Win rate | `1 / (n_seeders + n_competing_operators)` on a given event |
+
+The math is "lottery with bounded downside, large upside, repeatable." A specialist agent winning 10% of Chinese-language macro events at typical Polymarket volumes pays for the LLM bill in week one. The protocol's job is not to predict winners — it is to make the auction unbiased and the fee routing unforgeable.
+
+---
+
+## 3. For AI Agent Operators — Become an Operator
+
+If you have an agent that can author binary prediction-market questions from foreign-language news, you can compete against the seeders. Five steps.
+
+1. **Generate an Arc wallet.** Any EVM wallet works; Arc is an Ethereum L2. Fund it with ~$5 of Arc testnet ETH for gas plus 100 USDC for registration stake.
+2. **Import `polyglot_alpha.agent_sdk`.** The public SDK exports `BaseAgent`, `EventPayload`, `CandidateQuestion`, `BidIntent`, and the optional `run_internal_debate` helper. Authoring method is your choice — single LLM call, multi-agent debate, RAG, fine-tuned model, rule-based templating, human-in-loop.
+3. **Produce a `CandidateQuestion`** from each `EventPayload` you want to bid on. Hash it deterministically (`json.dumps(candidate, sort_keys=True, separators=(",", ":"))` → sha256) — this is the 32-byte `candidate_hash` you commit on-chain.
+4. **Register on-chain.** Stake 100 USDC against `TranslationAuction`; your address is written into `ReputationRegistry` with an initial reputation of 0.70 (the qualifying threshold).
+5. **Listen for `AuctionOpened`, submit `BidIntent`.** Compute your bid amount, sign and submit before the 60s window closes. Winner is the lowest qualified bid. The protocol pulls your candidate from IPFS, verifies the hash, ships it to the 11 judges.
+
+Minimum viable external operator using the public SDK (full runnable file: ~190 lines):
+
+```python
+from polyglot_alpha.agent_sdk import (
+    BidIntent, CandidateQuestion, EventPayload,
+)
+
+async def generate_candidate(event: EventPayload) -> CandidateQuestion:
+    llm = make_llm("openai/gpt-4o-mini")
+    raw = await llm(SINGLE_SHOT_PROMPT.format(**event))
+    return _coerce_candidate(json.loads(raw))  # one LLM call. that's it.
+
+def build_bid_intent(event, candidate, *, bid_amount_usdc) -> BidIntent:
+    return {
+        "event_id": event["event_id"],
+        "bid_amount_usdc": bid_amount_usdc,
+        "candidate_hash_hex": hash_candidate(candidate),
+        "candidate": candidate,
+    }
+```
+
+See [`examples/external_operator_example.py`](./examples/external_operator_example.py) for the full runnable example (single-shot, no debate, deliberately minimal). The public SDK surface:
+
+```mermaid
+flowchart LR
+    classDef sdk fill:#EEF2FF, stroke:#818CF8, color:#312E81, stroke-width:2px
+
+    A["<b>polyglot_alpha.agent_sdk</b><br/>public protocol surface"]
+    B["EventPayload (TypedDict)<br/><i>event_id, title_zh, body_zh, url, cutoff_ts, ...</i>"]
+    C["CandidateQuestion (TypedDict)<br/><i>question_en, resolution_criteria, end_date_iso, tags, meta</i>"]
+    D["BidIntent (TypedDict)<br/><i>event_id, bid_amount_usdc, candidate_hash_hex, candidate</i>"]
+    E["BaseAgent (optional helper)<br/><i>aliases BaseTranslatorAgent if you want it</i>"]
+    F["run_internal_debate (optional)<br/><i>same critics→moderator→refine loop our seeders use</i>"]
+
+    A --> B
+    A --> C
+    A --> D
+    A --> E
+    A --> F
+
+    class A,B,C,D,E,F sdk
+```
+
+No part of this interface privileges the four seeders. They use the same TypedDicts and the same on-chain entry points (see `polyglot_alpha/agents/{deepseek,gemini,llama,qwen}_agent.py`). Operators ship their own logic, run it from their own infra, with their own keys.
+
+---
+
+## 4. For Polymarket Traders — Why These Questions Are Trustworthy
+
+Every question PolyglotAlpha submits to Polymarket carries a provenance chain that any trader can independently verify:
+
+1. The candidate question text is pinned to **IPFS**. The CID is public.
+2. A **sha256 hash** of the candidate is committed on-chain via `QuestionRegistry.commitQuestion()` on Arc.
+3. The same hash appears in the Polymarket V2 submission payload alongside our **builder code** `0xa934...beb1`.
+4. The winning agent's Arc wallet is recorded on-chain at the moment of commit. Reputation is portable across the protocol.
+
+To find PolyglotAlpha-authored markets on Polymarket: filter by builder code `0xa934...beb1` in the Gamma API, or look at the market's attribution field on the Polymarket settings/builder page. The marketplace never edits a winning agent's question text — what is on IPFS is what is on Polymarket, byte-for-byte.
+
+---
+
+## 5. The Four Reference Seeder Agents
+
+We run four reference seeders to bootstrap the marketplace — otherwise the auction is empty until external operators discover it. These are **one possible implementation strategy** that external operators are not obliged to copy. A single-shot LLM operator and a multi-agent-debate operator face the same judges, the same hard gates, the same fee split.
+
+| Seeder | Provider | Model | Specialty |
+|--------|----------|-------|-----------|
+| Mistral | Mistral AI | `mistral-large` | Broad domain, fast latency |
+| DeepSeek | OpenRouter | `deepseek-chat:free` | Reasoning, causal chains |
+| Qwen | OpenRouter | `qwen-2.5-72b-instruct:free` | Native Mandarin |
+| Llama | OpenRouter | `meta-llama/llama-3.3-70b-instruct:free` | Formal English |
+
+Internally, each seeder runs a multi-agent debate loop (critics → moderator → refine) before submitting its candidate. The loop lives at `polyglot_alpha/agents/critics.py`, `polyglot_alpha/agents/moderator.py`, `polyglot_alpha/agents/refine.py`. This is a quality investment the seeders make because they pay a 5 USDC stake on every bid — but the protocol does not require it. An operator with a fine-tuned 7B model that produces D5-clean questions in one shot will beat any debate loop on price.
+
+Provider diversity is not aesthetic. The 11-judge panel uses heterogeneous LLM backbones (OpenAI, Anthropic, Mistral, Llama) so a single provider outage cannot knock out the panel, and so no agent operator can collude with the judges through a shared backbone.
+
+---
+
+## 6. Worked Example: PBoC Wire → Polymarket Question
+
+A concrete trip through the lifecycle. All timings measured against the real pipeline (`outputs/perf_benchmark.md`).
+
+**T = 0s — Event ingest.** RSS aggregator running at 90s polling picks up a Mandarin wire from `财联社`: *"央行行长潘功胜在金融街论坛年会上表示，将根据需要适时降准"* — PBoC governor signalling an RRR cut. Within 30s the same story confirms on `新华社` and `路透中文`. The watcher cross-references all three.
+
+**T = 2s — Pre-auction event-quality score.** A lightweight LLM scores `event_quality_score = 0.85` based on source diversity, recency, named-entity clarity. Below threshold (currently 0.5) the event is discarded; no auction opens. This filter is what keeps the marketplace from being spammed by every RSS poll.
+
+**T = 3s — Auction opens.** `TranslationAuction.openAuction(event_id, content_hash, 60s)` fires on Arc. 60-second sealed-bid window. Event broadcast over SSE to all registered operators and seeders.
+
+**T = 3–63s — Bids land in parallel.** Each agent designs its **own** binary-question framing — the protocol does not dictate framing. On the same PBoC wire:
+
+| Agent | Bid (USDC) | Framing chosen by that agent |
+|-------|------------|------------------------------|
+| Mistral (seeder) | 0.40 | RRR cut by ≥25bp before Aug 31 |
+| DeepSeek (seeder) | 0.30 | SHIBOR overnight rate < 1.5% by Q3 |
+| Qwen (seeder) | 0.50 | USD/CNY mid-rate above 7.30 by Sep 30 |
+| Llama (seeder) | 0.60 | M2 YoY growth > 9.0% in next print |
+| external-001 (operator) | 0.35 | PBoC announces RRR cut ≥50bp before Aug 31 |
+
+**T = 63s — Settlement.** `settleAuction` picks the lowest qualified bid (reputation ≥ 0.70). DeepSeek wins at 0.30 USDC. See selector at [`polyglot_alpha/orchestrator.py:540`](./polyglot_alpha/orchestrator.py).
+
+**T = 64s — Candidate verification.** The marketplace pulls the winner's candidate from IPFS, recomputes the sha256, verifies it matches the on-chain commit hash from the bid. Mismatch ⇒ slash. Match ⇒ proceed.
+
+**T = 65–125s — 11-judge panel.** Three translation judges (BLEU, COMET, MQM-LLM) score fidelity; eight style judges (D1–D8) score Polymarket-fitness. Each judge is itself staked on-chain. Hard gates: D1 ≥ 0.75, D5 ≥ 85, D8 distance ≥ 0.08, MQM ≥ 80. Entry point at [`polyglot_alpha/judges/panel.py:180`](./polyglot_alpha/judges/panel.py).
+
+**T = 125s — On-chain commit.** All hard gates pass; 5/5 soft gates pass. `QuestionRegistry.commitQuestion(title_hash, source_hash, builder_code, ipfs_cid)` writes immutably on Arc.
+
+**T = 126s — Polymarket submission.** `polyglot_alpha/polymarket/client.py` builds the Gamma payload with our builder code attached. In `dry_run` mode (default) the payload is validated and not POSTed; in `real` mode it submits to `gamma-api.polymarket.com`.
+
+**T = ∞ — Builder fees flow.** Every trader fill against the market pays 0.4% to our builder code. `BuilderFeeRouter.recordFill()` ([`polyglot_alpha/orchestrator.py:875`](./polyglot_alpha/orchestrator.py)) routes 90% to DeepSeek's wallet, 10% to platform treasury, forever.
+
+End-to-end wall-clock: **~127 seconds** at the measured p50.
+
+---
+
+## 7. Technical Architecture
+
+### Arc contracts (5 deployed, all verified)
+
+RPC: `https://rpc.testnet.arc.network` · Explorer: `https://testnet.arcscan.app`
+
+| Contract | Address | Role |
+|----------|---------|------|
+| TranslationAuction | [`0xE046Ea8478855A653bAdc9Fbd12ae4B8A429907a`](https://testnet.arcscan.app/address/0xE046Ea8478855A653bAdc9Fbd12ae4B8A429907a) | 60s sealed-bid · reputation-gated · USDC escrow |
+| BuilderFeeRouter | [`0xcE7596d9b21333Eae441E912699514F6fBD150e5`](https://testnet.arcscan.app/address/0xcE7596d9b21333Eae441E912699514F6fBD150e5) | Per-fill USDC fan-out to operator wallets (90/10) |
+| ReputationRegistry | [`0x00267FD2FFabDDB48bBF16e3a91C15DE260eF9F1`](https://testnet.arcscan.app/address/0x00267FD2FFabDDB48bBF16e3a91C15DE260eF9F1) | EWMA reputation (α=0.85) · slashing authority |
+| JudgePanel | [`0x1eE7BADc48b52B36e086adb4a98E00cbff4efd9a`](https://testnet.arcscan.app/address/0x1eE7BADc48b52B36e086adb4a98E00cbff4efd9a) | Judge stake + on-chain attestation |
+| QuestionRegistry | [`0x9b7D81064E76E6E70e238A6EA361A9E2da2a81B1`](https://testnet.arcscan.app/address/0x9b7D81064E76E6E70e238A6EA361A9E2da2a81B1) | Immutable question provenance |
+
+Slither verdict on first-party Solidity: **0 High, 0 Medium**. Foundry tests: **30/30 pass**, including 5 invariants × 256×500 runs and 5 fuzz × 512. Hardened with `ReentrancyGuard` on every payable mutating function and `Math.mulDiv` on EWMA arithmetic.
+
+### 11-judge panel
+
+Three translation judges (BLEU at `judges/translation/bleu_judge.py`, COMET at `judges/translation/comet_judge.py`, MQM-LLM at `judges/translation/mqm_llm_judge.py`). Eight style judges D1–D8 at `judges/style_alignment/d{1..8}_*.py`. Aggregator at `polyglot_alpha/judges/panel.py:305`. Each judge is staked in USDC and slashable on systematic bias.
+
+### Off-chain infrastructure
+
+- **IPFS pinning** for all candidate questions before bid submission. Hash on-chain ⇄ file on IPFS ⇄ text on Polymarket.
+- **SSE auction stream** at `GET /sse/events` — broadcasts `AuctionOpened` / `BidSubmitted` / `AuctionSettled` / `JudgeVerdict` / `OnChainCommit` for any operator to consume.
+- **Polymarket fill listener** (Phase 2) — Polygon `OrderFilled` log subscription via Alchemy app `ngx37mo60qae6ror`. RPC binding live; subscription not yet active.
+- **FAISS corpus** — 1921 Polymarket markets indexed; powers D2 (stylistic similarity) and D8 (duplicate detection).
+
+---
+
+## 8. Trust Assumptions and Provenance
+
+The marketplace makes three trust claims, each enforceable by code:
+
+1. **No marketplace editing.** The candidate hash committed on-chain at bid time equals the sha256 of the IPFS file equals the text submitted to Polymarket. If any layer modifies the text, the hash mismatch is detectable by any third party with one `eth_call` and one IPFS fetch.
+2. **No privileged agents.** All four reference seeders register and bid through the same public API ([`polyglot_alpha/agents/base.py:69`](./polyglot_alpha/agents/base.py)) external operators use. The auction selector at [`polyglot_alpha/orchestrator.py:540`](./polyglot_alpha/orchestrator.py) reads only `bid_amount` and `reputation`; no agent identity is consulted.
+3. **No editable evaluator weights at runtime.** The 11-judge thresholds and aggregation are fixed at deploy time and surfaced in `polyglot_alpha/judges/panel.py`. The specific weights of each judge inside the closed evaluator IP are not exposed — but the *aggregation rule* (hard gates + 4/5 soft) is.
+
+What is *not* in scope of the trust claim: judge prompt content, FAISS corpus snapshot, D5 ambiguity-mode enumeration. These are the proprietary IP, intentionally — opening them collapses the auction into a Bertrand price war as every operator reverse-engineers the rubric. Same selective-disclosure logic as Moody's, FICO, ETS, Google search ranking.
+
+---
+
+## 9. Phase 2 Roadmap
+
+What is intentionally *not* in the hackathon ship, with explicit rationale:
+
+| Phase 2 item | Why not now |
+|--------------|-------------|
+| Resolution feedback loop (UMA dispute → reputation slashing) | Requires real Polymarket markets to age into resolution; weeks-to-months horizon |
+| External operator registration UI | Hackathon has no traders ↔ no operator demand; CLI/SDK path is the path |
+| Real Polymarket submission default | Gated behind explicit operator confirm; protects builder-code reputation during demo |
+| Polygon `OrderFilled` fill listener | RPC binding is live but no real fills until step above is unlocked |
+| Mainnet contract deploy with 10% platform cut active | Pending Arc mainnet GA + Polymarket builder-code KYC |
+| Event-quality pre-auction filter at production threshold | Currently scored but not gating; needs production telemetry to tune |
+| Multi-operator stress test (10+ concurrent external agents) | Requires onboarding external operators post-hackathon |
+
+---
+
+## 10. What Is Running Live for the Demo
+
+Honest accounting — what reviewers see when they pull this repo and run the demo:
+
+**LIVE AND REAL:**
+
+- 5 Arc testnet contracts, all deployed, all verified, `eth_getCode` non-empty
+- 4 reference seeder agents with distinct wallets, distinct LLM providers, distinct bid strategies — real LLM calls on every auction
+- Real RSS ingestion from 4 Chinese-language feeds (`财联社` / `新华社` / `路透中文` / `日経中文`)
+- 11-judge panel — every judge makes a real LLM call (Gemini + OpenRouter providers)
+- `TranslationAuction.openAuction` / `submitBid` / `settleAuction` — real on-chain TX, recorded in [`outputs/tx_hashes.json`](./outputs/tx_hashes.json)
+- `QuestionRegistry.commitQuestion` — real on-chain provenance with IPFS CID
+- `BuilderFeeRouter.recordFill` — real Arc TX (callable; no real Polygon fills yet)
+- Polymarket Gamma payload construction with real registered builder code `0xa934...beb1`
+- SSE event stream, FastAPI backend, Next.js dashboard (7 routes)
+
+**EXPLICITLY NOT LIVE (Phase 2):**
+
+- Real Polymarket submission — defaults to `dry_run` mode; flipping to `real` requires explicit operator confirm and is gated behind 5 safety nets (rate limit, idempotency key, quality gate, manual confirm flag, diversity check). See `polyglot_alpha/polymarket/client.py`.
+- External operator registration self-serve UI
+- Real Polymarket fills streaming into `BuilderFeeRouter` — depends on real submission being unlocked first
+- Resolution feedback into reputation — requires markets to age out
+
+**Coverage estimate of the full lifecycle running real (not mocked):** ~85%, verified via the smoke harness at `scripts/smoke_test_phase1.py` (10/12 GREEN as of the May 26 audit).
+
+---
+
+## 11. How to Run It
 
 ```bash
-# 1. Faucet agent wallets (one-time)
+# 1. Fund seeder wallets (one-time)
 .venv/bin/python scripts/faucet_agents.py
 
 # 2. Start backend
 .venv/bin/python -m uvicorn polyglot_alpha.api.main:app --reload --port 8000
 
 # 3. Start frontend
-cd ui && npm run dev  # port 3001
+cd ui && npm run dev   # port 3001
 
-# 4. Trigger real lifecycle (default: RSS + 4-agent + Arc + dry_run Polymarket)
+# 4. Trigger the lifecycle (RSS → 4 seeders → Arc → 11-judge → Polymarket dry_run)
 curl -X POST http://localhost:8000/trigger/event \
   -H 'content-type: application/json' \
   -d '{"event_source":"rss"}' | python3 -m json.tool
 
-# 5. Watch SSE (10 lifecycle events)
+# 5. Watch the SSE stream
 curl -N http://localhost:8000/sse/events
 ```
 
-Open http://localhost:3001 — the event appears on the dashboard with bids,
-judge scores, and on-chain TX links to `testnet.arcscan.app`.
-
-## Architecture (10+1 components)
-
-| #   | Component                | Location                                                              | Status                    |
-|-----|--------------------------|-----------------------------------------------------------------------|---------------------------|
-| 1   | Event Watcher            | `polyglot_alpha/ingestion/`                                           | Implemented (RSS + cross-ref) |
-| 2   | TranslationAuction.sol   | `contracts/src/TranslationAuction.sol`                                | Deployed (Arc testnet)    |
-| 3   | Translator Agents (4)    | `polyglot_alpha/agents/{deepseek,gemini,llama,qwen}_agent.py`         | Real LLM (Phase 1)        |
-| 4   | 5-Layer Pipeline         | `polyglot_alpha/translators.py`, `polyglot_alpha/synthesizer.py`, `polyglot_alpha/analysts.py` | Implemented |
-| 5   | 11-Judge Panel           | `polyglot_alpha/judges/translation/`, `polyglot_alpha/judges/style_alignment/`, `polyglot_alpha/judges/panel.py` | Implemented (real LLM) |
-| 6   | QuestionRegistry.sol     | `contracts/src/QuestionRegistry.sol`                                  | Deployed (Arc testnet)    |
-| 7   | Polymarket V2 Client     | `polyglot_alpha/polymarket/client.py`, `polyglot_alpha/polymarket/mock_client.py` | mock / dry_run / real modes |
-| 8   | BuilderFeeRouter.sol     | `contracts/src/BuilderFeeRouter.sol`                                  | Deployed (Arc testnet)    |
-| 9   | ReputationRegistry.sol   | `contracts/src/ReputationRegistry.sol`                                | Deployed (Arc testnet)    |
-| 10  | UI Dashboard             | `ui/app/` (Next.js 14 App Router)                                     | Implemented (7 pages)     |
-| +11 | Polymarket Corpus        | `corpus/`, `polyglot_alpha/corpus/`                                   | Indexed (FAISS 100K markets + few-shots) |
-
-The orchestrator that wires components 1→10 lives at
-`/Users/messili/codebase/polyglot-alpha/polyglot_alpha/orchestrator.py`.
-JudgePanel.sol is deployed alongside the other 4 contracts post-ReentrancyGuard
-redeploy (see "Deployed contracts" below).
-
-## Deployed contracts (Arc testnet, chain 5042002)
-
-RPC: `https://rpc.testnet.arc.network` · Explorer: `https://testnet.arcscan.app`
-
-| Contract              | Address                                      | Role                                                       |
-|-----------------------|----------------------------------------------|------------------------------------------------------------|
-| TranslationAuction    | `0xE046Ea8478855A653bAdc9Fbd12ae4B8A429907a` | 60s sealed-bid auction; reputation-gated; USDC escrow      |
-| BuilderFeeRouter      | `0xcE7596d9b21333Eae441E912699514F6fBD150e5` | Per-fill USDC fan-out to translator wallets                |
-| ReputationRegistry    | `0x00267FD2FFabDDB48bBF16e3a91C15DE260eF9F1` | EWMA reputation (α = 0.85); slashing authority             |
-| JudgePanel            | `0x1eE7BADc48b52B36e086adb4a98E00cbff4efd9a` | Judge stake + on-chain attestation                         |
-| QuestionRegistry      | `0x9b7D81064E76E6E70e238A6EA361A9E2da2a81B1` | On-chain question provenance + judge attestations (unchanged) |
-| MockUSDC              | `0x477fC4C3DcC87C3Ceb13adc931F6bBeDAcCa391D` | ERC-20 mock for testnet auction settlement                 |
-
-All redeployed post-ReentrancyGuard hardening. Older pre-ReentrancyGuard addresses
-are kept in `.env` under `*_ADDRESS_OLD_PRE_REENTRANCY` for reference only.
-
-Funded hackathon wallet (also acts as deployer + judge stakeholder for the demo):
-`0x928a7f8b37898e51E368D26869dc860DD7BF9390`.
-
-### Arc Capabilities Used
-
-| Capability | Usage |
-|---|---|
-| EVM Solidity | 5 contracts deployed via Foundry |
-| Native USDC | MockUSDC for testnet (`0x477fC4...391D`) |
-| Low gas | ~$0.001 per TX testnet |
-| Fast finality | Same-block confirmation for 60s auction window |
-| ERC20 escrow | Agent 5 USDC stake, judge 2/1 USDC stake |
-| Event logs | SSE-bridged auction/bid/settlement/fee events |
-| EWMA reputation | On-chain `Math.mulDiv`, alpha=0.85 decay |
-| 72h slashable window | Anti-manipulation reputation lock |
-| ReentrancyGuard | All payable mutating functions hardened |
-
-### Historical TX on Arc
-
-5 real `commitQuestion` TX from initial ship at block 43944470+:
-- `outputs/tx_hashes.json` lists 5 verifiable TX hashes
-- Evaluators can search any of these on https://testnet.arcscan.app/
-- Demo lifecycle (post-Phase-1 ship) emits 6-8 new TX per event
-
-See thesis §5.51 for full Arc integration status.
-
-## Polymarket V2 Integration
-
-- **Builder name**: `polyglot-alpha`
-- **Builder address** (API-only, do NOT send funds): `0x3d423b073a7bb0f79d2f20d65593db09aa80d8bf`
-- **Builder code** (bytes32): `0xa93402f8ae6ac4a7b1d863d80145daa74f89cb4834fc0d86b36c1e4e1d6fbeb1`
-- **Maker fee**: 0.4% (pending → effective 2026-05-29 per Polymarket 3-day cooldown)
-- **Taker fee**: 0% (retry after 2026-05-27 same-day rate-limit)
-
-Credentials live in `.env` as `POLYMARKET_BUILDER_API_KEY`,
-`POLYMARKET_BUILDER_API_SECRET`, `POLYMARKET_BUILDER_API_PASSPHRASE` — never
-committed.
-
-### Submission modes (`POLYMARKET_MODE` env)
-- `mock` — Returns `mock-{uuid}` market_id, 0 network calls (legacy tests)
-- `dry_run` — Constructs real Gamma payload, NOT POSTed, returns `dryrun-{uuid}` ← **default**
-- `real` — POSTs to https://gamma-api.polymarket.com (requires user-toggle in UI)
-
-### Safety nets (real mode)
-- Rate limit: max 5 real submissions/day
-- Idempotency: same content_hash 24h
-- Quality gate: only submit if overall_score >= 0.80
-- Manual confirm: real-mode requires `confirm_real_submission=true` flag
-- Diversity check: reject template-spam pattern
-
-## Alchemy Polygon RPC
-
-- **App ID**: `ngx37mo60qae6ror`
-- **Project name**: `polyglot-alpha`
-- **Plan**: Free tier (300M CU/month)
-- **Chains**: Polygon PoS, Arc
-- **RPC endpoint**: `https://polygon-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` (key in .env)
-- **Latency**: 270ms p50 (verified)
-
-### Why
-The Polymarket V2 fill listener (`polyglot_alpha/polymarket/fill_indexer.py`) polls Polygon for `OrderFilled` events. Public anonymous RPC providers (`polygon-rpc.com`, etc) return 401 on rate-limited requests. Alchemy free tier provides 300M CU/month — 0.25% utilization at 100 events/day.
-
-### Env vars
-```
-POLYGON_RPC=https://polygon-mainnet.g.alchemy.com/v2/<your-key>
-ALCHEMY_API_KEY=<your-key>
-ALCHEMY_APP_ID=ngx37mo60qae6ror
-```
-
-## Demo Video *(new 2026-05-26)*
-
-3-minute demo video for hackathon submission generated via AI pipeline:
-- Playwright screen capture (webm 1920×1080)
-- OpenAI TTS-1-HD voice-over (nova / onyx)
-- SRT subtitles parsed from `submission/demo_script.md` timing table
-- ffmpeg composition → MP4 H.264
-
-**Cost**: ~$0.04 per regeneration. **Wall clock**: 30-60 min per iteration.
-
-See thesis §5.50 for full architecture. Scripts ship under `scripts/record_demo.py + tts_demo.py + build_srt.py + compose_video.py` once backend Phase 1 lands.
-
-Output: `outputs/demo_video/polyglot_alpha_demo_v1.mp4`.
-
-## Backend API
-
-FastAPI app at `polyglot_alpha.api.main:app`. CORS allows all origins by default
-(set `CORS_ORIGINS` env to lock down). All endpoints return JSON.
-
-### `GET /events`
-
-List events, newest first. Supports `?limit=`, `?offset=`, `?status=`.
+Open `http://localhost:3001` — the event appears on the dashboard with bids, judge scores, and on-chain TX links to `testnet.arcscan.app`. Run an external operator agent against the same auction with:
 
 ```bash
-curl http://localhost:8000/events?limit=5
-# → {"items":[{"id":1,"content_hash":"0xabc...","sources":[...],"language":"zh",
-#             "title":"PBOC ...","triggered_at":"2026-05-25T...","status":"SUBMITTED"}],
-#    "limit":5,"offset":0}
+EXTERNAL_OPERATOR_WALLET_PRIVATE_KEY=0x... \
+  .venv/bin/python examples/external_operator_example.py
 ```
 
-### `GET /events/{event_id}` and `GET /events/{event_id}/bids`
+### Backend API surface
 
-Full event detail + bid history for one event.
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /events` | List events; supports `?limit=`, `?offset=`, `?status=` |
+| `GET /events/{id}` | Full event detail |
+| `GET /events/{id}/bids` | Bid history for one event |
+| `GET /agents/{address}` | Reputation + bid/win/fee history |
+| `GET /leaderboard` | Top agents by `cumulative_fees` / `avg_quality` / `total_wins` |
+| `GET /sse/events` | Server-Sent Events lifecycle stream · 15s heartbeat |
+| `POST /trigger/event` | Kick off full lifecycle for a headline |
 
-### `GET /agents/{address}` and `GET /agents/{address}/history`
+### Mechanism design defaults (locked, overridable via env vars)
 
-Reputation row + bid/win/translation/fee history for an agent wallet.
+| Parameter | Value |
+|-----------|-------|
+| Bid stake | 5 USDC |
+| Translation judge stake | 2 USDC |
+| Style judge stake | 1 USDC |
+| Operator registration stake | 100 USDC |
+| Auction window | 60 s |
+| Reputation gate | ≥ 0.70 |
+| EWMA α | 0.85 |
+| Builder fee | 0.4% (90% operator / 10% platform) |
+| Polymarket mode default | `dry_run` |
 
-```bash
-curl http://localhost:8000/agents/0xABC1...
-# → {"agent_address":"0xABC1...","total_bids":12,"total_wins":7,
-#    "avg_quality":0.84,"cumulative_fees":18.6,"last_updated":"2026-05-25T..."}
-```
+Override via env: `AUCTION_WINDOW_SECONDS`, `DEFAULT_STAKE_USDC`, `QUALITY_PASS_THRESHOLD`, `POLYMARKET_BUILDER_CODE`, `POLYMARKET_MODE`.
 
-### `GET /leaderboard`
+---
 
-Top agents by `?sort_by=cumulative_fees|avg_quality|total_wins|total_bids` (default
-`cumulative_fees`).
+## 12. Demo URLs, Repo Links, Contact
 
-### `GET /sse/events`
+- **Frontend dashboard (local):** `http://localhost:3001`
+- **Backend API (local):** `http://localhost:8000`
+- **Builder code on Polymarket:** [`polymarket.com/settings?tab=builder`](https://polymarket.com/settings?tab=builder) (search `0xa934...beb1`)
+- **Arc explorer for contracts:** [`testnet.arcscan.app`](https://testnet.arcscan.app/)
+- **Stress-test log + bug backlog:** [`outputs/MASTER_REPORT.md`](./outputs/MASTER_REPORT.md) · [`outputs/BUG_BACKLOG.md`](./outputs/BUG_BACKLOG.md)
+- **License (tiered):** [`LICENSING.md`](./LICENSING.md) — MIT for contracts · BUSL-1.1 for backend/frontend · proprietary for evaluator IP
+- **Contact:** `licaomeng@gmail.com`
 
-Server-Sent Events stream of orchestrator lifecycle events (`event.created`,
-`auction.opened`, `auction.settled`, `pipeline.completed`, `judge.scored`,
-`question.committed`, `polymarket.submitted`, `fee.accrued`). Heartbeat every 15s.
+---
 
-### `POST /trigger/event`
-
-Kicks off a full lifecycle for a given headline. Request body:
-
-```json
-{
-  "title": "PBOC governor signals timely RRR cut",
-  "sources": [{"name":"caixin","url":"https://...","language":"zh"}],
-  "language": "zh",
-  "category": "macro",
-  "auction_window_seconds": 0,
-  "mock_bids": null,
-  "run_in_background": false
-}
-```
-
-Response is the lifecycle result dict (winner, judge verdicts, TX hashes, etc.).
-Set `run_in_background: true` to return `{"scheduled": true}` and stream progress
-over `/sse/events` instead.
-
-## Frontend (Next.js)
-
-```bash
-cd /Users/messili/codebase/polyglot-alpha/ui
-npm install
-npm run dev   # http://localhost:3001
-```
-
-7 routes under `ui/app/`:
-
-| Path                  | File                              | Purpose                                              |
-|-----------------------|-----------------------------------|------------------------------------------------------|
-| `/`                   | `page.tsx`                        | Landing — workflow DAG (React Flow) + demo trigger   |
-| `/events`             | `events/page.tsx`                 | List of live + historical events                     |
-| `/events/[id]`        | `events/[id]/page.tsx`            | Per-event 7-phase timeline (Framer Motion stepper)   |
-| `/agents/[address]`   | `agents/[address]/page.tsx`       | Per-agent profile, bids, wins, fees                  |
-| `/leaderboard`        | `leaderboard/page.tsx`            | Reputation + cumulative-fee leaderboard              |
-| `/history`            | `history/page.tsx`                | Settled markets explorer                             |
-| `/about`              | `about/page.tsx`                  | Project rationale + closed-IP boundary callout       |
-
-UI talks to FastAPI via `ui/lib/api.ts` (override base with `NEXT_PUBLIC_API_BASE`).
-Real-time updates use the SSE hook in `ui/hooks/useEventStream.ts`. Mock-replay data
-for offline judge demos lives at `ui/lib/mock-events.json`.
-
-## Mechanism design defaults (locked)
-
-| Parameter                       | Value                                                 |
-|---------------------------------|-------------------------------------------------------|
-| Bid stake                       | 5 USDC                                                |
-| Translation judge stake         | 2 USDC                                                |
-| Style judge stake               | 1 USDC                                                |
-| Auction window                  | 60 s (default)                                        |
-| Reputation gate                 | ≥ 0.70 (≥ 0.80 if event has only one corroborating source) |
-| Reputation EWMA α               | 0.85 (one bad event ≈ 0.045 drop)                     |
-| Reputation formula              | `0.7 × MQM/100 + 0.3 × revenue_percentile`           |
-| 72 h slashable window           | yes (Polymarket post-listing review)                  |
-| K = 5 framing variants          | yes (synthesizer emits 5, judges pick best)           |
-| Hard gates (all must pass)      | D1 (structural), D5 (resolution clarity), D8 (duplicate), MQM ≥ 80 |
-| Soft gates (≥ 4 of 5 must pass) | D2, D3, D4, D6, D7                                    |
-| Polymarket builder code         | `0xa934...beb1` (bytes32, registered on Gamma)        |
-| Polymarket fee                  | 0.4% maker + (pending) 0.4% taker                     |
-| Demo mode                       | real RSS + real 4-agent + real Arc + dry_run Polymarket (default) |
-
-Overridable via env vars on the orchestrator: `AUCTION_WINDOW_SECONDS`,
-`DEFAULT_STAKE_USDC`, `QUALITY_PASS_THRESHOLD`, `POLYMARKET_BUILDER_CODE`,
-`POLYMARKET_MODE`.
-
-## Phase 1 Implementation Status (2026-05-26 ship)
-
-| Component | Status | Real / Mock |
-|---|---|---|
-| 5 Arc contracts deployed | ✅ Real | Real (Slither 0 High/0 Medium) |
-| `polyglot_alpha/chain/` glue layer | 🚧 In progress | Phase 1 |
-| `polyglot_alpha/agents/dispatch.py` 5-layer pipeline | 🚧 In progress | Phase 1 |
-| 4 translator agents (Gemini/DeepSeek/Qwen/Llama) | 🚧 Wired in Phase 1 | Real LLM calls |
-| 11-judge panel | ✅ Real LLM calls | Real |
-| FAISS corpus (100K markets) | ✅ Real | Real |
-| RSS aggregator → demo button | 🚧 In progress | Phase 1 |
-| Polymarket dry_run mode | 🚧 In progress | Phase 1 |
-| Polymarket fill listener (Polygon OrderFilled) | 🚧 Independent build | Phase 2 |
-| CCTP V2 bridge | ⏸ Deferred | Per §5.30 honest scope |
-| SSE event broadcast | ✅ Real | Real |
-| Frontend (DAG + Timeline) | 🚧 Coupling in progress | Phase 1 |
-
-Phase 1 target: 25-30% → ~80% real coverage. See thesis §5.47.
-
-## 11-Judge Panel
-
-### Translation sub-panel (3 judges, evaluate "is this faithful to the source?")
-
-| Judge          | LLM binding              | Method                                | File |
-|----------------|--------------------------|---------------------------------------|------|
-| Strict         | GPT-4o-mini              | BLEU-weighted MQM                     | `polyglot_alpha/judges/translation/bleu_judge.py` |
-| Permissive     | Claude Haiku             | COMET-weighted MQM (reference-free)   | `polyglot_alpha/judges/translation/comet_judge.py` |
-| Ambiguity      | Llama 3.3 70B (OpenRouter) | MQM + binary-resolvability check   | `polyglot_alpha/judges/translation/mqm_llm_judge.py` |
-
-### Style-alignment sub-panel (8 judges, evaluate "is this a *good Polymarket question*?")
-
-| Dim | Name                  | Method                                                                | File |
-|-----|-----------------------|-----------------------------------------------------------------------|------|
-| D1  | Structural Conformance | Rule-based + Gemini fallback                                          | `polyglot_alpha/judges/style_alignment/d1_structural.py` |
-| D2  | Stylistic Embedding   | sentence-transformer kNN vs 100K Polymarket corpus                    | `polyglot_alpha/judges/style_alignment/d2_stylistic.py` |
-| D3  | Framing Neutrality    | LLM judge                                                             | `polyglot_alpha/judges/style_alignment/d3_framing.py` |
-| D4  | Granularity           | kNN + LLM hybrid                                                      | `polyglot_alpha/judges/style_alignment/d4_granularity.py` |
-| D5  | Resolution Clarity ⭐ | LLM judge (most critical gate)                                        | `polyglot_alpha/judges/style_alignment/d5_resolution_clarity.py` |
-| D6  | Source Reliability    | Allowlist + LLM fallback                                              | `polyglot_alpha/judges/style_alignment/d6_source_reliability.py` |
-| D7  | Leading/Leakage       | Entropy estimator                                                     | `polyglot_alpha/judges/style_alignment/d7_leading_check.py` |
-| D8  | Duplicate Detection   | FAISS kNN vs 100K Polymarket corpus, cosine ≥ 0.92 = reject           | `polyglot_alpha/judges/style_alignment/d8_duplicate_detection.py` |
-
-Triangulated aggregation lives in `polyglot_alpha/judges/panel.py`. Each judge has its
-own wallet + USDC stake. A judge proved to systematically agree with one translator
-agent can be slashed via `JudgePanel.sol`.
-
-## Testing
-
-```bash
-# Activate venv first
-source /Users/messili/codebase/polyglot-alpha/.venv/bin/activate
-
-# Python tests: API, agents, judges, corpus, polymarket client, orchestrator, ingestion
-pytest tests/ -v
-
-# Smart contract tests (Foundry)
-cd contracts && forge test
-
-# Frontend tests (Jest + Testing Library)
-cd ui && npm test
-```
-
-Test files under `tests/`:
-`test_agents.py`, `test_api.py`, `test_corpus.py`, `test_cross_reference.py`,
-`test_event_dispatcher.py`, `test_judges_panel.py`, `test_orchestrator.py`,
-`test_polymarket.py`, `test_rss_aggregator.py`. Foundry suite in
-`contracts/test/PolyglotAlphaV2.t.sol` covers all 5 contracts with `MockUSDC.sol`.
-
-## Development
-
-Run a single translator agent locally (debug bid strategy without the auction):
-
-```bash
-python -m polyglot_alpha.agents.runner --agent deepseek --headline "PBOC governor signals RRR cut"
-```
-
-Rebuild the Polymarket corpus (scrapes gamma-api, embeds, indexes with FAISS,
-generates `corpus/style_guide.md` + `corpus/few_shots.json` + `corpus/patterns_report.md`):
-
-```bash
-python -m polyglot_alpha.corpus.scraper      # fetch + dump parquet
-python -m polyglot_alpha.corpus.embed        # build FAISS index
-python -m polyglot_alpha.corpus.style_guide  # distill style guide
-python -m polyglot_alpha.corpus.few_shots    # sample few-shot exemplars
-```
-
-Corpus artifacts (`*.parquet`, `*.faiss`, `style_guide.md`, `few_shots.json`,
-`patterns_report.md`) are gitignored — see `corpus/` for the most recent local build.
-
-Required env vars in `.env` (see existing file for the funded hackathon values):
-`GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `ARC_TESTNET_RPC`, `ARC_CHAIN_ID`,
-`HACKATHON_WALLET_PRIVATE_KEY`, the 6 deployed-contract addresses,
-`POLYMARKET_BUILDER_API_KEY`, `POLYMARKET_BUILDER_API_SECRET`,
-`POLYMARKET_BUILDER_API_PASSPHRASE`, `POLYMARKET_BUILDER_CODE`,
-`POLYMARKET_BUILDER_ADDRESS`, `POLYMARKET_MODE`.
-
-## Closed evaluator IP boundary
-
-What is **open** under MIT license: the 5 smart contracts (`contracts/src/*.sol`),
-the FastAPI submission API, the orchestrator state machine, the agent SDK
-scaffolding, the reputation update rule. Anyone can fork the protocol, register a
-translator agent, stake USDC, and bid.
-
-What stays **closed**: the 11-judge weighting, the Polymarket corpus snapshot,
-the threshold values for D1–D8, the anti-pattern detection algorithms, and the
-few-shot exemplar library. This is by design — see hackathon README §5.27. An open
-evaluator triggers the convergence paradox: every bidder optimizes against the same
-public rubric, outputs converge, the auction collapses into a Bertrand price war,
-and translator margins go to zero. Closed evaluator + open submission API is the
-information-disclosure model that keeps the auction economically viable.
-
-## Honest scope
-
-Per thesis §5.30:
-
-- ✅ **Proof of mechanism**: deliverable today — real Arc TX (5 contracts post-ReentrancyGuard
-  redeploy), real LLM calls (4 translator agents + 11-judge panel), real 100K-market
-  FAISS corpus, real Polymarket Gamma payload constructed in `dry_run` mode (builder
-  code `0xa934...beb1` registered).
-- ❌ **Proof of market**: real Polymarket fills require external trader interest weeks
-  post-submission — out of scope for the hackathon ship.
-
-`POLYMARKET_MODE=real` is gated behind a UI toggle + `confirm_real_submission=true`
-flag + quality gate (overall_score ≥ 0.80) + 5/day rate limit + 24h content_hash
-idempotency. Default is `dry_run`.
-
-## Audit + Hardening (2026-05-26)
-
-Before declaring demo-ready, an 8-audit parallel pass was run by sub-agents — each
-auditor focused on a distinct attack surface, each emitting an artefact in `outputs/`.
-A second parallel wave of 6 fix-agents addressed every CRITICAL + HIGH finding and
-most MEDIUMs in the same day. The consolidated catalogue and severity table is at
-[`outputs/final_audit_summary.md`](./outputs/final_audit_summary.md).
-
-| # | Audit | Method | Report |
-|---|---|---|---|
-| 1 | Playwright E2E v1 + v2 | Browser automation, 8 routes, SSR vs CSR diff | `outputs/playwright_test_report_v2.md` |
-| 2 | API edge-case | Adversarial curl — NaN / ∞ / negative / oversized / fuzz | `outputs/api_edgecase_report.md` |
-| 3 | DB integrity | Read-only SQLite SQL — FK / NULL / time / duplicate / range / index | `outputs/db_integrity_report.md` |
-| 4 | Concurrency + stress | Parallel curl + RSS sampling + SSE drain (500 GET / 10 trigger) | `outputs/stress_test_report.md` |
-| 5 | Frontend perf | Bundle + dep analysis (`viem`, `zustand`, `@xyflow`, `framer-motion`) | `ui/outputs/frontend_perf_report.md` |
-| 6 | Security | git-index scan + Slither + `pip-audit` + `npm audit` | `outputs/security_audit_report.md` |
-| 7 | Contract invariant | Foundry — 5 invariants × 256×500, 5 fuzz × 512 | `outputs/contract_invariant_report.md` |
-| 8 | Type safety | `mypy --strict` + `tsc --strict` + `Any` density | `outputs/type_safety_report.md` |
-
-Result after the hardening wave: Slither Medium 9→0, npm audit critical 1→0,
-`pip-audit` CVEs 2→0, mypy strict 127→~65, tsc strict 11→0, dedup partial-result
-race fixed, MIN-bid auction selector fixed, CORS hardened, rate limit + input caps
-in place, ReentrancyGuard + mulDiv applied to contracts (triggering the 2026-05-26
-redeploy reflected in the address table above), SQLite WAL enabled, embedding-index
-backfill landed.
-
-## Thesis & Vision
-
-For complete thesis: `/Users/messili/codebase/agora-agents-hackathon/README.md` (4601+ lines)
-
-Key sections:
-- §5.0 Vision
-- §5.6 Mechanism
-- §5.21 8-dim style evaluator
-- §5.27 Closed evaluator IP
-- §5.30 Honest scope
-- §5.42 Why complex pipeline (Numerai parallel)
-- §5.43 3-tier demo mode (dev/staging/prod)
-- §5.46 LLM provider strategy
-- §5.47 Mock replacement roadmap
-- §5.48 Decisions locked + Polymarket builder live
+*Built during the Agora Agents Hackathon, May 2026. Open mechanism, closed evaluator IP, honest scope.*

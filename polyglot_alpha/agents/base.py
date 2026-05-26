@@ -21,7 +21,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, TypedDict
 
 from eth_account.signers.local import LocalAccount
 from web3 import Web3
@@ -32,6 +32,7 @@ from ..onchain import (
     OnChainClient,
     REGISTRATION_STAKE_USDC,
     event_id_from_event,
+    send_with_nonce_lock,
     usdc_to_units,
 )
 from ..schemas import (
@@ -40,6 +41,7 @@ from ..schemas import (
     Question,
     event_dict_to_model,
 )
+from .internal_debate import InternalDebateResult, run_internal_debate
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,70 @@ class BidSubmission:
     bid_amount_units: int
     candidate_hash_hex: str
     tx_hash: str
+
+
+# ---------------------------------------------------------------------------
+# Public SDK surface types
+# ---------------------------------------------------------------------------
+#
+# These TypedDicts describe the shapes external operators see when they
+# implement an agent through ``polyglot_alpha.agent_sdk``. They are kept
+# intentionally narrow: only fields the protocol cares about. Each operator
+# is free to attach extra keys (operators that do attach extras MUST keep
+# them deterministic so the on-chain candidate_hash stays reproducible).
+
+
+class EventPayload(TypedDict, total=False):
+    """Raw event payload published by the protocol's ingestion layer.
+
+    Operators receive this dict and produce a :class:`CandidateQuestion`.
+    Only ``event_id`` / ``title_zh`` / ``body_zh`` / ``cutoff_ts`` are
+    guaranteed; additional metadata (``source``, ``topic``, etc.) is
+    optional and may be absent on dev/test events.
+    """
+
+    event_id: str
+    title_zh: str
+    body_zh: str
+    url: str
+    cutoff_ts: int
+    topic: str
+    source: str
+
+
+class CandidateQuestion(TypedDict, total=False):
+    """The market-question shape operators are expected to emit.
+
+    The required keys (``question_en``, ``resolution_criteria``,
+    ``end_date_iso``) match what the on-chain :class:`Question` carries.
+    Operators may attach ``tags``, ``resolution_source``, ``title``,
+    ``category``, ``meta``, etc. as long as the resulting dict serialises
+    deterministically (used to compute candidate_hash).
+    """
+
+    question_en: str
+    resolution_criteria: str
+    end_date_iso: str
+    tags: List[str]
+    resolution_source: str
+    title: str
+    category: str
+    meta: Dict[str, Any]
+
+
+class BidIntent(TypedDict, total=False):
+    """Pre-submission descriptor of the bid an operator intends to place.
+
+    Operators construct one of these locally and then call
+    :meth:`BaseTranslatorAgent.submit_bid` (or the equivalent chain
+    helper) to broadcast it. The ``candidate_hash_hex`` MUST be the
+    SHA-256 over the canonicalised ``candidate`` payload.
+    """
+
+    event_id: str
+    bid_amount_usdc: float
+    candidate_hash_hex: str
+    candidate: CandidateQuestion
 
 
 class BaseTranslatorAgent:
@@ -161,6 +227,53 @@ class BaseTranslatorAgent:
         return question
 
     # ------------------------------------------------------------------
+    # Reference seeder's internal debate entry point
+    # ------------------------------------------------------------------
+
+    async def _propose_n_candidates(
+        self, event_dict: EventDict
+    ) -> List[Dict[str, Any]]:
+        """Produce N candidate dicts for the debate loop.
+
+        Wraps :func:`translators.propose_candidates` so the debate loop
+        sees plain dicts (the public SDK contract) rather than the
+        internal :class:`TranslationCandidate` Pydantic model. Tagging
+        each candidate with ``meta.model`` here means the refine stage
+        can route back to the same LLM that authored the winner.
+        """
+
+        event = event_dict_to_model(event_dict)
+        llm = self._llm_factory()
+        reports = await analysts.run_analysts(event, llm)
+        candidates = await translators.propose_candidates(
+            event, reports, llm, model_id=self.MODEL_ID
+        )
+        return [c.model_dump() for c in candidates]
+
+    async def propose_candidate(
+        self, event_dict: EventDict
+    ) -> InternalDebateResult:
+        """Produce a single candidate for the bid via the internal debate.
+
+        This is the reference seeder's implementation: it runs the
+        translator stage to get N candidates, then the critic +
+        moderator + refine stages to produce a single polished
+        candidate. The returned :class:`InternalDebateResult` carries
+        both the final candidate and the full intermediate trace, so
+        the caller can compute candidate_hash over ``final_candidate``
+        and still emit the trace for IPFS / auditing.
+
+        External operators do **NOT** have to use this method. The
+        protocol only requires that the on-chain bid carries a
+        candidate_hash matching the candidate eventually committed. How
+        the candidate is produced is each operator's choice.
+        """
+
+        return await run_internal_debate(
+            event_dict, propose_candidates_fn=self._propose_n_candidates
+        )
+
+    # ------------------------------------------------------------------
     # Chain interactions
     # ------------------------------------------------------------------
 
@@ -175,10 +288,13 @@ class BaseTranslatorAgent:
         if await loop.run_in_executor(None, self.onchain.is_registered, self.address):
             return None
         stake_units = usdc_to_units(REGISTRATION_STAKE_USDC)
-        await loop.run_in_executor(
-            None, self.onchain.approve_usdc, self.account, stake_units
-        )
-        return await loop.run_in_executor(None, self.onchain.register_agent, self.account)
+        # Serialize the approve+register pair under one lock so both
+        # signed-txs use sequential nonces from the agent's wallet.
+        def _approve_and_register() -> str:
+            self.onchain.approve_usdc(self.account, stake_units)
+            return self.onchain.register_agent(self.account)
+
+        return await send_with_nonce_lock(self.account, _approve_and_register)
 
     async def submit_bid(
         self,
@@ -194,14 +310,14 @@ class BaseTranslatorAgent:
             raise ValueError("candidate_metadata_hash must be 32 bytes")
         event_id_b = event_id_from_event(event_id)
         bid_units = usdc_to_units(bid_amount)
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None,
-            self.onchain.submit_bid,
+        return await send_with_nonce_lock(
             self.account,
-            event_id_b,
-            bid_units,
-            candidate_metadata_hash,
+            lambda: self.onchain.submit_bid(
+                self.account,
+                event_id_b,
+                bid_units,
+                candidate_metadata_hash,
+            ),
         )
 
     @staticmethod
@@ -278,7 +394,15 @@ class BaseTranslatorAgent:
             await asyncio.sleep(poll_interval_s)
 
     async def _handle_auction_opened(self, log_entry: Any) -> None:
-        """Default reaction: evaluate, run pipeline, submit a bid."""
+        """Default reaction: evaluate, run internal debate, submit a bid.
+
+        The four reference seeders use ``propose_candidate`` (which
+        wraps the internal debate loop), so the candidate_hash they
+        commit on-chain is computed over the POST-REFINE final
+        candidate. That guarantees the provenance chain (raw event ->
+        2 candidates -> critique -> moderator -> refine -> bid) is
+        verifiable from the on-chain hash alone.
+        """
 
         args = getattr(log_entry, "args", None) or log_entry["args"]
         event_id_bytes = bytes(args["eventId"])
@@ -296,17 +420,18 @@ class BaseTranslatorAgent:
                 "agent=%s skipping event=%s (zero bid)", self.AGENT_NAME, event_id_hex
             )
             return
-        question = await self.run_pipeline(event_dict)
-        candidate_hash = self.hash_question(question)
+        debate = await self.propose_candidate(event_dict)
+        candidate_hash = self.hash_candidate_dict(debate.final_candidate)
         tx_hash = await self.submit_bid(
             event_id_hex, evaluation.bid_amount_usdc, candidate_hash
         )
         logger.info(
-            "agent=%s bid event=%s amount=%.4f tx=%s",
+            "agent=%s bid event=%s amount=%.4f tx=%s debate_ms=%d",
             self.AGENT_NAME,
             event_id_hex,
             evaluation.bid_amount_usdc,
             tx_hash,
+            debate.total_duration_ms,
         )
 
     # ------------------------------------------------------------------

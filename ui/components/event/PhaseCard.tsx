@@ -49,7 +49,7 @@ export function PhaseCard({
           <button
             type="button"
             onClick={onHeaderClick}
-            className="w-full cursor-pointer rounded text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex min-h-[44px] w-full cursor-pointer items-center rounded text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={`Spotlight phase ${phase.name} on the DAG overview`}
           >
             <PhaseHeader index={index + 1} title={phase.name} status={phase.status} />

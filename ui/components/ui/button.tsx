@@ -16,10 +16,12 @@ const buttonVariants = cva(
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-9 px-3",
-        lg: "h-11 px-8",
-        icon: "h-10 w-10",
+        // Mobile-first: at least 44px tall on phones; tighten back to the
+        // 36/40px desktop scale from sm: (640px) up.
+        default: "min-h-[44px] px-4 py-2 sm:h-10 sm:min-h-0",
+        sm: "min-h-[44px] px-3 sm:h-9 sm:min-h-0",
+        lg: "min-h-[44px] px-8 sm:h-11 sm:min-h-0",
+        icon: "min-h-[44px] min-w-[44px] sm:h-10 sm:w-10 sm:min-h-0 sm:min-w-0",
       },
     },
     defaultVariants: { variant: "default", size: "default" },

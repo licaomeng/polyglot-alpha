@@ -1,0 +1,35 @@
+TypeScript Strict Mode — Error Diff
+====================================
+
+Baseline (iter 1, clean rebuild after `rm tsconfig.tsbuildinfo`):
+  Command : npx tsc --noEmit --strict
+  Exit    : 0
+  Errors  : 0
+
+Post-cleanup (iter 2, after EventTimeline + api.ts edits):
+  Command : npx tsc --noEmit --strict
+  Exit    : 0
+  Errors  : 0
+
+Delta: 0 -> 0 (no regression).
+
+Notes
+-----
+- The 11 jest-dom errors mentioned in the task brief had already been
+  resolved before this audit started (`@testing-library/jest-dom` is
+  listed in `tsconfig.json` `types`).
+- No `// @ts-ignore` or `// @ts-expect-error` directives in either prod
+  or test code.
+- No `: any` or `as any` in production code (`app/`, `components/`,
+  `hooks/`, `lib/`). Three `as any` casts remain in
+  `__tests__/EventStatusBadge.test.tsx`, each intentional — they feed
+  invalid string literals into a union-typed prop to verify the badge's
+  fallback rendering.
+- One non-null assertion in `hooks/useEventStream.ts:225` is justified
+  (the `data.phase` it dereferences is checked on the immediately
+  preceding line inside the same `else if` branch).
+- Four `as unknown as { ... }` casts in `components/event/EventTimeline.tsx`
+  (lines 272-277) were removed by widening `EventDetail` in `lib/api.ts`
+  with optional `builder_code` / `market_id` / `market_url` /
+  `is_simulated` snake_case fallback fields, matching what the backend
+  actually emits at the top level when `polymarket` is absent.

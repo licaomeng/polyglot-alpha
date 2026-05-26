@@ -1,0 +1,17 @@
+[PASS] backend_health: HTTP 200
+[PASS] trigger_event_source_rss_no_422: HTTP 409: {"detail":{"deduped":true,"original_event_id":83,"message":"duplicate event ignored"}}
+[FAIL] verdict_present: verdict=None
+[FAIL] market_id_real_or_dryrun: market_id=''
+[FAIL] tx_hash_not_sha256_fake: tx_hash=None
+[FAIL] quality_scores_bleu_real: BLEU=None
+[FAIL] quality_scores_comet_real: COMET=None
+[PASS] quality_scores_mqm_real: MQM=78
+[PASS] four_agents_bid: event_id=114 unique_agents=4 amounts=[0.3093, 0.75, 0.75, 0.88]
+[PASS] bids_diverse: unique amounts=3
+[PASS] polymarket_dryrun_mode: market_id='dryrun-14da28b9db0c'
+[PASS] submit_real_endpoint_exists: HTTP 400: {"detail":"confirm_real_submission=true required"}
+
+============================================================
+Smoke test: 7/12 checks passed
+============================================================
+[smoke] wrote /Users/messili/codebase/polyglot-alpha/outputs/smoke_test_phase1_result.json

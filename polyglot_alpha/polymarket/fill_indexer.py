@@ -376,9 +376,36 @@ class PolygonFillIndexer:
             raise ValueError(f"RPC error from {method}: {body['error']}")
         return body.get("result")
 
+    @staticmethod
+    def _is_valid_orderhash(market_id: str) -> bool:
+        """``orderHash`` market_ids are 32-byte hex strings (optionally 0x-prefixed).
+
+        Synthetic dry-run market_ids like ``dryrun-abc123`` or
+        ``sim-deadbeef`` cannot be passed to ``eth_getLogs`` — Polygon
+        rejects them with ``invalid hex string``. We treat any market_id
+        that does not look like a hex hash as "not on chain" and skip
+        the RPC call entirely (returns empty fills, no fake data).
+        """
+        mid = market_id.lower()
+        if mid.startswith("0x"):
+            mid = mid[2:]
+        if len(mid) == 0 or len(mid) > 64:
+            return False
+        return all(c in "0123456789abcdef" for c in mid)
+
     async def _fetch_new_fills(self) -> list[Fill]:
         """Pull logs since ``last_block_seen`` and decode them into Fills."""
         if not self.our_market_ids:
+            return []
+
+        # Skip RPC calls when none of the registered market_ids look like real
+        # on-chain orderHashes (e.g. only dry-run sim markets are registered).
+        # Returning ``[]`` here is the documented correct behavior for
+        # dry_run mode — no real fills exist, so no fills are emitted.
+        on_chain_ids = {
+            mid for mid in self.our_market_ids if self._is_valid_orderhash(mid)
+        }
+        if not on_chain_ids:
             return []
 
         client = await self._get_client()
@@ -405,8 +432,10 @@ class PolygonFillIndexer:
         # Build topic filter:
         #   topic[0] = OrderFilled event signature
         #   topic[1] = orderHash (one of our market_ids, padded to 32 bytes)
-        # eth_getLogs allows array-valued topics for OR matching.
-        topic1_filter = [self._market_id_to_topic(mid) for mid in self.our_market_ids]
+        # eth_getLogs allows array-valued topics for OR matching. Only hex
+        # ``on_chain_ids`` are used here — synthetic dry-run ids were
+        # filtered out above.
+        topic1_filter = [self._market_id_to_topic(mid) for mid in on_chain_ids]
         filter_obj = {
             "address": self.contract_address,
             "fromBlock": hex(from_block),

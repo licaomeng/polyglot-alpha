@@ -16,4 +16,27 @@ describe("EventStatusBadge", () => {
     render(<EventStatusBadge status={"weird" as any} />);
     expect(screen.getByText("weird")).toBeInTheDocument();
   });
+
+  // Backend serializes SQLAlchemy enum values as uppercase strings. UI must
+  // map them to the same user-facing labels as the lowercase synthetic ones,
+  // otherwise events appear with raw `EVALUATING` / `SUBMITTED` placeholders.
+  it.each([
+    ["PENDING", "Queued"],
+    ["AUCTION_OPEN", "Auctioning"],
+    ["AUCTION_SETTLED", "Settled bid"],
+    ["TRANSLATING", "Translating"],
+    ["EVALUATING", "Judging"],
+    ["REJECTED", "Rejected"],
+    ["COMMITTED", "Anchored"],
+    ["SUBMITTED", "Settled"],
+    ["FAILED", "Failed"],
+  ])("maps backend enum %s -> %s", (raw, label) => {
+    render(<EventStatusBadge status={raw as any} />);
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it("renders 'Unknown' for null/empty status instead of breaking layout", () => {
+    render(<EventStatusBadge status={"" as any} />);
+    expect(screen.getByText("Unknown")).toBeInTheDocument();
+  });
 });

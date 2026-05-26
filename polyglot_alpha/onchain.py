@@ -15,11 +15,13 @@ event loop responsive.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -206,6 +208,74 @@ def event_id_from_event(event_id_str: str) -> bytes:
     if event_id_str.startswith("0x") and len(event_id_str) == 66:
         return bytes.fromhex(event_id_str[2:])
     return Web3.keccak(text=event_id_str)
+
+
+# ---------------------------------------------------------------------------
+# Per-wallet nonce serialization
+# ---------------------------------------------------------------------------
+#
+# Production incident (event 137, settleAuction): two concurrent triggers
+# both read ``getTransactionCount(pending) == 156`` and then both submitted
+# a TX with nonce 156, causing Arc to reject the second one with
+# ``nonce too low: next nonce 157, tx nonce 156``.
+#
+# Fix: serialize the read-nonce -> build-tx -> send_raw_transaction sequence
+# for every TX signed by the same wallet address. The lock is keyed by the
+# *checksum address* (the operator wallet is shared across all 6 lifecycle
+# phases, so one shared key collapses to one shared lock).
+#
+# The registry is **module-level** so that distinct ``OnChainClient``
+# instances spun up by different services (auction / question / reputation /
+# fee-router) still share the same lock for the same operator wallet. An
+# instance-level lock would not protect against this case — that is the
+# whole point of the production failure.
+#
+# We lazily create one ``asyncio.Lock`` per address on first use; the
+# ``_REGISTRY_GUARD`` ``threading.Lock`` only protects insertion into the
+# dict so two coroutines starting at the same time cannot create two
+# different ``asyncio.Lock`` objects for the same address.
+
+_NONCE_LOCKS: Dict[str, "asyncio.Lock"] = {}
+_REGISTRY_GUARD = threading.Lock()
+
+
+def nonce_lock_for(address: str) -> "asyncio.Lock":
+    """Return the shared ``asyncio.Lock`` for ``address`` (checksum-normalized).
+
+    Module-level + keyed by address so all ``OnChainClient`` instances
+    coordinate on the same wallet.
+    """
+
+    key = Web3.to_checksum_address(address)
+    lock = _NONCE_LOCKS.get(key)
+    if lock is not None:
+        return lock
+    with _REGISTRY_GUARD:
+        lock = _NONCE_LOCKS.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            _NONCE_LOCKS[key] = lock
+        return lock
+
+
+async def send_with_nonce_lock(
+    account: LocalAccount,
+    blocking_send: Callable[[], Any],
+) -> Any:
+    """Run ``blocking_send`` in the default executor while holding the
+    per-wallet nonce lock for ``account.address``.
+
+    ``blocking_send`` MUST encapsulate the full read-nonce -> build-tx ->
+    ``send_raw_transaction`` sequence (i.e. it calls
+    ``_build_base_txn`` + ``_send``). The lock is released only after the
+    raw TX has been broadcast, which is when the next nonce becomes
+    observable to other tasks reading ``getTransactionCount(pending)``.
+    """
+
+    lock = nonce_lock_for(account.address)
+    loop = asyncio.get_running_loop()
+    async with lock:
+        return await loop.run_in_executor(None, blocking_send)
 
 
 # ---------------------------------------------------------------------------

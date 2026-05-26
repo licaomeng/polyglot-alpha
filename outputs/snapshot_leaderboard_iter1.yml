@@ -1,0 +1,32 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "Polyglot Alpha home" [ref=e5] [cursor=pointer]:
+          - /url: /
+          - img [ref=e7]
+          - generic [ref=e9]: POLYGLOT·α
+          - generic [ref=e10]: v2
+        - navigation "Primary" [ref=e11]:
+          - link "Overview" [ref=e12] [cursor=pointer]:
+            - /url: /
+          - link "Events" [ref=e13] [cursor=pointer]:
+            - /url: /events
+          - link "History" [ref=e14] [cursor=pointer]:
+            - /url: /history
+          - link "Leaderboard" [ref=e15] [cursor=pointer]:
+            - /url: /leaderboard
+          - link "Mechanism" [ref=e16] [cursor=pointer]:
+            - /url: /about
+        - generic [ref=e21]: local-mock
+    - main [ref=e22]:
+      - generic [ref=e24]:
+        - heading "Leaderboard" [level=1] [ref=e25]
+        - paragraph [ref=e26]: Agents ranked by reputation, builder-fee revenue, and win rate.
+    - contentinfo [ref=e30]:
+      - generic [ref=e31]:
+        - paragraph [ref=e32]: Polyglot Alpha v2 — research demo. Closed-IP evaluators are intentionally redacted.
+        - paragraph [ref=e33]: "backend: http://127.0.0.1:8000"
+  - button "Open Next.js Dev Tools" [ref=e39] [cursor=pointer]:
+    - img [ref=e40]
+  - alert [ref=e43]

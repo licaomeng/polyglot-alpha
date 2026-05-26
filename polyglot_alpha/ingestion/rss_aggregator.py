@@ -277,3 +277,45 @@ class RSSAggregator:
             if batch:
                 await on_batch(batch)
             await asyncio.sleep(interval_seconds)
+
+
+# --------------------------------------------------------------------------- #
+# Convenience: one-shot poll for trigger endpoints.                           #
+# --------------------------------------------------------------------------- #
+
+
+async def poll_sources_once(
+    sources: list[dict[str, Any]] | None = None,
+    *,
+    timeout: float = DEFAULT_HTTP_TIMEOUT,
+) -> list[RawEvent]:
+    """One-shot RSS poll without the seen-id dedup.
+
+    Used by the ``/trigger/event`` endpoint to surface the freshest items
+    without persisting state. Falls back to ``[]`` on any per-source
+    failure — the trigger route degrades to a hardcoded sample.
+    """
+
+    used_sources = sources if sources is not None else load_sources()
+    async with httpx.AsyncClient(
+        headers={"User-Agent": DEFAULT_USER_AGENT},
+        timeout=timeout,
+        follow_redirects=True,
+    ) as client:
+        bodies = await asyncio.gather(
+            *(fetch_feed(client, src) for src in used_sources),
+            return_exceptions=True,
+        )
+
+    out: list[RawEvent] = []
+    for src, body in zip(used_sources, bodies):
+        if isinstance(body, Exception) or not body:
+            continue
+        try:
+            out.extend(parse_feed(src, body))
+        except Exception as exc:  # pragma: no cover - feedparser robust
+            LOGGER.warning(
+                "poll_sources_once: parse failed for %s: %s", src.get("name"), exc
+            )
+            continue
+    return out

@@ -34,6 +34,11 @@ GEMINI_FLASH = "gemini-2.0-flash"
 DEEPSEEK_V3 = "deepseek/deepseek-chat"
 QWEN_25 = "qwen/qwen-2.5-72b-instruct"
 LLAMA_33 = "meta-llama/llama-3.3-70b-instruct"
+# OpenRouter-hosted Mistral Large — replaces the legacy Gemini Flash slot
+# (Gemini's free-tier 429 quota was injecting fake fallback translations
+# into the auction; routing the 4th agent through OpenRouter removes that
+# failure mode).
+MISTRAL_LARGE = "mistralai/mistral-large"
 
 LLMCallable = Callable[[str], Awaitable[str]]
 

@@ -15,15 +15,23 @@ const NAV = [
   { href: "/events", label: "Events" },
   { href: "/history", label: "History" },
   { href: "/leaderboard", label: "Leaderboard" },
-  { href: "/about", label: "Mechanism" },
+  { href: "/operators", label: "Operators" },
+  { href: "/about", label: "About" },
 ];
 
 export function SiteHeader() {
   const pathname = usePathname();
   return (
-    <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-14 items-center gap-6">
-        <Link href="/" className="flex items-center gap-2 font-mono text-sm font-semibold tracking-wide" aria-label="Polyglot Alpha home">
+    <header
+      className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
+    >
+      <div className="container flex h-14 items-center gap-3 sm:gap-6">
+        <Link
+          href="/"
+          className="flex min-h-[44px] items-center gap-2 font-mono text-sm font-semibold tracking-wide sm:min-h-0"
+          aria-label="Polyglot Alpha home"
+        >
           <span className="grid h-7 w-7 place-items-center rounded-md bg-primary/15 text-primary">
             <Zap className="h-4 w-4" aria-hidden />
           </span>
@@ -42,8 +50,9 @@ export function SiteHeader() {
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-sm transition-colors",
+                  "inline-flex items-center rounded-md px-3 py-1.5 text-sm transition-colors min-h-[44px] sm:min-h-[32px]",
                   active
                     ? "bg-primary/15 text-primary"
                     : "text-muted-foreground hover:bg-accent/10 hover:text-foreground",

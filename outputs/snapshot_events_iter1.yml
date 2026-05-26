@@ -1,0 +1,620 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "Polyglot Alpha home" [ref=e5] [cursor=pointer]:
+          - /url: /
+          - img [ref=e7]
+          - generic [ref=e9]: POLYGLOT·α
+          - generic [ref=e10]: v2
+        - navigation "Primary" [ref=e11]:
+          - link "Overview" [ref=e12] [cursor=pointer]:
+            - /url: /
+          - link "Events" [ref=e13] [cursor=pointer]:
+            - /url: /events
+          - link "History" [ref=e14] [cursor=pointer]:
+            - /url: /history
+          - link "Leaderboard" [ref=e15] [cursor=pointer]:
+            - /url: /leaderboard
+          - link "Mechanism" [ref=e16] [cursor=pointer]:
+            - /url: /about
+        - generic [ref=e21]: local-mock
+    - main [ref=e22]:
+      - generic [ref=e23]:
+        - generic [ref=e24]:
+          - generic [ref=e25]:
+            - heading "Events" [level=1] [ref=e26]
+            - paragraph [ref=e27]: Live + recent runs across the full 7-phase pipeline.
+          - generic [ref=e28]:
+            - generic [ref=e29]:
+              - img
+              - textbox "Search events" [ref=e30]:
+                - /placeholder: Search headlines…
+            - button "all" [pressed] [ref=e31] [cursor=pointer]
+            - button "running" [ref=e32] [cursor=pointer]
+            - button "completed" [ref=e33] [cursor=pointer]
+            - button "live" [ref=e34] [cursor=pointer]
+        - generic [ref=e46]:
+          - link "Open event my test" [ref=e47] [cursor=pointer]:
+            - /url: /events/108
+            - generic [ref=e49]:
+              - generic [ref=e50]:
+                - generic [ref=e51]:
+                  - generic "Mock data" [ref=e52]: Mock
+                  - generic [ref=e54]: PENDING
+                - img [ref=e55]
+              - heading "my test" [level=3] [ref=e58]
+              - generic [ref=e59]:
+                - generic [ref=e60]: x
+                - generic [ref=e61]: 8h ago
+          - link "Open event Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779741472663]" [ref=e62] [cursor=pointer]:
+            - /url: /events/107
+            - generic [ref=e64]:
+              - generic [ref=e65]:
+                - generic [ref=e66]:
+                  - generic "Mock data" [ref=e67]: Mock
+                  - generic [ref=e69]: PENDING
+                - img [ref=e70]
+              - heading "Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779741472663]" [level=3] [ref=e73]
+              - generic [ref=e74]:
+                - generic [ref=e75]: xinhua
+                - generic [ref=e76]: 8h ago
+          - link "Open event SUBMIT REAL SEED 1779741434" [ref=e77] [cursor=pointer]:
+            - /url: /events/106
+            - generic [ref=e79]:
+              - generic [ref=e80]:
+                - generic [ref=e81]:
+                  - generic "Mock data" [ref=e82]: Mock
+                  - generic [ref=e84]: SUBMITTED
+                - img [ref=e85]
+              - heading "SUBMIT REAL SEED 1779741434" [level=3] [ref=e88]
+              - generic [ref=e89]:
+                - generic [ref=e90]: test
+                - generic [ref=e91]: 8h ago
+          - link "Open event Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779741422142]" [ref=e92] [cursor=pointer]:
+            - /url: /events/105
+            - generic [ref=e94]:
+              - generic [ref=e95]:
+                - generic [ref=e96]:
+                  - generic "Mock data" [ref=e97]: Mock
+                  - generic [ref=e99]: PENDING
+                - img [ref=e100]
+              - heading "Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779741422142]" [level=3] [ref=e103]
+              - generic [ref=e104]:
+                - generic [ref=e105]: xinhua
+                - generic [ref=e106]: 8h ago
+          - link "Open event RACE TEST 1779741404" [ref=e107] [cursor=pointer]:
+            - /url: /events/104
+            - generic [ref=e109]:
+              - generic [ref=e110]:
+                - generic [ref=e111]:
+                  - generic "Mock data" [ref=e112]: Mock
+                  - generic [ref=e114]: SUBMITTED
+                - img [ref=e115]
+              - heading "RACE TEST 1779741404" [level=3] [ref=e118]
+              - generic [ref=e119]:
+                - generic [ref=e120]: race
+                - generic [ref=e121]: 8h ago
+          - link "Open event DEDUP DIFFERENT TITLE 9XQ8L" [ref=e122] [cursor=pointer]:
+            - /url: /events/103
+            - generic [ref=e124]:
+              - generic [ref=e125]:
+                - generic [ref=e126]:
+                  - generic "Mock data" [ref=e127]: Mock
+                  - generic [ref=e129]: SUBMITTED
+                - img [ref=e130]
+              - heading "DEDUP DIFFERENT TITLE 9XQ8L" [level=3] [ref=e133]
+              - generic [ref=e134]:
+                - generic [ref=e135]: dedup
+                - generic [ref=e136]: 8h ago
+          - link "Open event Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779741353208]" [ref=e137] [cursor=pointer]:
+            - /url: /events/102
+            - generic [ref=e139]:
+              - generic [ref=e140]:
+                - generic [ref=e141]:
+                  - generic "Mock data" [ref=e142]: Mock
+                  - generic [ref=e144]: PENDING
+                - img [ref=e145]
+              - heading "Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779741353208]" [level=3] [ref=e148]
+              - generic [ref=e149]:
+                - generic [ref=e150]: xinhua
+                - generic [ref=e151]: 8h ago
+          - link "Open event DEDUP TEST UNIQUE STRING 8XQ7K" [ref=e152] [cursor=pointer]:
+            - /url: /events/101
+            - generic [ref=e154]:
+              - generic [ref=e155]:
+                - generic [ref=e156]:
+                  - generic "Mock data" [ref=e157]: Mock
+                  - generic [ref=e159]: SUBMITTED
+                - img [ref=e160]
+              - heading "DEDUP TEST UNIQUE STRING 8XQ7K" [level=3] [ref=e163]
+              - generic [ref=e164]:
+                - generic [ref=e165]: dedup
+                - generic [ref=e166]: 8h ago
+          - link "Open event Edge case test — will Bitcoin exceed $200k by 2027?" [ref=e167] [cursor=pointer]:
+            - /url: /events/100
+            - generic [ref=e169]:
+              - generic [ref=e170]:
+                - generic [ref=e171]:
+                  - generic "Mock data" [ref=e172]: Mock
+                  - generic [ref=e174]: SUBMITTED
+                - img [ref=e175]
+              - heading "Edge case test — will Bitcoin exceed $200k by 2027?" [level=3] [ref=e178]
+              - generic [ref=e180]: 8h ago
+          - link "Open event x" [ref=e181] [cursor=pointer]:
+            - /url: /events/99
+            - generic [ref=e183]:
+              - generic [ref=e184]:
+                - generic [ref=e185]:
+                  - generic "Mock data" [ref=e186]: Mock
+                  - generic [ref=e188]: SUBMITTED
+                - img [ref=e189]
+              - heading "x" [level=3] [ref=e192]
+              - generic [ref=e193]:
+                - generic [ref=e194]: test
+                - generic [ref=e195]: 8h ago
+          - link "Open event Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779741230770]" [ref=e196] [cursor=pointer]:
+            - /url: /events/98
+            - generic [ref=e198]:
+              - generic [ref=e199]:
+                - generic [ref=e200]:
+                  - generic "Mock data" [ref=e201]: Mock
+                  - generic [ref=e203]: EVALUATING
+                - img [ref=e204]
+              - heading "Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779741230770]" [level=3] [ref=e207]
+              - generic [ref=e208]:
+                - generic [ref=e209]: xinhua
+                - generic [ref=e210]: 8h ago
+          - link "Open event Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779740972737]" [ref=e211] [cursor=pointer]:
+            - /url: /events/97
+            - generic [ref=e213]:
+              - generic [ref=e214]:
+                - generic [ref=e215]:
+                  - generic "Mock data" [ref=e216]: Mock
+                  - generic [ref=e218]: SUBMITTED
+                - img [ref=e219]
+              - heading "Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779740972737]" [level=3] [ref=e222]
+              - generic [ref=e223]:
+                - generic [ref=e224]: xinhua
+                - generic [ref=e225]: 8h ago
+          - link "Open event UX retest 1779740304472286000" [ref=e226] [cursor=pointer]:
+            - /url: /events/96
+            - generic [ref=e228]:
+              - generic [ref=e229]:
+                - generic [ref=e230]:
+                  - generic "Mock data" [ref=e231]: Mock
+                  - generic [ref=e233]: SUBMITTED
+                - img [ref=e234]
+              - heading "UX retest 1779740304472286000" [level=3] [ref=e237]
+              - generic [ref=e238]:
+                - generic [ref=e239]: x
+                - generic [ref=e240]: 8h ago
+          - link "Open event Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779740249329]" [ref=e241] [cursor=pointer]:
+            - /url: /events/95
+            - generic [ref=e243]:
+              - generic [ref=e244]:
+                - generic [ref=e245]:
+                  - generic "Mock data" [ref=e246]: Mock
+                  - generic [ref=e248]: SUBMITTED
+                - img [ref=e249]
+              - heading "Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779740249329]" [level=3] [ref=e252]
+              - generic [ref=e253]:
+                - generic [ref=e254]: xinhua
+                - generic [ref=e255]: 8h ago
+          - link "Open event Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779740240851]" [ref=e256] [cursor=pointer]:
+            - /url: /events/94
+            - generic [ref=e258]:
+              - generic [ref=e259]:
+                - generic [ref=e260]:
+                  - generic "Mock data" [ref=e261]: Mock
+                  - generic [ref=e263]: SUBMITTED
+                - img [ref=e264]
+              - heading "Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779740240851]" [level=3] [ref=e267]
+              - generic [ref=e268]:
+                - generic [ref=e269]: xinhua
+                - generic [ref=e270]: 8h ago
+          - link "Open event Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779739976964]" [ref=e271] [cursor=pointer]:
+            - /url: /events/93
+            - generic [ref=e273]:
+              - generic [ref=e274]:
+                - generic [ref=e275]:
+                  - generic "Mock data" [ref=e276]: Mock
+                  - generic [ref=e278]: SUBMITTED
+                - img [ref=e279]
+              - heading "Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779739976964]" [level=3] [ref=e282]
+              - generic [ref=e283]:
+                - generic [ref=e284]: xinhua
+                - generic [ref=e285]: 8h ago
+          - link "Open event Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779739927244]" [ref=e286] [cursor=pointer]:
+            - /url: /events/92
+            - generic [ref=e288]:
+              - generic [ref=e289]:
+                - generic [ref=e290]:
+                  - generic "Mock data" [ref=e291]: Mock
+                  - generic [ref=e293]: SUBMITTED
+                - img [ref=e294]
+              - heading "Live demo · Will Beijing announce major fiscal stimulus before December 2026? [1779739927244]" [level=3] [ref=e297]
+              - generic [ref=e298]:
+                - generic [ref=e299]: xinhua
+                - generic [ref=e300]: 8h ago
+          - link "Open event curl test 1779739919679597000" [ref=e301] [cursor=pointer]:
+            - /url: /events/91
+            - generic [ref=e303]:
+              - generic [ref=e304]:
+                - generic [ref=e305]:
+                  - generic "Mock data" [ref=e306]: Mock
+                  - generic [ref=e308]: SUBMITTED
+                - img [ref=e309]
+              - heading "curl test 1779739919679597000" [level=3] [ref=e312]
+              - generic [ref=e313]:
+                - generic [ref=e314]: x
+                - generic [ref=e315]: 8h ago
+          - 'link "Open event Iter 4 1779738776643235000: Will EUR/USD trade below 1.05 before September 1, 2026?" [ref=e316] [cursor=pointer]':
+            - /url: /events/90
+            - generic [ref=e318]:
+              - generic [ref=e319]:
+                - generic [ref=e320]:
+                  - generic "Mock data" [ref=e321]: Mock
+                  - generic [ref=e323]: SUBMITTED
+                - img [ref=e324]
+              - 'heading "Iter 4 1779738776643235000: Will EUR/USD trade below 1.05 before September 1, 2026?" [level=3] [ref=e327]'
+              - generic [ref=e328]:
+                - generic [ref=e329]: ecb
+                - generic [ref=e330]: 8h ago
+          - 'link "Open event Iter 3 1779738543037315000: Will Federal Reserve cut rates 50bp by November 1, 2026?" [ref=e331] [cursor=pointer]':
+            - /url: /events/89
+            - generic [ref=e333]:
+              - generic [ref=e334]:
+                - generic [ref=e335]:
+                  - generic "Mock data" [ref=e336]: Mock
+                  - generic [ref=e338]: SUBMITTED
+                - img [ref=e339]
+              - 'heading "Iter 3 1779738543037315000: Will Federal Reserve cut rates 50bp by November 1, 2026?" [level=3] [ref=e342]'
+              - generic [ref=e343]:
+                - generic [ref=e344]: bloomberg
+                - generic [ref=e345]: 8h ago
+          - 'link "Open event Iter 2 1779738339205934000: Will Bitcoin reach $120k by August 2026?" [ref=e346] [cursor=pointer]':
+            - /url: /events/88
+            - generic [ref=e348]:
+              - generic [ref=e349]:
+                - generic [ref=e350]:
+                  - generic "Mock data" [ref=e351]: Mock
+                  - generic [ref=e353]: REJECTED
+                - img [ref=e354]
+              - 'heading "Iter 2 1779738339205934000: Will Bitcoin reach $120k by August 2026?" [level=3] [ref=e357]'
+              - generic [ref=e358]:
+                - generic [ref=e359]: coindesk
+                - generic [ref=e360]: 8h ago
+          - 'link "Open event Iter 1 1779738028071956000: Will USD/CNY breach 7.40 by July 2026?" [ref=e361] [cursor=pointer]':
+            - /url: /events/87
+            - generic [ref=e363]:
+              - generic [ref=e364]:
+                - generic [ref=e365]:
+                  - generic "Mock data" [ref=e366]: Mock
+                  - generic [ref=e368]: FAILED
+                - img [ref=e369]
+              - 'heading "Iter 1 1779738028071956000: Will USD/CNY breach 7.40 by July 2026?" [level=3] [ref=e372]'
+              - generic [ref=e373]:
+                - generic [ref=e374]: reuters
+                - generic [ref=e375]: 8h ago
+          - link "Open event Will Apple ship Vision Pro 2 before October 1779737663054780000 2026?" [ref=e376] [cursor=pointer]:
+            - /url: /events/86
+            - generic [ref=e378]:
+              - generic [ref=e379]:
+                - generic [ref=e380]:
+                  - generic "Mock data" [ref=e381]: Mock
+                  - generic [ref=e383]: REJECTED
+                - img [ref=e384]
+              - heading "Will Apple ship Vision Pro 2 before October 1779737663054780000 2026?" [level=3] [ref=e387]
+              - generic [ref=e388]:
+                - generic [ref=e389]: src-1779737663054780000
+                - generic [ref=e390]: 9h ago
+          - link "Open event Will Tesla launch FSD v15 before September 1779737539736342000, 2026?" [ref=e391] [cursor=pointer]:
+            - /url: /events/85
+            - generic [ref=e393]:
+              - generic [ref=e394]:
+                - generic [ref=e395]:
+                  - generic "Mock data" [ref=e396]: Mock
+                  - generic [ref=e398]: REJECTED
+                - img [ref=e399]
+              - heading "Will Tesla launch FSD v15 before September 1779737539736342000, 2026?" [level=3] [ref=e402]
+              - generic [ref=e403]:
+                - generic [ref=e404]: src-1779737539736342000
+                - generic [ref=e405]: 9h ago
+          - 'link "Open event Diag run 1779737403546718000: Will Tesla reach $300 by July 1, 2026?" [ref=e406] [cursor=pointer]':
+            - /url: /events/84
+            - generic [ref=e408]:
+              - generic [ref=e409]:
+                - generic [ref=e410]:
+                  - generic "Mock data" [ref=e411]: Mock
+                  - generic [ref=e413]: REJECTED
+                - img [ref=e414]
+              - 'heading "Diag run 1779737403546718000: Will Tesla reach $300 by July 1, 2026?" [level=3] [ref=e417]'
+              - generic [ref=e418]:
+                - generic [ref=e419]: src-1779737403546718000
+                - generic [ref=e420]: 9h ago
+          - link "Open event Will the People's Bank of China (PBOC) announce a cut to the Reserve Requirement Ratio (RRR) before August 23, 2026?" [ref=e421] [cursor=pointer]:
+            - /url: /events/83
+            - generic [ref=e423]:
+              - generic [ref=e424]:
+                - generic [ref=e425]:
+                  - generic "Mock data" [ref=e426]: Mock
+                  - generic [ref=e428]: FAILED
+                - img [ref=e429]
+              - heading "Will the People's Bank of China (PBOC) announce a cut to the Reserve Requirement Ratio (RRR) before August 23, 2026?" [level=3] [ref=e432]
+              - generic [ref=e433]:
+                - generic [ref=e434]: rss-fallback
+                - generic [ref=e435]: 9h ago
+          - link "Open event null" [ref=e436] [cursor=pointer]:
+            - /url: /events/82
+            - generic [ref=e438]:
+              - generic [ref=e439]:
+                - generic [ref=e440]:
+                  - generic "Mock data" [ref=e441]: Mock
+                  - generic [ref=e443]: REJECTED
+                - img [ref=e444]
+              - heading [level=3]
+              - generic [ref=e448]: 9h ago
+          - 'link "Open event Demo: Will Beijing announce major fiscal stimulus before December 2026? (2026-05-25T17:16:10.457Z)" [ref=e449] [cursor=pointer]':
+            - /url: /events/81
+            - generic [ref=e451]:
+              - generic [ref=e452]:
+                - generic [ref=e453]:
+                  - generic "Mock data" [ref=e454]: Mock
+                  - generic [ref=e456]: SUBMITTED
+                - img [ref=e457]
+              - 'heading "Demo: Will Beijing announce major fiscal stimulus before December 2026? (2026-05-25T17:16:10.457Z)" [level=3] [ref=e460]'
+              - generic [ref=e461]:
+                - generic [ref=e462]: xinhua
+                - generic [ref=e463]: 11h ago
+          - 'link "Open event Demo: Will Beijing announce major fiscal stimulus before December 2026? (2026-05-25T17:15:09.665Z)" [ref=e464] [cursor=pointer]':
+            - /url: /events/80
+            - generic [ref=e466]:
+              - generic [ref=e467]:
+                - generic [ref=e468]:
+                  - generic "Mock data" [ref=e469]: Mock
+                  - generic [ref=e471]: SUBMITTED
+                - img [ref=e472]
+              - 'heading "Demo: Will Beijing announce major fiscal stimulus before December 2026? (2026-05-25T17:15:09.665Z)" [level=3] [ref=e475]'
+              - generic [ref=e476]:
+                - generic [ref=e477]: xinhua
+                - generic [ref=e478]: 11h ago
+          - 'link "Open event Demo: Will Beijing announce major fiscal stimulus before December 2026? (2026-05-25T17:12:38.529Z)" [ref=e479] [cursor=pointer]':
+            - /url: /events/79
+            - generic [ref=e481]:
+              - generic [ref=e482]:
+                - generic [ref=e483]:
+                  - generic "Mock data" [ref=e484]: Mock
+                  - generic [ref=e486]: SUBMITTED
+                - img [ref=e487]
+              - 'heading "Demo: Will Beijing announce major fiscal stimulus before December 2026? (2026-05-25T17:12:38.529Z)" [level=3] [ref=e490]'
+              - generic [ref=e491]:
+                - generic [ref=e492]: xinhua
+                - generic [ref=e493]: 11h ago
+          - 'link "Open event Demo: Will Beijing announce major fiscal stimulus before December 2026? (2026-05-25T17:10:20.732Z)" [ref=e494] [cursor=pointer]':
+            - /url: /events/78
+            - generic [ref=e496]:
+              - generic [ref=e497]:
+                - generic [ref=e498]:
+                  - generic "Mock data" [ref=e499]: Mock
+                  - generic [ref=e501]: SUBMITTED
+                - img [ref=e502]
+              - 'heading "Demo: Will Beijing announce major fiscal stimulus before December 2026? (2026-05-25T17:10:20.732Z)" [level=3] [ref=e505]'
+              - generic [ref=e506]:
+                - generic [ref=e507]: xinhua
+                - generic [ref=e508]: 11h ago
+          - 'link "Open event Demo: Will Beijing announce major fiscal stimulus before December 2026?" [ref=e509] [cursor=pointer]':
+            - /url: /events/77
+            - generic [ref=e511]:
+              - generic [ref=e512]:
+                - generic [ref=e513]:
+                  - generic "Mock data" [ref=e514]: Mock
+                  - generic [ref=e516]: SUBMITTED
+                - img [ref=e517]
+              - 'heading "Demo: Will Beijing announce major fiscal stimulus before December 2026?" [level=3] [ref=e520]'
+              - generic [ref=e521]:
+                - generic [ref=e522]: xinhua
+                - generic [ref=e523]: 11h ago
+          - link "Open event sse finalize 1779728158168906000" [ref=e524] [cursor=pointer]:
+            - /url: /events/76
+            - generic [ref=e526]:
+              - generic [ref=e527]:
+                - generic [ref=e528]:
+                  - generic "Mock data" [ref=e529]: Mock
+                  - generic [ref=e531]: SUBMITTED
+                - img [ref=e532]
+              - heading "sse finalize 1779728158168906000" [level=3] [ref=e535]
+              - generic [ref=e536]:
+                - generic [ref=e537]: x
+                - generic [ref=e538]: 11h ago
+          - link "Open event rep gate 1779728149985830000" [ref=e539] [cursor=pointer]:
+            - /url: /events/75
+            - generic [ref=e541]:
+              - generic [ref=e542]:
+                - generic [ref=e543]:
+                  - generic "Mock data" [ref=e544]: Mock
+                  - generic [ref=e546]: SUBMITTED
+                - img [ref=e547]
+              - heading "rep gate 1779728149985830000" [level=3] [ref=e550]
+              - generic [ref=e551]:
+                - generic [ref=e552]: x
+                - generic [ref=e553]: 11h ago
+          - link "Open event MIN bid 1779728149759584000" [ref=e554] [cursor=pointer]:
+            - /url: /events/74
+            - generic [ref=e556]:
+              - generic [ref=e557]:
+                - generic [ref=e558]:
+                  - generic "Mock data" [ref=e559]: Mock
+                  - generic [ref=e561]: SUBMITTED
+                - img [ref=e562]
+              - heading "MIN bid 1779728149759584000" [level=3] [ref=e565]
+              - generic [ref=e566]:
+                - generic [ref=e567]: x
+                - generic [ref=e568]: 11h ago
+          - link "Open event dedup unique 1779728116202791000" [ref=e569] [cursor=pointer]:
+            - /url: /events/73
+            - generic [ref=e571]:
+              - generic [ref=e572]:
+                - generic [ref=e573]:
+                  - generic "Mock data" [ref=e574]: Mock
+                  - generic [ref=e576]: SUBMITTED
+                - img [ref=e577]
+              - heading "dedup unique 1779728116202791000" [level=3] [ref=e580]
+              - generic [ref=e581]:
+                - generic [ref=e582]: a
+                - generic [ref=e583]: 11h ago
+          - link "Open event rate10" [ref=e584] [cursor=pointer]:
+            - /url: /events/72
+            - generic [ref=e586]:
+              - generic [ref=e587]:
+                - generic [ref=e588]:
+                  - generic "Mock data" [ref=e589]: Mock
+                  - generic [ref=e591]: FAILED
+                - img [ref=e592]
+              - heading "rate10" [level=3] [ref=e595]
+              - generic [ref=e597]: 11h ago
+          - link "Open event rate9" [ref=e598] [cursor=pointer]:
+            - /url: /events/71
+            - generic [ref=e600]:
+              - generic [ref=e601]:
+                - generic [ref=e602]:
+                  - generic "Mock data" [ref=e603]: Mock
+                  - generic [ref=e605]: FAILED
+                - img [ref=e606]
+              - heading "rate9" [level=3] [ref=e609]
+              - generic [ref=e611]: 11h ago
+          - link "Open event rate8" [ref=e612] [cursor=pointer]:
+            - /url: /events/70
+            - generic [ref=e614]:
+              - generic [ref=e615]:
+                - generic [ref=e616]:
+                  - generic "Mock data" [ref=e617]: Mock
+                  - generic [ref=e619]: FAILED
+                - img [ref=e620]
+              - heading "rate8" [level=3] [ref=e623]
+              - generic [ref=e625]: 11h ago
+          - link "Open event rate7" [ref=e626] [cursor=pointer]:
+            - /url: /events/69
+            - generic [ref=e628]:
+              - generic [ref=e629]:
+                - generic [ref=e630]:
+                  - generic "Mock data" [ref=e631]: Mock
+                  - generic [ref=e633]: FAILED
+                - img [ref=e634]
+              - heading "rate7" [level=3] [ref=e637]
+              - generic [ref=e639]: 11h ago
+          - link "Open event rate6" [ref=e640] [cursor=pointer]:
+            - /url: /events/68
+            - generic [ref=e642]:
+              - generic [ref=e643]:
+                - generic [ref=e644]:
+                  - generic "Mock data" [ref=e645]: Mock
+                  - generic [ref=e647]: FAILED
+                - img [ref=e648]
+              - heading "rate6" [level=3] [ref=e651]
+              - generic [ref=e653]: 11h ago
+          - link "Open event rate5" [ref=e654] [cursor=pointer]:
+            - /url: /events/67
+            - generic [ref=e656]:
+              - generic [ref=e657]:
+                - generic [ref=e658]:
+                  - generic "Mock data" [ref=e659]: Mock
+                  - generic [ref=e661]: FAILED
+                - img [ref=e662]
+              - heading "rate5" [level=3] [ref=e665]
+              - generic [ref=e667]: 11h ago
+          - link "Open event rate4" [ref=e668] [cursor=pointer]:
+            - /url: /events/66
+            - generic [ref=e670]:
+              - generic [ref=e671]:
+                - generic [ref=e672]:
+                  - generic "Mock data" [ref=e673]: Mock
+                  - generic [ref=e675]: FAILED
+                - img [ref=e676]
+              - heading "rate4" [level=3] [ref=e679]
+              - generic [ref=e681]: 11h ago
+          - link "Open event rate3" [ref=e682] [cursor=pointer]:
+            - /url: /events/65
+            - generic [ref=e684]:
+              - generic [ref=e685]:
+                - generic [ref=e686]:
+                  - generic "Mock data" [ref=e687]: Mock
+                  - generic [ref=e689]: FAILED
+                - img [ref=e690]
+              - heading "rate3" [level=3] [ref=e693]
+              - generic [ref=e695]: 11h ago
+          - link "Open event rate2" [ref=e696] [cursor=pointer]:
+            - /url: /events/64
+            - generic [ref=e698]:
+              - generic [ref=e699]:
+                - generic [ref=e700]:
+                  - generic "Mock data" [ref=e701]: Mock
+                  - generic [ref=e703]: FAILED
+                - img [ref=e704]
+              - heading "rate2" [level=3] [ref=e707]
+              - generic [ref=e709]: 11h ago
+          - link "Open event rate1" [ref=e710] [cursor=pointer]:
+            - /url: /events/63
+            - generic [ref=e712]:
+              - generic [ref=e713]:
+                - generic [ref=e714]:
+                  - generic "Mock data" [ref=e715]: Mock
+                  - generic [ref=e717]: FAILED
+                - img [ref=e718]
+              - heading "rate1" [level=3] [ref=e721]
+              - generic [ref=e723]: 11h ago
+          - link "Open event MIN bid test 1779728065 2197" [ref=e724] [cursor=pointer]:
+            - /url: /events/62
+            - generic [ref=e726]:
+              - generic [ref=e727]:
+                - generic [ref=e728]:
+                  - generic "Mock data" [ref=e729]: Mock
+                  - generic [ref=e731]: SUBMITTED
+                - img [ref=e732]
+              - heading "MIN bid test 1779728065 2197" [level=3] [ref=e735]
+              - generic [ref=e736]:
+                - generic [ref=e737]: x
+                - generic [ref=e738]: 11h ago
+          - link "Open event MIN bid test 1779728027" [ref=e739] [cursor=pointer]:
+            - /url: /events/61
+            - generic [ref=e741]:
+              - generic [ref=e742]:
+                - generic [ref=e743]:
+                  - generic "Mock data" [ref=e744]: Mock
+                  - generic [ref=e746]: SUBMITTED
+                - img [ref=e747]
+              - heading "MIN bid test 1779728027" [level=3] [ref=e750]
+              - generic [ref=e751]:
+                - generic [ref=e752]: x
+                - generic [ref=e753]: 11h ago
+          - link "Open event perf test 1779726707270236000" [ref=e754] [cursor=pointer]:
+            - /url: /events/60
+            - generic [ref=e756]:
+              - generic [ref=e757]:
+                - generic [ref=e758]:
+                  - generic "Mock data" [ref=e759]: Mock
+                  - generic [ref=e761]: SUBMITTED
+                - img [ref=e762]
+              - heading "perf test 1779726707270236000" [level=3] [ref=e765]
+              - generic [ref=e766]:
+                - generic [ref=e767]: p
+                - generic [ref=e768]: 12h ago
+          - link "Open event perf test 1779726706901108000" [ref=e769] [cursor=pointer]:
+            - /url: /events/59
+            - generic [ref=e771]:
+              - generic [ref=e772]:
+                - generic [ref=e773]:
+                  - generic "Mock data" [ref=e774]: Mock
+                  - generic [ref=e776]: SUBMITTED
+                - img [ref=e777]
+              - heading "perf test 1779726706901108000" [level=3] [ref=e780]
+              - generic [ref=e781]:
+                - generic [ref=e782]: p
+                - generic [ref=e783]: 12h ago
+    - contentinfo [ref=e42]:
+      - generic [ref=e43]:
+        - paragraph [ref=e44]: Polyglot Alpha v2 — research demo. Closed-IP evaluators are intentionally redacted.
+        - paragraph [ref=e45]: "backend: http://127.0.0.1:8000"
+  - button "Open Next.js Dev Tools" [ref=e789] [cursor=pointer]:
+    - img [ref=e790]
+  - alert [ref=e793]

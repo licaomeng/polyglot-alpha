@@ -59,8 +59,15 @@ async def propose_candidates(
     llm: LLMCallable,
     *,
     n: int = _CANDIDATE_COUNT,
+    model_id: str | None = None,
 ) -> List[TranslationCandidate]:
-    """Generate ``n`` candidate questions in parallel."""
+    """Generate ``n`` candidate questions in parallel.
+
+    When ``model_id`` is provided, each returned candidate is tagged with a
+    ``meta={"model": model_id}`` field so downstream layers (critics,
+    moderator, refine) know which LLM produced it without having to plumb
+    that information separately.
+    """
 
     analyst_notes = "\n".join(f"- [{r.analyst_id}] {r.summary}" for r in reports)
     prompt = _PROMPT_TMPL.format(
@@ -70,7 +77,7 @@ async def propose_candidates(
     async def _one(idx: int) -> TranslationCandidate:
         raw = await llm(prompt)
         payload = _extract_json(raw)
-        return TranslationCandidate(
+        kwargs: dict = dict(
             translator_id=f"t{idx}",
             question_en=str(payload.get("question_en") or "").strip()
             or "Will the event resolve as expected?",
@@ -80,5 +87,8 @@ async def propose_candidates(
             or _default_end_date_iso(),
             tags=list(payload.get("tags") or []),
         )
+        if model_id:
+            kwargs["meta"] = {"model": model_id}
+        return TranslationCandidate(**kwargs)
 
     return await asyncio.gather(*(_one(i) for i in range(n)))

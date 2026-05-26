@@ -43,23 +43,21 @@ export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
 export async function triggerEvent(
   payload?: TriggerPayload,
 ): Promise<{ event_id: string }> {
-  // v2 default: send a unique user_payload per click so the 24h content_hash
-  // dedup doesn't 409 back-to-back demo clicks. The backend's event_source=rss
-  // path ignores client-provided salt and always returns the same RSS-cached
-  // headline, so the demo button drives the real 4-LLM + Arc TX + dry_run
-  // Polymarket lifecycle via a freshly-timestamped user payload instead.
-  const ts = Date.now();
+  // Phase 1 RSS ingestion: the demo button drives the real Chinese-language
+  // RSS pipeline (BBC zh / RFI Chinese / Xinhua / SCMP / People's Daily) +
+  // Haiku triage, so the backend picks a fresh Polymarket-style question
+  // from current news rather than serving a hardcoded fiscal-stimulus
+  // string. A 5-min sliding-window dedup on the backend reuses event_id
+  // for back-to-back clicks within 5 min; older duplicates are salted on
+  // the server so they kick off a fresh lifecycle.
   const body: Record<string, unknown> =
     payload && Object.keys(payload).length > 0
       ? (payload as Record<string, unknown>)
       : {
-          title: `Live demo · Will Beijing announce major fiscal stimulus before December 2026? [${ts}]`,
-          sources: [
-            { name: "xinhua", url: `https://www.xinhua.com/macro/${ts}` },
-            { name: "caixin", url: `https://www.caixin.com/${ts}` },
-          ],
+          event_source: "rss",
           language: "zh",
           category: "macro",
+          rss_window_minutes: 24 * 60,
           auction_window_seconds: 0.5,
         };
   const res = await fetch(`${API_BASE}/trigger/event`, {
@@ -168,6 +166,12 @@ export interface EventDetail extends EventSummary {
     revenueStream: { ts: string; usd: number }[];
     recentFills?: { ts: string; txHash: string; amountUsd: number }[];
   };
+  // Backend may also expose these snake_case fields at the top level of
+  // EventDetail as a fallback when `polymarket` is not yet populated.
+  builder_code?: string;
+  market_id?: string;
+  market_url?: string;
+  is_simulated?: boolean;
 }
 
 export interface AgentProfile {
@@ -198,8 +202,19 @@ export interface TriggerPayload {
   sources?: { name: string; url: string }[];
 }
 
-// ─── SSE event taxonomy (10 lifecycle types) ──────────────────────────────
+// ─── SSE event taxonomy ───────────────────────────────────────────────────
+//
+// The lifecycle now ships 13 named events. The original 10 ("core") drive the
+// 7 top-level phases shown on the Timeline; the 3 new "debate" events fire
+// inside phase 2 (Translation Pipeline) and animate the agent-debate
+// sub-phase chips (L3 Critics → L4 Moderator → L5 Refine).
+//
+// We deliberately keep `SseEventType` referring to the 10 core events so the
+// existing exhaustive `Record<SseEventType, …>` consumers (e.g. the trigger
+// button's progress labels owned by agent ε) continue to typecheck without
+// modification. New code should reach for `AnySseEventType` to cover all 13.
 
+/** The 10 core lifecycle events (one per top-level phase transition). */
 export type SseEventType =
   | "event.created"
   | "auction.opened"
@@ -212,12 +227,24 @@ export type SseEventType =
   | "builder_fee.accrued"
   | "event.finalized";
 
-export const SSE_EVENT_TYPES: SseEventType[] = [
+/** The 3 agent-debate sub-events inside phase 2 (Translation Pipeline). */
+export type DebateSseEventType =
+  | "critic.completed"
+  | "moderator.verdict"
+  | "refine.completed";
+
+/** Union of every named SSE event the backend can emit (core + debate). */
+export type AnySseEventType = SseEventType | DebateSseEventType;
+
+export const SSE_EVENT_TYPES: AnySseEventType[] = [
   "event.created",
   "auction.opened",
   "bid.submitted",
   "auction.settled",
   "translation.completed",
+  "critic.completed",
+  "moderator.verdict",
+  "refine.completed",
   "quality.verdict",
   "onchain.committed",
   "polymarket.submitted",
@@ -225,13 +252,16 @@ export const SSE_EVENT_TYPES: SseEventType[] = [
   "event.finalized",
 ];
 
-// Maps SSE event types → 7-phase index (0-based against `_PHASE_NAMES`).
-export const SSE_TO_PHASE_INDEX: Record<SseEventType, number> = {
+/** Maps every SSE event → 7-phase index. Debate events all live in phase 2. */
+export const SSE_TO_PHASE_INDEX: Record<AnySseEventType, number> = {
   "event.created": 0,
   "auction.opened": 1,
   "bid.submitted": 1,
   "auction.settled": 1,
   "translation.completed": 2,
+  "critic.completed": 2,
+  "moderator.verdict": 2,
+  "refine.completed": 2,
   "quality.verdict": 3,
   "onchain.committed": 4,
   "polymarket.submitted": 5,
@@ -248,6 +278,36 @@ export const PHASE_NAMES: string[] = [
   "Polymarket V2 Submission",
   "Streaming Revenue",
 ];
+
+// ─── Sub-phase taxonomy (Translation Pipeline debate) ─────────────────────
+//
+// Phase 2 ("Translation Pipeline") fans out into five sub-phases that the
+// Timeline renders as progressive-disclosure chips. Each sub-phase advances
+// from `pending → running → completed` as named SSE events arrive.
+
+/** Sub-phases nested under each top-level phase index. */
+export const SUB_PHASES_BY_PHASE: Record<number, string[]> = {
+  2: [
+    "L1 Analysts",
+    "L2 Translators",
+    "L3 Critics",
+    "L4 Moderator",
+    "L5 Refine",
+  ],
+};
+
+/**
+ * Maps an incoming SSE event to the index of the sub-phase that should turn
+ * "completed" when it fires. Undefined → the event has no sub-phase mapping.
+ */
+export const SSE_TO_SUB_PHASE_INDEX: Partial<Record<AnySseEventType, number>> = {
+  // L1/L2 don't have dedicated SSE events yet — they're rolled into the
+  // single `translation.completed` event which marks both as done.
+  "translation.completed": 1, // L2 Translators done (and L1 implicitly)
+  "critic.completed": 2, // L3 Critics
+  "moderator.verdict": 3, // L4 Moderator
+  "refine.completed": 4, // L5 Refine
+};
 
 // Arc explorer base — surfaced everywhere so TxLink can build links uniformly.
 export const ARC_EXPLORER_BASE: string = "https://testnet.arcscan.app";

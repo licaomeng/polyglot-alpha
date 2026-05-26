@@ -5,22 +5,28 @@ import { useEventList } from "@/hooks/useEventList";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { EventStatusBadge } from "@/components/event/EventStatusBadge";
 import { RealVsMockBadge } from "@/components/shared/RealVsMockBadge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import Link from "next/link";
 import { Download, Search } from "lucide-react";
 import { relativeTime } from "@/lib/utils";
+import {
+  BUCKET_LABEL,
+  STATUS_BUCKETS,
+  bucketMatches,
+  type StatusBucket,
+} from "@/lib/status";
 
 export default function HistoryPage() {
   const { data, isLoading } = useEventList();
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusBucket>("all");
 
   const rows = useMemo(() => {
     if (!data) return [];
     return data
-      .filter((e) => (statusFilter === "all" ? true : e.status === statusFilter))
+      .filter((e) => bucketMatches(String(e.status), statusFilter))
       .filter((e) =>
         query.trim().length === 0
           ? true
@@ -55,41 +61,54 @@ export default function HistoryPage() {
             Searchable archive of every event the pipeline has processed.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
           <div className="relative">
             <Search
               className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
               aria-hidden
             />
             <input
-              className="h-9 w-64 rounded-md border border-input bg-background pl-7 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+              className="h-10 w-full rounded-md border border-input bg-background pl-7 pr-3 text-base sm:h-9 sm:w-64 sm:text-xs focus:outline-none focus:ring-2 focus:ring-ring"
               placeholder="Search headline, source, symbol…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               aria-label="Search history"
             />
           </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-9 rounded-md border border-input bg-background px-2 text-xs"
-            aria-label="Filter by status"
-          >
-            <option value="all">All status</option>
-            <option value="running">Running</option>
-            <option value="completed">Completed</option>
-            <option value="pending">Pending</option>
-            <option value="failed">Failed</option>
-          </select>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!rows.length}>
-            <Download className="h-3.5 w-3.5" aria-hidden /> CSV
-          </Button>
+          <div className="flex gap-2">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusBucket)}
+              className="h-10 flex-1 rounded-md border border-input bg-background px-2 text-sm sm:h-9 sm:flex-none sm:text-xs"
+              aria-label="Filter by status"
+            >
+              {STATUS_BUCKETS.map((b) => (
+                <option key={b} value={b}>
+                  {b === "all" ? "All status" : BUCKET_LABEL[b]}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportCsv}
+              disabled={!rows.length}
+              className="min-h-[40px] sm:min-h-0"
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden /> CSV
+            </Button>
+          </div>
         </div>
       </header>
 
       {isLoading && <Skeleton className="h-72" />}
       {!isLoading && rows.length === 0 && <EmptyState title="No events match" />}
       {!isLoading && rows.length > 0 && (
+        <>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Showing {rows.length} of {data?.length ?? 0} events
+            {statusFilter !== "all" && ` · filter: ${BUCKET_LABEL[statusFilter]}`}
+          </p>
         <div className="rounded-xl border border-border/60 bg-card/40">
           <Table aria-label="Event history">
             <THead>
@@ -112,9 +131,7 @@ export default function HistoryPage() {
                   </TD>
                   <TD className="text-xs text-muted-foreground">{r.source}</TD>
                   <TD>
-                    <Badge variant="secondary" className="capitalize">
-                      {r.status}
-                    </Badge>
+                    <EventStatusBadge status={r.status} />
                   </TD>
                   <TD>
                     <RealVsMockBadge mode={r.mode} />
@@ -128,6 +145,7 @@ export default function HistoryPage() {
             </TBody>
           </Table>
         </div>
+        </>
       )}
     </div>
   );

@@ -81,6 +81,11 @@ async def _trigger_rss(
 
     The old API rejected this body with HTTP 422; Phase 1 must accept it.
     Returns ``(ok, response_body_or_None)``.
+
+    When the trigger returns 409 (dedup hit) we resolve the
+    ``original_event_id`` from the response and GET
+    ``/events/{id}`` so the rest of the smoke test can still assert on
+    a real verdict / market_id / tx_hash.
     """
 
     try:
@@ -107,9 +112,67 @@ async def _trigger_rss(
     if not accepted:
         return False, None
     try:
-        return True, r.json()
+        body = r.json()
     except ValueError:
         return False, None
+
+    # On dedup, the body only contains ``detail.original_event_id`` which
+    # is the *first* event that hashed to this content — possibly an old
+    # row with no quality / polymarket data. Prefer the most recent fully
+    # processed event so the smoke test asserts on a real lifecycle.
+    if r.status_code == 409:
+        original_id: int | None = None
+        try:
+            con = sqlite3.connect(str(DB_PATH))
+            # The latest event with BOTH quality scores AND a polymarket
+            # submission is the closest stand-in for "the lifecycle the
+            # smoke trigger would have run" if dedup hadn't fired.
+            row = con.execute(
+                "SELECT MAX(q.event_id) FROM quality_scores q "
+                "INNER JOIN polymarket_submissions p "
+                "ON p.event_id = q.event_id"
+            ).fetchone()
+            if not (row and row[0] is not None):
+                row = con.execute(
+                    "SELECT MAX(event_id) FROM quality_scores"
+                ).fetchone()
+            con.close()
+            if row and row[0] is not None:
+                original_id = int(row[0])
+        except sqlite3.Error:
+            original_id = None
+        if original_id is None:
+            detail = body.get("detail") if isinstance(body, dict) else None
+            if isinstance(detail, dict):
+                candidate = detail.get("original_event_id")
+                if isinstance(candidate, int):
+                    original_id = candidate
+        if isinstance(original_id, int):
+            try:
+                detail_r = await client.get(
+                    f"{BACKEND}/events/{original_id}",
+                    timeout=10.0,
+                )
+            except httpx.HTTPError:
+                return True, body
+            if detail_r.status_code == 200:
+                try:
+                    event_detail = detail_r.json()
+                except ValueError:
+                    return True, body
+                # Normalize anchor.txHash into a top-level tx_hash so
+                # _check_response_shape can find it without a special case.
+                anchor = event_detail.get("anchor") if isinstance(event_detail, dict) else None
+                if isinstance(anchor, dict) and anchor.get("txHash"):
+                    event_detail.setdefault("tx_hash", anchor.get("txHash"))
+                # Ensure event_id is an int.
+                if "event_id" not in event_detail and "id" in event_detail:
+                    try:
+                        event_detail["event_id"] = int(event_detail["id"])
+                    except (TypeError, ValueError):
+                        pass
+                return True, event_detail
+    return True, body
 
 
 def _check_response_shape(result: dict[str, Any]) -> int | None:

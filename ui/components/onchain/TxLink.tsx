@@ -25,7 +25,7 @@ export function TxLink({ txHash, url, mode = "live", label }: Props) {
         href={href}
         target="_blank"
         rel="noreferrer noopener"
-        className="inline-flex items-center gap-1 rounded font-mono text-xs text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
+        className="inline-flex min-h-[44px] items-center gap-1 rounded px-2 py-1 font-mono text-xs text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring sm:min-h-0 sm:px-0 sm:py-0"
         aria-label={`View transaction ${display} on Arc explorer (opens in new tab)`}
       >
         {display}

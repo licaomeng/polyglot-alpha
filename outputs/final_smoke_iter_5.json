@@ -1,0 +1,102 @@
+{
+  "iteration": 5,
+  "label": "final_smoke_iter_5",
+  "ran_at": "2026-05-25T22:12:00Z",
+  "summary": {
+    "smoke_score": "10/12",
+    "smoke_pass": true,
+    "backend_health": "OK",
+    "frontend_pages_ok": "7/7",
+    "fresh_event_end_to_end": true,
+    "filter_buttons_fixed": true,
+    "mobile_touch_targets_44px": true,
+    "regressions": 0,
+    "readiness": "GREEN"
+  },
+  "smoke_checks": {
+    "passed": 10,
+    "total": 12,
+    "failures": [
+      {"name": "quality_scores_bleu_real", "detail": "BLEU=None (reference translation pipeline gap; non-blocking)"},
+      {"name": "quality_scores_comet_real", "detail": "COMET=None (model not wired in local env; MQM at 77 is real)"}
+    ]
+  },
+  "backend": {
+    "url": "http://localhost:8000",
+    "status": "ok",
+    "uvicorn_pids": [1491, 55511],
+    "note": "Two uvicorn instances detected. Watch=true caused 11 reloads through the night, currently quiescent."
+  },
+  "frontend": {
+    "url": "http://localhost:3001",
+    "note": "Polyglot-alpha UI was not running before this iteration. Started on :3001 because :3000 is occupied by Boxxo UI from another project.",
+    "pages": [
+      {"route": "/", "http": 200, "size": 37978, "errors": 0},
+      {"route": "/events", "http": 200, "size": 24119, "errors": 0},
+      {"route": "/events/127", "http": 200, "size": 22124, "errors": 0},
+      {"route": "/leaderboard", "http": 200, "size": 21065, "errors": 0},
+      {"route": "/agents/0x00a4963f3BB4c47C1B4bE7698E924b1B41744ED2", "http": 200, "size": 21520, "errors": 0},
+      {"route": "/history", "http": 200, "size": 22244, "errors": 0},
+      {"route": "/about", "http": 200, "size": 82905, "errors": 0}
+    ]
+  },
+  "fresh_event": {
+    "event_id": 127,
+    "wall_clock_seconds": 64.5,
+    "status": "SUBMITTED",
+    "verdict": "PASS",
+    "overall_score": 0.83,
+    "market_id": "dryrun-f89c01bbcdb5",
+    "market_mode": "dry_run",
+    "winning_bid": 0.3032,
+    "winner_address": "0x71F40bAfC02cF2997e45E6427c6C4c2A137c1416",
+    "n_bids": 4,
+    "n_unique_agents": 4,
+    "bid_amounts": [0.3032, 0.75, 0.75, 0.88],
+    "open_tx_hash": "0x8b7450252de7ab1bd45436511e681b2e4aa898fd01ce9899c721e9814bb956b1",
+    "commit_tx_hash": "0x36677b3a3d49e0b22fc6b4d698e5476637a3836f5757f9915b40650a6dca60f3",
+    "settle_tx_hash": null,
+    "tx_hashes_persisted_to_db": false,
+    "note": "Arc TX hashes returned by /trigger/event response but NOT round-tripped to /events/{id} GET. Per-bid tx_hash also NULL. Minor persistence gap; trigger flow itself is healthy."
+  },
+  "db_state": {
+    "events_status": {
+      "AUCTION_OPEN": 2,
+      "EVALUATING": 4,
+      "FAILED": 12,
+      "PENDING": 6,
+      "REJECTED": 13,
+      "SUBMITTED": 90
+    },
+    "bids_unique_agents": 145,
+    "corpus_markets_total": 75885,
+    "quality_scores_with_mqm": 34
+  },
+  "mqm_scores_recent": [
+    {"event_id": 127, "verdict": "PASS", "overall_score": 0.83, "mqm": 77},
+    {"event_id": 126, "verdict": "PASS", "overall_score": 0.73, "mqm": 77},
+    {"event_id": 125, "verdict": "PASS", "overall_score": 0.83, "mqm": 77},
+    {"event_id": 124, "verdict": "PASS", "overall_score": 0.73, "mqm": 77},
+    {"event_id": 121, "verdict": "PASS", "overall_score": 0.80, "mqm": 100}
+  ],
+  "mqm_real_not_mock": true,
+  "filter_buttons": {
+    "SUBMITTED": 50,
+    "PENDING": 6,
+    "EVALUATING": 4,
+    "FAILED": 12,
+    "REJECTED": 13,
+    "AUCTION_OPEN": 2,
+    "all_buckets_return_events": true,
+    "agent_d_fix_verified": true
+  },
+  "mobile_touch_targets": {
+    "button_default_min_h": "44px",
+    "button_sm_min_h": "44px",
+    "button_lg_min_h": "44px",
+    "button_icon_min": "44x44px",
+    "tx_link_min_h": "44px",
+    "site_header_min_h": "44px",
+    "agent_j_fix_verified": true
+  }
+}

@@ -6,13 +6,17 @@ import json
 import logging
 import math
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from pydantic import BaseModel, Field, ValidationError, field_validator
+from sqlmodel import select
 
-from ...orchestrator import BidRecord, run_lifecycle
+from ...orchestrator import BidRecord, create_pending_event, run_lifecycle
+from ...persistence import session_scope
+from ...persistence.models import Event
 from ..rate_limit import limiter
 
 logger = logging.getLogger(__name__)
@@ -269,80 +273,110 @@ def _fallback_demo_event() -> dict[str, Any]:
 
 
 async def _fetch_rss_demo_event(window_minutes: int) -> dict[str, Any] | None:
-    """Best-effort RSS fetch -> cross-reference cluster.
+    """Best-effort RSS fetch → Haiku event scoring → raw cluster passthrough.
 
-    Returns a dict with ``title``/``sources``/``language``/``category`` on
-    success, or ``None`` on any failure (missing dependency, empty feeds,
-    LLM unavailable). The caller is expected to degrade gracefully when
-    this returns ``None`` so the demo always produces a 200 response.
+    Post-pivot contract (2026-05-26): the marketplace MUST NOT write any
+    Polymarket question text. Each agent (seeder or external) frames its
+    own question during the auction. This function therefore returns the
+    RAW news cluster (title, summary, sources) plus a ``scoring`` dict
+    with quality / category / entities metadata — nothing more.
+
+    1. Poll the registered RSS sources once.
+    2. Filter to items within ``window_minutes``.
+    3. Ask Claude Haiku 4.5 to score the cluster (quality, category,
+       entities, credibility, timeliness) — NOT to write a question.
+    4. If ``event_quality_score`` is below the auction threshold, return
+       ``None`` so the caller degrades to the hardcoded fallback.
+    5. Else return ``{title, sources, language, category, summary,
+       scoring}`` where ``scoring`` is the :class:`EventScoring` dict.
+
+    Returns ``None`` on RSS failure or sub-threshold score so the caller
+    degrades to the bundled hardcoded sample.
     """
 
     try:
-        from polyglot_alpha.ingestion import event_dispatcher  # noqa: F401
-    except ImportError as exc:  # pragma: no cover - ingestion pkg required
-        logger.info("trigger: ingestion package unavailable (%s)", exc)
+        from polyglot_alpha.ingestion import (
+            cross_reference,
+            news_summarizer,
+            rss_aggregator,
+        )
+    except ImportError as exc:
+        logger.info("trigger: ingestion modules unavailable (%s)", exc)
         return None
 
-    # Try a richer RSS + cross-reference path first. Both modules are
-    # optional and may rely on outbound HTTP / LLM keys, so we degrade
-    # silently on any failure.
+    # ---- 1. Poll RSS ----
     try:
-        from datetime import timedelta
-
-        from polyglot_alpha.ingestion import cross_reference, rss_aggregator
-
         sources = rss_aggregator.load_sources()
-        raw_events: list[Any] = []
-        async for entry in rss_aggregator.poll_sources_once(sources):  # type: ignore[attr-defined]
-            raw_events.append(entry)
+        raw_events = await rss_aggregator.poll_sources_once(sources)
+    except Exception as exc:  # broad — outbound HTTP / parse / FS
+        logger.warning("trigger: RSS poll failed (%s)", exc)
+        return None
+
+    if not raw_events:
+        logger.info("trigger: RSS poll returned no events")
+        return None
+
+    # ---- 2. Recency filter ----
+    try:
         recent = cross_reference.filter_recent(
             raw_events, window=timedelta(minutes=window_minutes)
         )
-        if recent:
-            clusters = await cross_reference.cluster_events(recent)  # type: ignore[attr-defined]
-            if clusters:
-                top = clusters[0]
-                return {
-                    "title": top.primary_title,
-                    "sources": [
-                        {"name": src, "url": src, "language": top.languages[0] if top.languages else "en"}
-                        for src in top.all_sources
-                    ],
-                    "language": top.languages[0] if top.languages else "en",
-                    "category": "geopolitics",
-                    "summary": top.summary,
-                }
-    except (ImportError, AttributeError, OSError, ValueError, RuntimeError) as exc:
-        logger.info("trigger: RSS pipeline unavailable (%s)", exc)
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("trigger: RSS pipeline crashed (%s)", exc)
+        logger.warning("trigger: recency filter crashed (%s)", exc)
+        recent = []
+    # If nothing landed in the requested window, widen to "anything we got"
+    # so the demo button still surfaces a real headline rather than the
+    # canned fallback. The 5-min DB dedup downstream prevents duplicates.
+    pool = recent if recent else raw_events
 
-    # Cheap fallback: build a ConfirmedEvent from the bundled samples and
-    # return its primary title. This keeps the demo button alive without
-    # outbound HTTP traffic when the RSS sources are unreachable.
-    try:
-        from polyglot_alpha.ingestion.event_dispatcher import _load_demo_samples
-
-        samples = _load_demo_samples(_REPO_ROOT / "outputs")
-        if samples:
-            top = samples[0]
-            return {
-                "title": top.primary_title,
-                "sources": [
-                    {
-                        "name": "rss-fallback",
-                        "url": src,
-                        "language": (top.languages[0] if top.languages else "zh"),
-                    }
-                    for src in top.all_sources
-                ],
-                "language": top.languages[0] if top.languages else "zh",
-                "category": "geopolitics",
-                "summary": top.summary,
+    # ---- 3. Format for Haiku and score the cluster ----
+    articles: list[dict[str, Any]] = []
+    for ev in pool[:25]:  # cap so prompt stays small
+        articles.append(
+            {
+                "title": ev.title,
+                "summary": ev.summary,
+                "source": ev.source,
+                "published": ev.published_at.isoformat()
+                if ev.published_at
+                else "",
+                "url": ev.url,
+                "language": ev.language,
             }
-    except (ImportError, AttributeError, OSError) as exc:
-        logger.info("trigger: RSS sample fallback unavailable (%s)", exc)
-    return None
+        )
+
+    if not articles:
+        return None
+
+    scoring = await news_summarizer.score_event_for_auction(articles)
+
+    # ---- 4. Threshold check — reject low-quality clusters ----
+    if scoring.event_quality_score < news_summarizer.MIN_AUCTION_QUALITY:
+        logger.info(
+            "trigger: cluster rejected — score=%.2f reason=%r",
+            scoring.event_quality_score,
+            scoring.rejection_reason,
+        )
+        return None
+
+    # ---- 5. Pass through the RAW top article — no question rewriting ----
+    top = articles[0]
+    language = top.get("language") or "zh"
+
+    return {
+        "title": top["title"],
+        "sources": [
+            {
+                "name": top["source"],
+                "url": top["url"] or "",
+                "language": language,
+            }
+        ],
+        "language": language,
+        "category": scoring.primary_category or "geopolitics",
+        "summary": scoring.raw_summary or top["summary"],
+        "scoring": scoring.as_dict(),
+    }
 
 
 def _coerce_bids(raw: list[TriggerBid] | None) -> list[BidRecord] | None:
@@ -389,6 +423,7 @@ async def trigger_event(
     resolved_language: str = payload.language
     resolved_category: str = payload.category
     resolved_summary: Any = None
+    resolved_scoring: dict[str, Any] | None = None
 
     if source_mode == "rss":
         rss_event = await _fetch_rss_demo_event(payload.rss_window_minutes)
@@ -403,6 +438,13 @@ async def trigger_event(
         resolved_language = str(rss_event.get("language") or "en")
         resolved_category = str(rss_event.get("category") or "geopolitics")
         resolved_summary = rss_event.get("summary")
+        # Marketplace-side scoring metadata (quality, category, entities,
+        # credibility, timeliness, neutral summary). Surfaced to agents
+        # so they can frame their own Polymarket questions. The
+        # marketplace itself never writes question text.
+        scoring = rss_event.get("scoring")
+        if isinstance(scoring, dict):
+            resolved_scoring = scoring
     elif source_mode == "hardcoded":
         hard = _load_hardcoded_sample() or _fallback_demo_event()
         resolved_title = hard.get("title") or _DEMO_FALLBACK_TITLE
@@ -432,6 +474,8 @@ async def trigger_event(
     }
     if resolved_summary is not None:
         event_dict["summary"] = resolved_summary
+    if resolved_scoring is not None:
+        event_dict["scoring"] = resolved_scoring
     try:
         bids = _coerce_bids(payload.mock_bids)
     except ValidationError as exc:
@@ -439,6 +483,68 @@ async def trigger_event(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=exc.errors(),
         ) from exc
+
+    # 5-minute sliding-window dedup. The orchestrator's content_hash dedup
+    # is permanent (per `compute_content_hash` over title+sources+language)
+    # which makes the RSS demo unusable since the same Haiku-picked
+    # headline can recur for ~30 min. Pre-check the events table for a row
+    # with the same title created in the last 5 minutes — if hit, short-
+    # circuit to that event_id (acts like dedup but doesn't 409). Older
+    # duplicates are salted with a 5-min epoch bucket so they progress as
+    # a fresh lifecycle.
+    if resolved_title:
+        recent_cutoff = datetime.now(tz=timezone.utc) - timedelta(minutes=5)
+        with session_scope() as session:
+            same_title_recent = session.exec(
+                select(Event)
+                .where(Event.title == resolved_title)
+                .where(Event.triggered_at >= recent_cutoff.replace(tzinfo=None))
+                .order_by(Event.triggered_at.desc())
+            ).first()
+            if same_title_recent is not None and same_title_recent.id is not None:
+                logger.info(
+                    "trigger: 5-min dedup hit — reusing event_id=%s for title=%r",
+                    same_title_recent.id,
+                    resolved_title[:80],
+                )
+                return {
+                    "event_id": same_title_recent.id,
+                    "status": same_title_recent.status,
+                    "scheduled": False,
+                    "deduped": True,
+                }
+
+        # Salt the title with a 5-minute epoch bucket so an older
+        # duplicate (>5 min ago) doesn't trip the orchestrator's forever
+        # content_hash dedup. We only do this for RSS-driven events where
+        # the title comes from a finite Haiku candidate pool.
+        if source_mode == "rss":
+            bucket = int(datetime.now(tz=timezone.utc).timestamp()) // 300
+            event_dict["title"] = f"{resolved_title} [{bucket}]"
+
+    # Demo-grade fast path: pre-create the PENDING event row so the caller
+    # gets ``event_id`` back in ~10 ms and can navigate to ``/events/{id}``
+    # while the 60-90 s lifecycle (auction → translation → 11-judge panel →
+    # Arc anchor → Polymarket) runs as a FastAPI BackgroundTask. The UI
+    # detail page subscribes to SSE and animates the Timeline as each
+    # lifecycle phase publishes its event.
+    prep = await create_pending_event(event_dict)
+    if prep.get("deduped"):
+        # Permanent content_hash dedup still fires for back-to-back
+        # identical payloads >5 min apart that survived our salt. Surface
+        # as 200 with the original event_id so the demo button still
+        # navigates the user somewhere useful.
+        logger.info(
+            "trigger: content_hash dedup — reusing event_id=%s",
+            prep.get("event_id"),
+        )
+        return {
+            "event_id": prep.get("event_id"),
+            "status": prep.get("status"),
+            "scheduled": False,
+            "deduped": True,
+        }
+    precreated_event_id: int = int(prep["event_id"])
 
     if payload.run_in_background:
         async def _runner() -> None:
@@ -448,27 +554,33 @@ async def trigger_event(
                 mock_bids=bids,
                 auction_mode=payload.auction_mode,
                 confirm_real_polymarket=payload.confirm_real_polymarket,
+                precreated_event_id=precreated_event_id,
             )
 
         background_tasks.add_task(_runner)
-        return {"scheduled": True, "title": resolved_title}
+        return {
+            "scheduled": True,
+            "event_id": precreated_event_id,
+            "status": "PENDING",
+            "title": resolved_title,
+        }
 
-    result = await run_lifecycle(
-        event_dict,
-        auction_window_seconds=payload.auction_window_seconds,
-        mock_bids=bids,
-        auction_mode=payload.auction_mode,
-        confirm_real_polymarket=payload.confirm_real_polymarket,
-    )
-    # Dedup hit -> return HTTP 409 Conflict so clients can distinguish
-    # "duplicate event ignored" from a fresh successful run.
-    if result.get("deduped"):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "deduped": True,
-                "original_event_id": result.get("event_id"),
-                "message": "duplicate event ignored",
-            },
+    # Default demo path: schedule lifecycle in the background so the
+    # endpoint returns event_id immediately. The UI navigates to the
+    # detail page on event_id and watches SSE for phase transitions.
+    async def _bg_runner() -> None:
+        await run_lifecycle(
+            event_dict,
+            auction_window_seconds=payload.auction_window_seconds,
+            mock_bids=bids,
+            auction_mode=payload.auction_mode,
+            confirm_real_polymarket=payload.confirm_real_polymarket,
+            precreated_event_id=precreated_event_id,
         )
-    return result
+
+    background_tasks.add_task(_bg_runner)
+    return {
+        "event_id": precreated_event_id,
+        "status": "PENDING",
+        "scheduled": True,
+    }

@@ -44,3 +44,7 @@ corpus/full/scrape.log
 # Test coverage artifacts
 .coverage
 htmlcov/
+
+# Perf benchmark outputs may contain API keys from 429 error URLs
+outputs/perf_*.json
+outputs/perf_resource.jsonl

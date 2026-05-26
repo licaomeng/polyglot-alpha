@@ -26,7 +26,7 @@ from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from web3 import Web3
 
-from ..onchain import OnChainClient, event_id_from_event
+from ..onchain import OnChainClient, event_id_from_event, send_with_nonce_lock
 
 logger = logging.getLogger(__name__)
 
@@ -155,8 +155,6 @@ async def commit_question(
     cutoff = cutoff_ts or _default_cutoff_ts()
     winning_translator = builder_code or "polyglot-alpha"
 
-    loop = asyncio.get_running_loop()
-
     def _send() -> tuple[str, int]:
         base = client._build_base_txn(account)
         txn = contract.functions.registerQuestion(
@@ -176,7 +174,7 @@ async def commit_question(
         qid_local = int(logs[0]["args"]["id"]) if logs else 0
         return tx_hash_local, qid_local
 
-    tx_hash, qid = await loop.run_in_executor(None, _send)
+    tx_hash, qid = await send_with_nonce_lock(account, _send)
     if not tx_hash.startswith("0x"):
         tx_hash = "0x" + tx_hash
     question_id_hex = "0x" + format(qid, "x").rjust(40, "0") if qid else (

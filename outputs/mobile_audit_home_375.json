@@ -1,0 +1,72 @@
+{
+  "url": "http://localhost:3001/events",
+  "title": "Polyglot Alpha v2",
+  "viewport": {
+    "w": 375,
+    "h": 667
+  },
+  "overflow": {
+    "bodyScrollWidth": 617,
+    "htmlScrollWidth": 617,
+    "horizontalOverflow": true,
+    "unscrollableOffenders": [
+      {
+        "tag": "button",
+        "cls": "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-",
+        "right": 463,
+        "width": 80
+      }
+    ]
+  },
+  "touch": {
+    "total": 62,
+    "small": 7,
+    "compliancePct": 89,
+    "sampleSmall": [
+      {
+        "tag": "a",
+        "text": "POLYGLOT·αv2",
+        "w": 124,
+        "h": 28
+      },
+      {
+        "tag": "input",
+        "text": "",
+        "w": 224,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "text": "All",
+        "w": 41,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "text": "Queued",
+        "w": 78,
+        "h": 36
+      },
+      {
+        "tag": "button",
+        "text": "Running",
+        "w": 80,
+        "h": 36
+      }
+    ]
+  },
+  "multiColGrids": [],
+  "workflowOverview": {
+    "height": null
+  },
+  "featured": 50,
+  "header": {
+    "height": 57,
+    "hasHamburger": false,
+    "navOverflowScrollable": true
+  },
+  "footer": {
+    "height": 105,
+    "fullWidth": true
+  }
+}

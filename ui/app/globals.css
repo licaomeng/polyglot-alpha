@@ -52,6 +52,66 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    /* Avoid horizontal page scrolling on mobile when nested elements
+       briefly overflow (e.g. while ReactFlow lays out). */
+    overflow-x: hidden;
+  }
+
+  body {
+    /* Honour the iOS safe-area insets at the page edge. The header is
+       sticky and the footer can also bump against the home indicator. */
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    /* Remove the 300 ms tap delay on touch devices for fast UI. */
+    touch-action: manipulation;
+  }
+
+  /* iOS momentum scrolling on horizontally scrolling containers
+     (tables, the nav strip, the bucket filters). */
+  [class~="overflow-x-auto"],
+  [class~="overflow-auto"] {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ReactFlow's zoom/fit controls render at 24px square by default —
+     bump them to a touch-friendly 32px on small screens so they pass
+     the 44px guideline once the surrounding padding is included. */
+  @media (max-width: 639px) {
+    .react-flow__controls-button {
+      width: 32px !important;
+      height: 32px !important;
+    }
+  }
+
+  /* Dark-theme contrast for xyflow's zoom/fit controls. xyflow ships
+     light-mode defaults (white bg + dark glyphs); on our dark surface the
+     SVG glyphs were rendering near-white on a near-white button. Force a
+     dark button face + light glyph so the +/− icons are legible. */
+  .react-flow__controls-button {
+    background-color: hsl(var(--card)) !important;
+    border-color: hsl(var(--border) / 0.6) !important;
+    color: hsl(var(--foreground)) !important;
+  }
+  .react-flow__controls-button:hover {
+    background-color: hsl(var(--accent) / 0.5) !important;
+  }
+  .react-flow__controls-button svg,
+  .react-flow__controls-button svg path,
+  .react-flow__controls-button svg polyline,
+  .react-flow__controls-button svg polygon,
+  .react-flow__controls-button svg line {
+    fill: hsl(var(--foreground)) !important;
+    stroke: hsl(var(--foreground)) !important;
+  }
+
+  /* Stop iOS auto-zoom on focus by ensuring text inputs render at
+     >= 16px on small screens — they shrink back to xs at sm+. */
+  @media (max-width: 639px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
   }
 }
 

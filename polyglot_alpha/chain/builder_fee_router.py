@@ -24,7 +24,7 @@ from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from web3 import Web3
 
-from ..onchain import OnChainClient, usdc_to_units
+from ..onchain import OnChainClient, send_with_nonce_lock, usdc_to_units
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,6 @@ class BuilderFeeRouter:
 
         account = _operator_account()
         amount_units = usdc_to_units(max(0.0, amount_usdc))
-        loop = asyncio.get_running_loop()
 
         def _send() -> str:
             # Approve the router to pull USDC from the operator wallet.
@@ -116,7 +115,7 @@ class BuilderFeeRouter:
             )
             return self._onchain._send(txn, account)
 
-        tx_hash = await loop.run_in_executor(None, _send)
+        tx_hash = await send_with_nonce_lock(account, _send)
         if not tx_hash.startswith("0x"):
             tx_hash = "0x" + tx_hash
         logger.info("fund(amount=%.4f) tx=%s", amount_usdc, tx_hash)
@@ -152,7 +151,6 @@ async def record_fill(
         abi=_load_abi(),
     )
     amount_units = usdc_to_units(max(0.0, fill_amount_usdc))
-    loop = asyncio.get_running_loop()
 
     def _send() -> str:
         base = client._build_base_txn(account)
@@ -161,7 +159,7 @@ async def record_fill(
         ).build_transaction({**base, "gas": 250_000})
         return client._send(txn, account)
 
-    tx_hash = await loop.run_in_executor(None, _send)
+    tx_hash = await send_with_nonce_lock(account, _send)
     if not tx_hash.startswith("0x"):
         tx_hash = "0x" + tx_hash
     logger.info(
@@ -185,7 +183,6 @@ async def claim_fees(
         address=Web3.to_checksum_address(_router_address()),
         abi=_load_abi(),
     )
-    loop = asyncio.get_running_loop()
 
     def _send() -> str:
         base = client._build_base_txn(account)
@@ -194,7 +191,7 @@ async def claim_fees(
         ).build_transaction({**base, "gas": 200_000})
         return client._send(txn, account)
 
-    tx_hash = await loop.run_in_executor(None, _send)
+    tx_hash = await send_with_nonce_lock(account, _send)
     if not tx_hash.startswith("0x"):
         tx_hash = "0x" + tx_hash
     logger.info("claimFees(translator=%s) tx=%s", translator, tx_hash)

@@ -119,6 +119,32 @@ def _get_chain_question_registry():
         return None
 
 
+_builder_fee_import_warned: bool = False
+
+
+def _get_chain_builder_fee_router():
+    """Return ``polyglot_alpha.chain.builder_fee_router`` or ``None``.
+
+    Logged at most once per process so missing-chain environments don't
+    spam the log with identical ImportError lines.
+    """
+
+    global _builder_fee_import_warned
+    try:
+        from polyglot_alpha.chain import builder_fee_router  # type: ignore
+
+        return builder_fee_router
+    except ImportError as exc:  # pragma: no cover - chain pkg optional
+        if not _builder_fee_import_warned:
+            logger.warning(
+                "chain.builder_fee_router unavailable (%s); "
+                "builder-fee accruals will be recorded as simulated",
+                exc,
+            )
+            _builder_fee_import_warned = True
+        return None
+
+
 def _get_dispatch():
     """Return ``polyglot_alpha.agents.dispatch`` or ``None``."""
 
@@ -409,7 +435,9 @@ async def _collect_bids(
         if dispatch is not None and hasattr(dispatch, "collect_bids_inline"):
             try:
                 raw_bids = await dispatch.collect_bids_inline(
-                    event_dict, window_seconds=window_seconds
+                    event_dict,
+                    window_seconds=window_seconds,
+                    auction_event_id=event_id,
                 )
             except (RuntimeError, ValueError, KeyError) as exc:
                 logger.warning(
@@ -825,37 +853,176 @@ async def _submit_to_polymarket(
     }
 
 
-_fill_listener_import_warned: bool = False
+async def _record_builder_fee_on_chain(
+    market_id: str,
+    fill_amount_usdc: float,
+    translator_address: str,
+) -> str | None:
+    """Call ``BuilderFeeRouter.recordFill`` and return the Arc tx hash.
+
+    Returns the real on-chain tx hash on success, or ``None`` on any
+    failure (missing chain package, missing operator key, RPC error,
+    contract revert). Callers should treat ``None`` as "record this
+    accrual as simulated, with ``arc_tx_hash=None``" — we never fabricate
+    a fake hash so downstream consumers can distinguish "no tx" from
+    "real tx".
+    """
+
+    builder_fee_router = _get_chain_builder_fee_router()
+    if builder_fee_router is None:
+        return None
+    try:
+        return await builder_fee_router.record_fill(
+            market_id, fill_amount_usdc, translator_address
+        )
+    except _CHAIN_RUNTIME_ERRORS as exc:
+        logger.error(
+            "recordFill chain call failed (market=%s translator=%s): %s; "
+            "falling back to simulated builder-fee event",
+            market_id,
+            translator_address,
+            exc,
+        )
+        return None
+    except RuntimeError as exc:
+        # ``_operator_account`` raises ``RuntimeError`` when the operator
+        # private key is missing; treat that like an RPC failure.
+        logger.error(
+            "recordFill chain call failed (market=%s translator=%s): %s; "
+            "falling back to simulated builder-fee event",
+            market_id,
+            translator_address,
+            exc,
+        )
+        return None
+
+
+_fill_listener_started_log: bool = False
+
+
+async def _persist_builder_fee_event(event: Any) -> None:
+    """DB sink: persist a :class:`polymarket.types.BuilderFeeEvent` into SQLite.
+
+    The Pydantic ``BuilderFeeEvent`` from ``polymarket.types`` and the
+    SQLModel ``BuilderFeeEvent`` in ``persistence.models`` share a name
+    but live in different modules; we translate explicitly here so the
+    on-disk schema (``fill_amount`` / ``fee_amount`` / ``arc_tx_hash``)
+    stays decoupled from the in-memory wire shape.
+    """
+    with session_scope() as session:
+        session.add(
+            BuilderFeeEvent(
+                market_id=event.market_id,
+                fill_amount=float(event.fill_amount_usdc),
+                fee_amount=float(event.builder_fee_usdc),
+                translator_address=event.translator_address,
+                arc_tx_hash=event.tx_hash,
+                is_simulated=bool(event.is_simulated),
+            )
+        )
 
 
 async def _start_fill_listener(
     market_id: str, translator_address: str, is_simulated: bool
 ) -> None:
-    """Spin up the Polymarket fill listener. Mock just logs.
+    """Spin up the Polymarket fill listener for one (market, translator) pair.
 
-    The ``polymarket.fill_listener`` module is optional. We log its
-    absence at most once per process so the orchestrator does not spam
-    the log with identical ImportError lines per event.
+    Selector rules:
+
+      * ``POLYGON_RPC`` set + reachable -> real :class:`PolygonFillIndexer`
+        (filtered to ``market_id``; returns 0 fills in dry_run since the
+        synthetic sim market_id never appears in real Polygon logs —
+        that's the documented correct behavior).
+      * ``POLYGON_RPC`` unset, or RPC unreachable -> :class:`MockFillSource`
+        fallback so demos still render synthetic fills.
+
+    The listener runs the background poll loop until process exit. Fills
+    decoded from chain are forwarded to :class:`FillListener`, which
+    dedupes by ``fill_id``, persists a :class:`BuilderFeeEvent` row, and
+    broadcasts an SSE ``builder_fee.accrued`` event.
     """
 
-    global _fill_listener_import_warned
-    try:  # pragma: no cover
-        from .polymarket import fill_listener  # type: ignore
+    global _fill_listener_started_log
 
-        await fill_listener.start(market_id, translator_address)
-    except (ImportError, AttributeError):
-        # ImportError: module not present. AttributeError: module
-        # present but no ``start`` symbol exposed (real listener API
-        # differs). Both mean we run in mock mode; log once per session.
-        if not _fill_listener_import_warned:
-            logger.info(
-                "fill listener adapter unavailable; running in mock mode "
-                "for this session (market=%s translator=%s simulated=%s)",
-                market_id,
-                translator_address,
-                is_simulated,
-            )
-            _fill_listener_import_warned = True
+    if not market_id:
+        return
+
+    try:
+        from .polymarket.fill_indexer import make_fill_indexer
+        from .polymarket.fill_listener import ChainRecorder, FillListener
+    except ImportError as exc:  # pragma: no cover - deps always present
+        logger.warning(
+            "fill listener modules unavailable (%s); skipping listener "
+            "for market=%s translator=%s",
+            exc,
+            market_id,
+            translator_address,
+        )
+        return
+
+    polygon_rpc_set = bool(os.getenv("POLYGON_RPC"))
+    try:
+        source = await make_fill_indexer(
+            market_id=market_id,
+            force_mock=not polygon_rpc_set,
+        )
+    except (httpx.HTTPError, ValueError, OSError) as exc:
+        logger.warning(
+            "make_fill_indexer raised %s; skipping listener for market=%s",
+            exc,
+            market_id,
+        )
+        return
+
+    source_kind = type(source).__name__
+    if not _fill_listener_started_log:
+        logger.info(
+            "fill listener: %s connected for market=%s translator=%s "
+            "(polygon_rpc_set=%s submission_simulated=%s)",
+            source_kind,
+            market_id,
+            translator_address,
+            polygon_rpc_set,
+            is_simulated,
+        )
+        _fill_listener_started_log = True
+    else:
+        logger.debug(
+            "fill listener: %s wired for market=%s translator=%s",
+            source_kind,
+            market_id,
+            translator_address,
+        )
+
+    hub = get_pubsub()
+
+    async def _sse_sink(payload: dict[str, Any]) -> None:
+        await hub.publish(
+            payload.get("type", "builder_fee.accrued"),
+            payload.get("data", {}),
+        )
+
+    chain_recorder: Optional[Any] = None
+    try:
+        candidate = ChainRecorder()
+        if candidate.enabled:
+            chain_recorder = candidate
+    except (ValueError, OSError) as exc:  # pragma: no cover - defensive
+        logger.debug("ChainRecorder construction failed: %s", exc)
+
+    listener = FillListener(
+        client=source,
+        market_id=market_id,
+        translator_address=translator_address,
+        sse_sink=_sse_sink,
+        db_sink=_persist_builder_fee_event,
+        chain_recorder=chain_recorder,
+    )
+
+    try:
+        await listener.listen()
+    except asyncio.CancelledError:  # pragma: no cover - shutdown path
+        raise
     except (RuntimeError, httpx.HTTPError) as exc:
         logger.warning(
             "fill listener failed for market=%s translator=%s: %s",
@@ -951,6 +1118,54 @@ def compute_content_hash(event_dict: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
+async def create_pending_event(
+    event_dict: dict[str, Any],
+) -> dict[str, Any]:
+    """Synchronously persist a PENDING Event row and emit ``event.created``.
+
+    Lets the demo button get an event_id back instantly so the UI can
+    navigate to ``/events/{id}`` while the lifecycle runs in a BackgroundTask.
+    On a content-hash dedup hit, returns the existing event_id with
+    ``deduped=True`` so the caller can surface HTTP 409.
+    """
+
+    content_hash = compute_content_hash(event_dict)
+    with session_scope() as session:
+        existing = session.exec(
+            select(Event).where(Event.content_hash == content_hash)
+        ).first()
+        if existing is not None:
+            return {
+                "event_id": existing.id,
+                "status": existing.status,
+                "deduped": True,
+                "content_hash": content_hash,
+            }
+        event = Event(
+            content_hash=content_hash,
+            sources=list(event_dict.get("sources", []) or []),
+            language=event_dict.get("language", "en"),
+            title=event_dict.get("title"),
+            status=EventStatus.PENDING.value,
+        )
+        session.add(event)
+        session.flush()
+        event_id = event.id
+        assert event_id is not None
+
+    hub = get_pubsub()
+    await hub.publish(
+        "event.created",
+        {"event_id": event_id, "content_hash": content_hash},
+    )
+    return {
+        "event_id": event_id,
+        "status": EventStatus.PENDING.value,
+        "deduped": False,
+        "content_hash": content_hash,
+    }
+
+
 async def run_lifecycle(
     event_dict: dict[str, Any],
     *,
@@ -959,6 +1174,7 @@ async def run_lifecycle(
     publish: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None,
     auction_mode: str | None = None,
     confirm_real_polymarket: bool = False,
+    precreated_event_id: int | None = None,
 ) -> dict[str, Any]:
     """Top-level wrapper that catches any unhandled exception in the inner
     lifecycle so events never stay forever in an in-flight status. On
@@ -974,6 +1190,7 @@ async def run_lifecycle(
             publish=publish,
             auction_mode=auction_mode,
             confirm_real_polymarket=confirm_real_polymarket,
+            precreated_event_id=precreated_event_id,
         )
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception(
@@ -1026,6 +1243,7 @@ async def _run_lifecycle_inner(
     publish: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None,
     auction_mode: str | None = None,
     confirm_real_polymarket: bool = False,
+    precreated_event_id: int | None = None,
 ) -> dict[str, Any]:
     """Run the full lifecycle. Returns a summary dict.
 
@@ -1075,37 +1293,44 @@ async def _run_lifecycle_inner(
         )
 
     # ----- Step 1: Persist event + broadcast event.created -----
+    # When ``precreated_event_id`` is provided, the caller already did the
+    # dedup check + insert + ``event.created`` publish (see
+    # :func:`create_pending_event`), so we just adopt that row.
     content_hash = compute_content_hash(event_dict)
-    with session_scope() as session:
-        existing = session.exec(
-            select(Event).where(Event.content_hash == content_hash)
-        ).first()
-        if existing is not None:
-            # Dedup hit — do not run the lifecycle a second time. The
-            # caller decides whether to surface this as HTTP 409 etc.
-            return {
-                "event_id": existing.id,
-                "status": existing.status,
-                "deduped": True,
-                "content_hash": content_hash,
-            }
-        event = Event(
-            content_hash=content_hash,
-            sources=list(event_dict.get("sources", []) or []),
-            language=event_dict.get("language", "en"),
-            title=event_dict.get("title"),
-            status=EventStatus.PENDING.value,
-        )
-        session.add(event)
-        session.flush()
-        event_id = event.id
-        assert event_id is not None
+    if precreated_event_id is not None:
+        event_id = precreated_event_id
+        phases_completed = 1
+    else:
+        with session_scope() as session:
+            existing = session.exec(
+                select(Event).where(Event.content_hash == content_hash)
+            ).first()
+            if existing is not None:
+                # Dedup hit — do not run the lifecycle a second time. The
+                # caller decides whether to surface this as HTTP 409 etc.
+                return {
+                    "event_id": existing.id,
+                    "status": existing.status,
+                    "deduped": True,
+                    "content_hash": content_hash,
+                }
+            event = Event(
+                content_hash=content_hash,
+                sources=list(event_dict.get("sources", []) or []),
+                language=event_dict.get("language", "en"),
+                title=event_dict.get("title"),
+                status=EventStatus.PENDING.value,
+            )
+            session.add(event)
+            session.flush()
+            event_id = event.id
+            assert event_id is not None
 
-    await publish(
-        "event.created",
-        {"event_id": event_id, "content_hash": content_hash},
-    )
-    phases_completed = 1
+        await publish(
+            "event.created",
+            {"event_id": event_id, "content_hash": content_hash},
+        )
+        phases_completed = 1
 
     # ----- Step 2: Open on-chain auction -----
     open_tx = await _open_onchain_auction(
@@ -1326,19 +1551,37 @@ async def _run_lifecycle_inner(
     )
 
     # Emit a synthetic builder-fee event in simulation mode so downstream
-    # dashboards have data to render during the demo.
+    # dashboards have data to render during the demo. Even though the
+    # Polymarket submission is simulated, we still try to land a real
+    # ``BuilderFeeRouter.recordFill`` tx on Arc so the on-chain
+    # leaderboard / reputation flow has real data. If the chain call
+    # fails (no operator key, RPC down, contract revert) we fall back to
+    # ``is_simulated=True`` with ``arc_tx_hash=None`` rather than the
+    # historical ``"0xsimulated"`` placeholder.
     if market.get("is_simulated"):
         from sqlalchemy import update as _sa_update
+
+        fee_market_id = market.get("market_id", "")
+        # 1 USDC accrual on a $100 notional fill.
+        builder_fill_amount = 100.0
+        builder_fee_amount = 1.0
+
+        arc_tx_hash = await _record_builder_fee_on_chain(
+            market_id=fee_market_id,
+            fill_amount_usdc=builder_fee_amount,
+            translator_address=winner.agent_address,
+        )
+        fee_is_simulated = arc_tx_hash is None
 
         with session_scope() as session:
             session.add(
                 BuilderFeeEvent(
-                    market_id=market.get("market_id", ""),
-                    fill_amount=100.0,
-                    fee_amount=1.0,
+                    market_id=fee_market_id,
+                    fill_amount=builder_fill_amount,
+                    fee_amount=builder_fee_amount,
                     translator_address=winner.agent_address,
-                    arc_tx_hash="0xsimulated",
-                    is_simulated=True,
+                    arc_tx_hash=arc_tx_hash,
+                    is_simulated=fee_is_simulated,
                 )
             )
             # Atomic increment to avoid lost-update races when multiple
@@ -1347,7 +1590,8 @@ async def _run_lifecycle_inner(
                 _sa_update(AgentReputation)
                 .where(AgentReputation.agent_address == winner.agent_address)
                 .values(
-                    cumulative_fees=AgentReputation.cumulative_fees + 1.0,
+                    cumulative_fees=AgentReputation.cumulative_fees
+                    + builder_fee_amount,
                     last_updated=datetime.now(timezone.utc),
                 )
             )
@@ -1355,9 +1599,10 @@ async def _run_lifecycle_inner(
             "builder_fee.accrued",
             {
                 "event_id": event_id,
-                "market_id": market.get("market_id"),
-                "fee_amount": 1.0,
-                "is_simulated": True,
+                "market_id": fee_market_id,
+                "fee_amount": builder_fee_amount,
+                "arc_tx_hash": arc_tx_hash,
+                "is_simulated": fee_is_simulated,
             },
         )
         phases_completed = 7
@@ -1396,6 +1641,7 @@ __all__ = [
     "JudgePanelResult",
     "PipelineResult",
     "compute_content_hash",
+    "create_pending_event",
     "run_lifecycle",
     "AUCTION_WINDOW_SECONDS",
     "QUALITY_PASS_THRESHOLD",

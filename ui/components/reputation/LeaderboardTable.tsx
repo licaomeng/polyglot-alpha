@@ -14,6 +14,24 @@ function ariaSortFor(active: boolean, dir: "asc" | "desc"): "ascending" | "desce
   return dir === "asc" ? "ascending" : "descending";
 }
 
+/**
+ * Backend leaves the `alias` field null for seed agents (`0xqwen_agent`,
+ * `0xgemini_agent`, etc). Surface a readable name derived from the address so
+ * the evaluator sees "Qwen agent" instead of an em-dash. Falls back to a
+ * shortened address when no recognisable pattern matches.
+ */
+function deriveAlias(address: string): string {
+  const lower = address.toLowerCase();
+  if (lower.includes("qwen")) return "Qwen agent";
+  if (lower.includes("gemini")) return "Gemini agent";
+  if (lower.includes("llama")) return "Llama agent";
+  if (lower.includes("deepseek")) return "DeepSeek agent";
+  // Generic mock-named agents (0xagent_a, 0xagent1) get a humanised form.
+  const match = lower.match(/^0x(agent[_a-z0-9]+)$/);
+  if (match) return match[1].replace(/_/g, " ");
+  return "Agent";
+}
+
 export function LeaderboardTable({ entries }: { entries: LeaderboardEntry[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -63,6 +81,7 @@ export function LeaderboardTable({ entries }: { entries: LeaderboardEntry[] }) {
           <TH
             className="text-right"
             aria-sort={ariaSortFor(sortKey === "reputation", sortDir)}
+            title="Reputation score in [0, 1]. EWMA over recent fills with closed-IP weighting (thesis §5.27)."
           >
             <SortButton
               label="Rep."
@@ -75,6 +94,7 @@ export function LeaderboardTable({ entries }: { entries: LeaderboardEntry[] }) {
           <TH
             className="text-right"
             aria-sort={ariaSortFor(sortKey === "revenueUsd", sortDir)}
+            title="Cumulative builder-fee revenue (USDC). 0.4% maker fee per Polymarket fill routes to the producing agent."
           >
             <SortButton
               label="Revenue"
@@ -87,6 +107,7 @@ export function LeaderboardTable({ entries }: { entries: LeaderboardEntry[] }) {
           <TH
             className="text-right"
             aria-sort={ariaSortFor(sortKey === "winRate", sortDir)}
+            title="Auctions won divided by auctions entered. Lowest qualified bid wins."
           >
             <SortButton
               label="Win rate"
@@ -109,8 +130,11 @@ export function LeaderboardTable({ entries }: { entries: LeaderboardEntry[] }) {
                   href={`/agents/${row.address}`}
                   className="group flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded px-1 -mx-1"
                   aria-label={`View profile for ${row.alias ?? row.address}`}
+                  title={row.address}
                 >
-                  <span className="font-medium group-hover:text-primary">{row.alias ?? "—"}</span>
+                  <span className="font-medium group-hover:text-primary">
+                    {row.alias ?? deriveAlias(row.address)}
+                  </span>
                   <span className="font-mono text-[10px] text-muted-foreground group-hover:text-primary">
                     {shortAddr(row.address)}
                   </span>
@@ -161,7 +185,7 @@ function SortButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1 rounded transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "inline-flex min-h-[40px] items-center gap-1 rounded px-1 transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-[28px]",
         align === "right" && "flex-row-reverse",
         active && "text-foreground",
       )}

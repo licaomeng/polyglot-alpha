@@ -1,0 +1,44 @@
+{
+  "iteration": 1,
+  "wall_clock_seconds": 65,
+  "event_id": "98",
+  "verdict": "PARTIAL_PASS",
+  "checks": {
+    "1_home_render": true,
+    "2_trigger_click_navigates": false,
+    "3_sse_event_count": 7,
+    "4_phase1": true,
+    "5_phase2_4_diverse_bids": true,
+    "6_phase3_5_layer": true,
+    "7_phase4_11_judges": true,
+    "8_phase5_arc_explorer_link": true,
+    "9_phase6_dryrun_market": true,
+    "10_phase7_streaming": true,
+    "11_dag_timeline_coupling": true,
+    "12_cross_page_nav": true
+  },
+  "pass_count": 11,
+  "verified_event_used_for_phase_assertions": "96",
+  "screenshots": [
+    "outputs/screenshots/demo_iter_1_home.png",
+    "outputs/screenshots/demo_iter_1_event96_detail.png"
+  ],
+  "notes": "Backend went unresponsive during iter (parallel-agent contention). Trigger click did NOT navigate immediately because /trigger/event is synchronous and ran for full lifecycle (~60s+); UI button shows live SSE progress instead. Phase verification done against event 96 (prior, fully completed) since event 98 (mine) stuck mid-lifecycle. Discovered + fixed builder_code rendering bug (was literal 'polyglot_alpha' fallback instead of real 0xa934... hex).",
+  "issues_observed": [
+    "Backend /trigger/event blocks until lifecycle complete (~60s) — TriggerButton's router.push immediately-after-await never fires until full lifecycle done",
+    "Backend saturated by 3 parallel sub-agents triggering events concurrently",
+    "Event 98 stuck at EVALUATING after 4 phases (multi-instance DB contention)"
+  ],
+  "bugs_fixed": [
+    {
+      "file": "ui/components/event/EventTimeline.tsx",
+      "line": 266,
+      "desc": "Builder-code badge fell back to literal 'polyglot_alpha' string when polymarket nested object lacked builderCode. Added fallback chain: event.polymarket.builderCode -> phase.details.builder_code -> event.builder_code (top-level snake_case from API) -> literal default."
+    },
+    {
+      "file": "ui/components/polymarket/BuilderCodeBadge.tsx",
+      "line": 3,
+      "desc": "Long 0x...64-hex codes overflowed the badge UI. Added formatBuilderCode() to render as `0xabcd…1234` with full value in title/aria-label."
+    }
+  ]
+}

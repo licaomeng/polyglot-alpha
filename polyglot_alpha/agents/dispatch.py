@@ -25,30 +25,26 @@ import asyncio
 import hashlib
 import json
 import logging
-import os
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-import httpx
 from eth_account import Account
 
 from .. import analysts, quality_eval, synthesizer, translators
+from ..chain.auction_client import AuctionClient
 from ..llm import LLMCallable, make_llm
 from ..schemas import Question as SchemaQuestion, event_dict_to_model
 from . import AGENT_REGISTRY
+from .wallets import load_or_derive_wallet
 
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WALLETS_PATH = _REPO_ROOT / "outputs" / "agent_wallets.json"
 
-# Default bid window in USDC used when an agent's ``evaluate_event`` blows up
-# but we still want to register a non-zero bid in the auction window.
-_DEFAULT_FALLBACK_BID_USDC: float = 1.0
-_DEFAULT_FALLBACK_REPUTATION: float = 1.0
 _DEFAULT_AUCTION_WINDOW_SECONDS: float = 30.0
 _DEFAULT_PIPELINE_TIMEOUT_SECONDS: float = 120.0
 
@@ -313,85 +309,152 @@ async def run_pipeline(
 # ---------------------------------------------------------------------------
 
 
+def _resolve_agent_signing_key(agent_name: str) -> Optional[str]:
+    """Return the agent's deterministic private key for on-chain ``placeBid``.
+
+    Tries (in order): ``<AGENT>_WALLET_PRIVATE_KEY`` env, then deterministic
+    derivation from ``HACKATHON_WALLET_PRIVATE_KEY``. Returns ``None`` when
+    neither is available (e.g. unit tests without operator PK) — callers
+    fall back to a throwaway eval-only keypair and skip the on-chain
+    ``placeBid`` for that bid.
+    """
+
+    try:
+        return load_or_derive_wallet(agent_name).private_key
+    except (RuntimeError, ValueError):
+        return None
+
+
+async def _place_bid_on_chain(
+    agent_name: str,
+    agent_pk: str,
+    auction_event_id: Any,
+    bid_amount: float,
+    candidate_hash_hex: str,
+) -> str:
+    """Sign + send ``TranslationAuction.placeBid`` for one agent.
+
+    Returns the 0x-prefixed tx hash. Raises on RPC / signing failure so
+    the caller can record the bid as failed instead of pretending the
+    on-chain write succeeded.
+    """
+
+    if auction_event_id is None or auction_event_id == "":
+        raise ValueError(
+            f"dispatch._place_bid_on_chain: missing auction event_id for {agent_name}"
+        )
+    client = AuctionClient()
+    return await client.submit_bid(
+        event_id=auction_event_id,
+        bid_amount_usdc=bid_amount,
+        candidate_hash=candidate_hash_hex,
+        agent_pk=agent_pk,
+    )
+
+
 async def _safe_agent_bid(
     agent_name: str,
     agent_cls: type,
     event_dict: dict[str, Any],
+    *,
+    auction_event_id: Any = None,
 ) -> dict[str, Any]:
-    """Drive one agent's pre-bid evaluation. Always returns a dict.
+    """Drive one agent's pre-bid evaluation + on-chain ``placeBid``.
 
-    On LLM / construction failure we still emit a safe default so the
-    auction window is never starved of bids.
+    On any LLM / construction failure we **propagate** the exception so the
+    orchestrator records the bid as failed and moves on — no synthetic
+    fallback bid is ever returned (the previous fallback emitted a
+    placeholder candidate hash and a flat 1.0 USDC bid that got committed
+    on-chain as a "real" agent vote).
+
+    After a successful evaluation, the agent's wallet signs a real
+    ``TranslationAuction.placeBid`` transaction and the returned dict
+    carries the resulting ``tx_hash``. If the agent has no resolvable
+    private key (eval-only path, e.g. tests without operator PK) we skip
+    the on-chain write and leave ``tx_hash`` unset — the orchestrator
+    persists the bid row with ``tx_hash=NULL`` in that case, which is
+    honest about the on-chain state.
     """
 
     coerced = _coerce_event(event_dict)
-    fallback_address = f"0x{agent_name.lower()}_eval_only"
 
-    try:
-        agent = agent_cls(wallet_pk=_throwaway_pk())
-    except Exception as exc:  # pragma: no cover - construction is trivial
-        logger.warning(
-            "dispatch.collect_bids_inline: agent=%s construction failed: %s",
-            agent_name,
-            exc,
-        )
-        return {
-            "agent_address": fallback_address,
-            "agent_name": agent_name,
-            "bid_amount": _DEFAULT_FALLBACK_BID_USDC,
-            "candidate_hash": "0x0",
-            "reputation": _DEFAULT_FALLBACK_REPUTATION,
-            "confidence": 0.5,
-            "expected_cost_usdc": 0.0,
-            "llm_model": getattr(agent_cls, "MODEL_ID", "unknown"),
-            "_error": f"construction:{exc}",
-        }
+    # Prefer the agent's real signing key (so ``placeBid`` is signed by the
+    # same address used everywhere else). Fall back to a throwaway PK only
+    # for evaluation purposes when the operator PK is unavailable.
+    real_pk = _resolve_agent_signing_key(agent_name)
+    agent_pk = real_pk or _throwaway_pk()
+    agent = agent_cls(wallet_pk=agent_pk)
 
-    try:
-        evaluation = await agent.evaluate_event(coerced)
-    except Exception as exc:  # broad: LLM quota, parse error, network
-        logger.warning(
-            "dispatch.collect_bids_inline: agent=%s evaluate_event failed: %s",
-            agent_name,
-            exc,
-        )
-        return {
-            "agent_address": agent.address,
-            "agent_name": agent_name,
-            "bid_amount": _DEFAULT_FALLBACK_BID_USDC,
-            "candidate_hash": "0x0",
-            "reputation": _DEFAULT_FALLBACK_REPUTATION,
-            "confidence": 0.5,
-            "expected_cost_usdc": 0.0,
-            "llm_model": agent_cls.MODEL_ID,
-            "_error": f"evaluate:{exc}",
-        }
+    evaluation = await agent.evaluate_event(coerced)
 
-    return {
+    bid_amount = float(evaluation.bid_amount_usdc)
+    candidate_hash_hex = _candidate_hash_for_agent(
+        agent_name, evaluation, coerced
+    )
+
+    result: dict[str, Any] = {
         "agent_address": agent.address,
         "agent_name": agent_name,
-        "bid_amount": float(evaluation.bid_amount_usdc),
-        "candidate_hash": _candidate_hash_for_agent(
-            agent_name, evaluation, coerced
-        ),
+        "bid_amount": bid_amount,
+        "candidate_hash": candidate_hash_hex,
         "reputation": float(getattr(evaluation, "estimated_quality", 1.0)),
         "confidence": float(evaluation.confidence),
         "expected_cost_usdc": float(evaluation.expected_cost_usdc),
         "llm_model": agent_cls.MODEL_ID,
     }
 
+    # On-chain placeBid: only attempted when we have a real signing key
+    # AND the orchestrator passed the auction's event_id. Sub-agent β is
+    # serialising nonces on ``OnChainClient.sign_and_send``, so we can
+    # fire these in parallel across the 4 agents without colliding.
+    chain_event_id = auction_event_id
+    if chain_event_id is None:
+        # Fallback: best-effort derive from the event_dict for callers that
+        # pass the event_id inline (e.g. CLI demos). The orchestrator path
+        # always passes ``auction_event_id`` explicitly.
+        chain_event_id = (
+            coerced.get("event_id")
+            or coerced.get("eventId")
+            or coerced.get("id")
+        )
+    if real_pk is not None and chain_event_id not in (None, ""):
+        try:
+            tx_hash = await _place_bid_on_chain(
+                agent_name=agent_name,
+                agent_pk=real_pk,
+                auction_event_id=chain_event_id,
+                bid_amount=bid_amount,
+                candidate_hash_hex=candidate_hash_hex,
+            )
+            result["tx_hash"] = tx_hash
+        except Exception as exc:
+            # On-chain failure does not invalidate the bid evaluation — log
+            # and leave ``tx_hash`` unset so the orchestrator can decide
+            # whether to persist or retry. We do NOT swallow the error
+            # silently: the bid record will carry ``_chain_error`` for the
+            # API layer to surface.
+            logger.warning(
+                "dispatch.collect_bids_inline: agent=%s placeBid failed: %s",
+                agent_name,
+                exc,
+            )
+            result["_chain_error"] = f"placeBid:{exc}"
+    return result
+
 
 async def collect_bids_inline(
     event: dict[str, Any],
     *,
     window_seconds: float = _DEFAULT_AUCTION_WINDOW_SECONDS,
+    auction_event_id: Any = None,
 ) -> list[dict[str, Any]]:
-    """Run all 4 reference agents in parallel, each emits a (mock) bid.
+    """Run all 4 reference agents in parallel; each agent's bid goes on-chain.
 
-    No real on-chain transactions are submitted — that is the auction
-    client's job. This function exists so the in-process demo path can
-    surface bid-sized differences (each agent's :meth:`bid_strategy` skews
-    the amount) without requiring a live RPC.
+    Each agent drives its real ``evaluate_event`` (the LLM-backed pricing
+    call) and, when its wallet is resolvable + ``auction_event_id`` is
+    supplied, signs and sends ``TranslationAuction.placeBid`` so the
+    resulting ``bids.tx_hash`` reflects an actual chain write rather than
+    NULL.
 
     Each returned dict has at least::
 
@@ -404,15 +467,20 @@ async def collect_bids_inline(
             "confidence":    float,            # 0-1
             "expected_cost_usdc": float,
             "llm_model":     str,
+            "tx_hash":       str | absent,     # 0x... when placeBid succeeded
         }
 
-    A failed agent yields the same shape with an extra ``_error`` key so
-    callers can render the failure inline.
+    Agents whose ``evaluate_event`` raises are **dropped** — no synthetic
+    placeholder bid is returned. The orchestrator therefore proceeds with
+    however many real bids were produced (0-4) instead of pretending all
+    four agents voted.
     """
 
     items = list(AGENT_REGISTRY.items())  # [(name, cls), ...] — 4 entries.
     tasks = [
-        asyncio.create_task(_safe_agent_bid(name, cls, event))
+        asyncio.create_task(
+            _safe_agent_bid(name, cls, event, auction_event_id=auction_event_id)
+        )
         for name, cls in items
     ]
     bids: list[dict[str, Any]] = []
@@ -451,8 +519,15 @@ async def run_for_winner(
     """Orchestrator-facing entry point.
 
     Resolves the agent class from ``winner_address`` and drives the full
-    5-layer pipeline. On any LLM failure we degrade to a deterministic
-    placeholder so the lifecycle still emits a hashable candidate.
+    5-layer pipeline.
+
+    **No fallback translation.** If the LLM call fails (quota, timeout,
+    parse error, network), the exception is propagated to the
+    orchestrator so the lifecycle records the failure and skips the
+    on-chain commit step. The previous implementation emitted a synthetic
+    ``"Will <title>? by 2026-12-31"`` placeholder on failure which was
+    then committed on-chain and judged by the 11-judge panel as if it
+    were a real translation — that path is removed.
     """
 
     agent_name = resolve_agent_name(winner_address)
@@ -462,56 +537,11 @@ async def run_for_winner(
         agent_name,
     )
 
-    try:
-        question = await asyncio.wait_for(
-            _run_pipeline_schema(event_dict, agent_name),
-            timeout=_DEFAULT_PIPELINE_TIMEOUT_SECONDS,
-        )
-        final_question = _build_final_question_dict(event_dict, question)
-    except (
-        asyncio.TimeoutError,
-        RuntimeError,
-        ValueError,
-        KeyError,
-        httpx.HTTPError,
-    ) as exc:
-        logger.warning(
-            "dispatch.run_for_winner: pipeline failed (%s); emitting fallback",
-            exc,
-        )
-        title_raw = (
-            event_dict.get("title")
-            or event_dict.get("title_zh")
-            or "PolyglotAlpha demo question"
-        ).strip()
-        cutoff = datetime.now(timezone.utc).replace(month=12, day=31, microsecond=0)
-        cutoff_iso = cutoff.isoformat()
-        # Avoid doubling the "Will" prefix when the upstream title already
-        # starts with it (matches _build_final_question_dict behaviour).
-        if title_raw.lower().startswith("will "):
-            fallback_title = title_raw if title_raw.endswith("?") else f"{title_raw}?"
-        else:
-            fallback_title = (
-                f"Will {title_raw.rstrip('?')} by {cutoff.strftime('%B %d, %Y')}?"
-            )
-        final_question = {
-            "title": fallback_title,
-            "description": event_dict.get("summary") or title_raw,
-            "resolution_criteria": (
-                "Resolves YES if the underlying event is confirmed by an "
-                "authoritative report on or before the cutoff, otherwise NO."
-            ),
-            "resolution_source": "operator",
-            "cutoff_ts": cutoff_iso,
-            "end_date_iso": cutoff_iso,
-            "category": event_dict.get("category", "geopolitics"),
-            "source_news": title_raw,
-            "source_language": event_dict.get("language", "zh"),
-            "target_language": "en",
-            "outcomes": ["Yes", "No"],
-            "confidence": 0.5,
-            "quality_score": 0.5,
-        }
+    question = await asyncio.wait_for(
+        _run_pipeline_schema(event_dict, agent_name),
+        timeout=_DEFAULT_PIPELINE_TIMEOUT_SECONDS,
+    )
+    final_question = _build_final_question_dict(event_dict, question)
 
     candidate_hash = hashlib.sha256(
         json.dumps(final_question, sort_keys=True).encode()

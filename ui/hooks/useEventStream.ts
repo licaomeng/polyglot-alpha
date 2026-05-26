@@ -6,14 +6,14 @@ import {
   PHASE_NAMES,
   SSE_EVENT_TYPES,
   SSE_TO_PHASE_INDEX,
+  type AnySseEventType,
   type PhaseState,
   type PhaseStatus,
-  type SseEventType,
 } from "@/lib/api";
 
 /** Last-seen SSE event surfaced to UI consumers (drives trigger button labels). */
 export interface LatestSseEvent {
-  type: SseEventType | "hello" | "heartbeat";
+  type: AnySseEventType | "hello" | "heartbeat";
   data: Record<string, unknown>;
   receivedAt: number;
 }
@@ -37,7 +37,7 @@ function nextStatus(prev: PhaseStatus | undefined, incoming: PhaseStatus): Phase
 
 function applyEvent(
   current: PhaseState[] | undefined,
-  type: SseEventType,
+  type: AnySseEventType,
   data: Record<string, unknown>,
 ): PhaseState[] {
   // Initialise a baseline 7-phase scaffold the first time we receive any event.
@@ -85,12 +85,63 @@ function applyEvent(
       details: { ...(base[idx].details ?? {}), ...data },
     };
   } else if (type === "translation.completed") {
+    // Phase 2 stays "running" while debate sub-phases (critic / moderator /
+    // refine) fire; we only mark it "completed" once `refine.completed`
+    // arrives. If the backend skips the debate layers entirely (legacy
+    // pipeline), the absence of those events leaves phase 2 in "running"
+    // until `quality.verdict` arrives and progresses past it — matching
+    // pre-debate behaviour.
+    const prevSub =
+      (base[idx].details?.subPhases as Record<string, PhaseStatus> | undefined) ?? {};
     base[idx] = {
       ...base[idx],
-      status: nextStatus(base[idx].status, "completed"),
+      status: nextStatus(base[idx].status, "running"),
       startedAt: base[idx].startedAt ?? now,
-      completedAt: now,
-      details: { ...(base[idx].details ?? {}), ...data },
+      details: {
+        ...(base[idx].details ?? {}),
+        ...data,
+        subPhases: {
+          ...prevSub,
+          "L1 Analysts": "completed",
+          "L2 Translators": "completed",
+          "L3 Critics": prevSub["L3 Critics"] ?? "running",
+        },
+      },
+    };
+  } else if (
+    type === "critic.completed" ||
+    type === "moderator.verdict" ||
+    type === "refine.completed"
+  ) {
+    const prevSub =
+      (base[idx].details?.subPhases as Record<string, PhaseStatus> | undefined) ?? {};
+    const nextSub: Record<string, PhaseStatus> = { ...prevSub };
+    if (type === "critic.completed") {
+      nextSub["L1 Analysts"] = "completed";
+      nextSub["L2 Translators"] = "completed";
+      nextSub["L3 Critics"] = "completed";
+      nextSub["L4 Moderator"] = "running";
+    } else if (type === "moderator.verdict") {
+      nextSub["L3 Critics"] = "completed";
+      nextSub["L4 Moderator"] = "completed";
+      nextSub["L5 Refine"] = "running";
+    } else {
+      nextSub["L4 Moderator"] = "completed";
+      nextSub["L5 Refine"] = "completed";
+    }
+    const phase2Completed = type === "refine.completed";
+    base[idx] = {
+      ...base[idx],
+      status: phase2Completed
+        ? nextStatus(base[idx].status, "completed")
+        : nextStatus(base[idx].status, "running"),
+      startedAt: base[idx].startedAt ?? now,
+      completedAt: phase2Completed ? now : base[idx].completedAt,
+      details: {
+        ...(base[idx].details ?? {}),
+        ...data,
+        subPhases: nextSub,
+      },
     };
   } else if (type === "quality.verdict") {
     const verdict = String(data.verdict ?? "");
@@ -169,7 +220,7 @@ export function useEventStream(eventId?: string): UseEventStreamReturn {
     es.addEventListener("open", onOpen);
     es.addEventListener("error", onError);
 
-    const handle = (type: SseEventType | "hello" | "heartbeat", raw: string) => {
+    const handle = (type: AnySseEventType | "hello" | "heartbeat", raw: string) => {
       let data: Record<string, unknown> = {};
       try {
         data = JSON.parse(raw || "{}") as Record<string, unknown>;
@@ -195,13 +246,13 @@ export function useEventStream(eventId?: string): UseEventStreamReturn {
       }
     };
 
-    const allTypes: Array<SseEventType | "hello" | "heartbeat"> = [
+    const allTypes: Array<AnySseEventType | "hello" | "heartbeat"> = [
       ...SSE_EVENT_TYPES,
       "hello",
       "heartbeat",
     ];
     const namedListeners: Array<{
-      type: SseEventType | "hello" | "heartbeat";
+      type: AnySseEventType | "hello" | "heartbeat";
       fn: (ev: MessageEvent<string>) => void;
     }> = allTypes.map((t) => ({
       type: t,
