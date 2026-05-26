@@ -1646,6 +1646,13 @@ async def _run_lifecycle_inner(
                 market_url=market.get("market_url"),
                 status=market.get("status", PolymarketStatus.SIMULATED.value),
                 is_simulated=bool(market.get("is_simulated", True)),
+                mode=market.get("mode"),
+                fees_estimate_usdc=(
+                    float(market["fees_estimate_usdc"])
+                    if market.get("fees_estimate_usdc") is not None
+                    else None
+                ),
+                payload=market.get("payload") or None,
             )
         )
         _set_status(session, event_id, EventStatus.SUBMITTED)
@@ -1657,6 +1664,9 @@ async def _run_lifecycle_inner(
             "market_url": market.get("market_url"),
             "is_simulated": bool(market.get("is_simulated", True)),
             "mode": market.get("mode", "unknown"),
+            "payload": market.get("payload") or {},
+            "fees_estimate_usdc": market.get("fees_estimate_usdc"),
+            "error": market.get("error"),
         },
     )
     phases_completed = 6

@@ -220,14 +220,17 @@ def _serialize_event_detail(
     # Builder-fee presence indicates the Streaming Revenue phase completed.
     from ...persistence.models import BuilderFeeEvent
 
+    fee_rows: list[BuilderFeeEvent] = []
     has_fee_event = False
     if submission is not None and submission.market_id:
-        any_fee = session.exec(
-            select(BuilderFeeEvent).where(
-                BuilderFeeEvent.market_id == submission.market_id
-            )
-        ).first()
-        has_fee_event = any_fee is not None
+        fee_rows = list(
+            session.exec(
+                select(BuilderFeeEvent)
+                .where(BuilderFeeEvent.market_id == submission.market_id)
+                .order_by(BuilderFeeEvent.timestamp.asc())
+            ).all()
+        )
+        has_fee_event = len(fee_rows) > 0
 
     # Build the anchor object the UI consumes for the On-chain Anchor phase.
     # Falls back to the auction settlement tx when no question row exists yet
@@ -243,6 +246,34 @@ def _serialize_event_detail(
             "txHash": anchor_tx_hash,
             "explorerUrl": f"https://testnet.arcscan.app/tx/{anchor_tx_hash}",
             "ipfsCid": getattr(question, "reasoning_ipfs", None),
+        }
+
+    # Rich Polymarket submission block — UI consumes ``event.polymarket.*``
+    # via optional-chaining; emit ``None`` when the pipeline hasn't reached
+    # the submission phase yet so consumers can render an empty state.
+    polymarket_block: Optional[dict[str, Any]] = None
+    if submission is not None:
+        polymarket_block = {
+            "marketId": submission.market_id,
+            "marketUrl": submission.market_url,
+            "isSimulated": bool(submission.is_simulated),
+            "mode": submission.mode,
+            "status": submission.status,
+            "builderCode": getattr(question, "builder_code", None),
+            "payload": submission.payload,
+            "feesEstimateUsdc": submission.fees_estimate_usdc,
+            "submittedAt": _utc_iso(submission.submitted_at),
+            "revenueStream": [
+                {
+                    "recipient": r.translator_address,
+                    "usd": r.fee_amount,
+                    "fillAmount": r.fill_amount,
+                    "arcTxHash": r.arc_tx_hash,
+                    "isSimulated": bool(r.is_simulated),
+                    "ts": _utc_iso(r.timestamp),
+                }
+                for r in fee_rows
+            ],
         }
 
     detail: dict[str, Any] = _serialize_event_summary(event)
@@ -266,6 +297,7 @@ def _serialize_event_detail(
             "is_simulated": (
                 bool(submission.is_simulated) if submission is not None else None
             ),
+            "polymarket": polymarket_block,
             "final_question": (
                 translation.final_question_json if translation is not None else None
             ),

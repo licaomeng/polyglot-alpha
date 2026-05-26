@@ -105,6 +105,63 @@ def init_db() -> None:
     from . import models  # noqa: F401  side-effect: register tables
 
     SQLModel.metadata.create_all(engine)
+    _migrate_polymarket_submissions(engine)
+
+
+# Columns added to ``polymarket_submissions`` after the table's first
+# release (2026-05-26). Each entry is ``(column_name, ddl_type)``. The
+# helper below is idempotent — re-running is a no-op — and applies
+# ``ALTER TABLE ADD COLUMN`` only for columns that are missing. This
+# avoids destroying the ~76 historical submission rows already in the
+# local SQLite DB while still bringing the schema in line with the
+# updated ``PolymarketSubmission`` model.
+_POLYMARKET_SUBMISSION_NEW_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("mode", "VARCHAR"),
+    ("fees_estimate_usdc", "FLOAT"),
+    ("payload", "JSON"),
+)
+
+
+def _migrate_polymarket_submissions(engine: Engine) -> None:
+    """Idempotently add new columns to ``polymarket_submissions``.
+
+    Works for both SQLite (``ALTER TABLE ADD COLUMN``) and Postgres
+    (same DDL syntax). Skipped silently if the table doesn't exist yet
+    (fresh DB — ``create_all`` will have rendered the full schema).
+    """
+
+    from sqlalchemy import inspect as sa_inspect, text as sa_text
+
+    try:
+        inspector = sa_inspect(engine)
+        if "polymarket_submissions" not in inspector.get_table_names():
+            return
+        existing_cols = {
+            c["name"] for c in inspector.get_columns("polymarket_submissions")
+        }
+        missing = [
+            (name, ddl)
+            for name, ddl in _POLYMARKET_SUBMISSION_NEW_COLUMNS
+            if name not in existing_cols
+        ]
+        if not missing:
+            return
+        with engine.begin() as conn:
+            for name, ddl in missing:
+                conn.execute(
+                    sa_text(
+                        f"ALTER TABLE polymarket_submissions ADD COLUMN {name} {ddl}"
+                    )
+                )
+                logger.info(
+                    "migrated polymarket_submissions: added column %s %s",
+                    name,
+                    ddl,
+                )
+    except Exception as exc:  # noqa: BLE001 — best-effort, keep startup alive
+        logger.warning(
+            "polymarket_submissions migration skipped (%s)", exc
+        )
 
 
 def reset_engine(url: str) -> Engine:

@@ -6,8 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { IngestionSourcesView } from "./IngestionSourcesView";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
-import type { EventDetail, PhaseState } from "@/lib/api";
+import { cn, shortAddr, formatUsd } from "@/lib/utils";
+import { arcTxUrl, type EventDetail, type PhaseState } from "@/lib/api";
 
 interface PhaseDetailsAccordionProps {
   phase: PhaseState;
@@ -504,6 +504,37 @@ function AnchorDetails({
 
 // ─── Polymarket details ───────────────────────────────────────────────────
 
+// Color tokens for each known submission mode badge.
+const MODE_BADGE_CLASSES: Record<string, string> = {
+  real: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+  live: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+  dry_run: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+  simulated: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+  mock: "border-rose-500/40 bg-rose-500/10 text-rose-300",
+};
+
+const DASH = "—";
+
+function formatEndDateUtc(iso?: string | null): string {
+  if (!iso) return DASH;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${d.toISOString().replace("T", " ").replace(/\.\d+Z$/, "Z")} UTC`;
+}
+
+interface PolymarketPayload {
+  question?: string;
+  outcomes?: string[];
+  resolution_source?: string;
+  end_date_iso?: string;
+  initial_liquidity_usdc?: number;
+  external_id?: string;
+  builder_name?: string;
+  builder_code?: string;
+  category?: string;
+  client_id?: string;
+}
+
 function PolymarketDetails({
   event,
   phase,
@@ -517,15 +548,28 @@ function PolymarketDetails({
   const marketUrl = event.polymarket?.marketUrl ?? det.market_url ?? event.market_url;
   const isSimulated =
     event.polymarket?.isSimulated ?? det.is_simulated ?? event.is_simulated ?? false;
-  const mode = isSimulated ? "dry_run" : "real";
+  const mode: string = event.polymarket?.mode ?? (isSimulated ? "dry_run" : "real");
+  const builderCode = event.polymarket?.builderCode ?? DASH;
+  const feesEstimate = event.polymarket?.feesEstimateUsdc;
+  const payload = (event.polymarket?.payload ?? null) as PolymarketPayload | null;
+
   return (
     <div className="space-y-3">
       <IOSection
         inputs={[
-          { label: "question payload", value: "title + outcomes + resolution_source + cutoff" },
+          {
+            label: "question payload",
+            value: payload ? (
+              <PayloadFieldsList payload={payload} />
+            ) : (
+              <span className="font-mono text-[10px] text-muted-foreground">
+                Awaiting submission…
+              </span>
+            ),
+          },
           {
             label: "builder_code",
-            value: <span className="font-mono">{event.builder_code ?? "polyglot_alpha"}</span>,
+            value: <span className="font-mono">{builderCode}</span>,
           },
           {
             label: "mode",
@@ -533,20 +577,31 @@ function PolymarketDetails({
               <Badge
                 className={cn(
                   "font-mono text-[9px] uppercase tracking-wider",
-                  isSimulated
-                    ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
-                    : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+                  MODE_BADGE_CLASSES[mode] ??
+                    "border-border/60 bg-muted/10 text-muted-foreground",
                 )}
               >
                 {mode}
               </Badge>
             ),
           },
+          ...(feesEstimate !== null && feesEstimate !== undefined
+            ? [
+                {
+                  label: "fees_estimate_usdc",
+                  value: (
+                    <span className="font-mono text-foreground/85">
+                      {formatUsd(feesEstimate)}
+                    </span>
+                  ),
+                },
+              ]
+            : []),
         ]}
         outputs={[
           {
             label: "market_id",
-            value: marketId ? <span className="font-mono">{marketId}</span> : "—",
+            value: marketId ? <span className="font-mono">{marketId}</span> : DASH,
           },
           {
             label: "market_url",
@@ -565,11 +620,12 @@ function PolymarketDetails({
                 </a>
               )
             ) : (
-              "—"
+              DASH
             ),
           },
         ]}
       />
+      <PayloadJsonViewer payload={event.polymarket?.payload ?? null} />
       <div className="space-y-1 text-xs">
         <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           safety gates
@@ -590,6 +646,139 @@ function PolymarketDetails({
         </ul>
       </div>
     </div>
+  );
+}
+
+function PayloadFieldsList({ payload }: { payload: PolymarketPayload }) {
+  const rows: { label: string; value: ReactNode }[] = [
+    {
+      label: "question",
+      value: payload.question ? (
+        <span dir="auto" className="text-foreground/90">
+          {payload.question}
+        </span>
+      ) : (
+        DASH
+      ),
+    },
+    {
+      label: "outcomes",
+      value:
+        payload.outcomes && payload.outcomes.length > 0 ? (
+          <span className="flex flex-wrap gap-1">
+            {payload.outcomes.map((outcome, i) => (
+              <Badge
+                key={`${outcome}-${i}`}
+                dir="auto"
+                className="border-border/60 bg-muted/10 font-mono text-[10px] text-foreground/85"
+              >
+                {outcome}
+              </Badge>
+            ))}
+          </span>
+        ) : (
+          DASH
+        ),
+    },
+    {
+      label: "resolution_source",
+      value: payload.resolution_source ? (
+        <span dir="auto" className="font-mono text-foreground/85">
+          {payload.resolution_source}
+        </span>
+      ) : (
+        DASH
+      ),
+    },
+    {
+      label: "end_date (UTC)",
+      value: (
+        <span className="font-mono text-foreground/85">
+          {formatEndDateUtc(payload.end_date_iso)}
+        </span>
+      ),
+    },
+    {
+      label: "initial_liquidity_usdc",
+      value:
+        payload.initial_liquidity_usdc !== undefined &&
+        payload.initial_liquidity_usdc !== null ? (
+          <span className="font-mono text-foreground/85">
+            {formatUsd(payload.initial_liquidity_usdc)}
+          </span>
+        ) : (
+          DASH
+        ),
+    },
+    {
+      label: "external_id",
+      value: payload.external_id ? (
+        <span className="font-mono text-foreground/85">{payload.external_id}</span>
+      ) : (
+        DASH
+      ),
+    },
+    {
+      label: "builder_name",
+      value: payload.builder_name ? (
+        <span dir="auto" className="text-foreground/85">
+          {payload.builder_name}
+        </span>
+      ) : (
+        DASH
+      ),
+    },
+    {
+      label: "builder_code",
+      value: payload.builder_code ? (
+        <span className="font-mono text-foreground/85">{payload.builder_code}</span>
+      ) : (
+        DASH
+      ),
+    },
+    {
+      label: "category",
+      value: payload.category ? (
+        <span dir="auto" className="text-foreground/85">
+          {payload.category}
+        </span>
+      ) : (
+        DASH
+      ),
+    },
+  ];
+  return (
+    <dl className="space-y-1.5">
+      {rows.map((row) => (
+        <div key={row.label} className="flex flex-col gap-0.5">
+          <dt className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+            {row.label}
+          </dt>
+          <dd className="text-xs">{row.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function PayloadJsonViewer({
+  payload,
+}: {
+  payload: Record<string, unknown> | null;
+}) {
+  if (!payload) return null;
+  return (
+    <details className="rounded-md border border-border/40 bg-card/40">
+      <summary className="cursor-pointer list-none px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        View API Payload
+      </summary>
+      <pre
+        aria-label="Raw Polymarket Gamma API payload"
+        className="max-h-72 overflow-auto rounded-b-md border-t border-border/40 bg-background/40 p-3 font-mono text-[10px] leading-relaxed text-foreground/80"
+      >
+        {JSON.stringify(payload, null, 2)}
+      </pre>
+    </details>
   );
 }
 

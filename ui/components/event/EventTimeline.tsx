@@ -432,10 +432,16 @@ function renderPhaseBody(
           <p className="text-xs text-muted-foreground">no fees streamed yet</p>,
         );
       }
+      // BuilderFeeStream expects a strictly-typed { ts: string; usd: number }[]
+      // (for the recharts time axis). Filter out null-ts rows that the new
+      // backend shape may include before passing the chart data through.
+      const chartStream = stream
+        .filter((row): row is typeof row & { ts: string } => typeof row.ts === "string")
+        .map((row) => ({ ts: row.ts, usd: row.usd }));
       return wrap(
         <>
           <Separator />
-          <BuilderFeeStream stream={stream} recentFills={fills} />
+          <BuilderFeeStream stream={chartStream} recentFills={fills} />
         </>,
       );
     }

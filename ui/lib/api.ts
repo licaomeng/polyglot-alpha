@@ -159,11 +159,18 @@ export interface EventDetail extends EventSummary {
     builderCode: string;
     marketUrl?: string;
     marketId?: string;
-    mode?: "live" | "dry_run" | "mock";
+    mode?: "live" | "dry_run" | "mock" | "real" | "simulated";
     isSimulated?: boolean;
     status?: string;
-    payload?: Record<string, unknown>;
-    revenueStream: { ts: string; usd: number }[];
+    payload?: Record<string, unknown> | null;
+    feesEstimateUsdc?: number | null;
+    revenueStream: {
+      ts: string | null;
+      usd: number;
+      recipient?: string;
+      arcTxHash?: string;
+      isSimulated?: boolean;
+    }[];
     recentFills?: { ts: string; txHash: string; amountUsd: number }[];
   };
   // Backend may also expose these snake_case fields at the top level of

@@ -44,6 +44,18 @@ PER_JUDGE_TIMEOUT_RETRY_S: float = float(
     os.environ.get("PER_JUDGE_TIMEOUT_RETRY_S", "90")
 )
 
+# Panel-level budget. Aggregate any judges that finished within this
+# window and synthesize an ``INSUFFICIENT_DATA`` JudgeResult for any
+# that did not. This keeps the panel authoritative on slow events
+# (e.g. d8 cold-load against the 112 MB FAISS corpus / sentence-
+# transformers download) instead of cascading to a whole-panel
+# orchestrator-level timeout that collapses to a mock verdict and
+# discards the 10 finished judges. Event 112 is the canonical incident:
+# d8 ran past the 60 + 90 s per-judge budget, the outer 120 s wrapper
+# in orchestrator._evaluate_with_judges fired first, and a mock
+# PASS@0.85 was written instead of the real verdict.
+PANEL_BUDGET_S: float = float(os.environ.get("PANEL_BUDGET_S", "110"))
+
 from polyglot_alpha.judges.style_alignment import (
     judge_d1_structural,
     judge_d2_stylistic,
@@ -324,16 +336,83 @@ async def evaluate(
                 evidence={"timeout": True, "retried": True},
             )
 
-    awaited = await asyncio.gather(
-        *(_run_one(name, factory) for name, factory in task_factories.items()),
-        return_exceptions=True,
+    # Launch every judge as its own Task so we can wait with an overall
+    # panel budget and still recover finished judges if a straggler is
+    # still cold-loading after PANEL_BUDGET_S. This is the graceful-
+    # degradation path from event 112: if one judge (typically d8 with
+    # its 112 MB FAISS + sentence-transformers cold load) blows past the
+    # per-judge 60 + 90 s budget, we no longer let it drag the whole
+    # panel into the orchestrator's outer 120 s timeout (which used to
+    # fall back to a MOCK verdict and discard the other 10 judges).
+    name_to_task: dict[str, asyncio.Task[Any]] = {
+        name: asyncio.create_task(_run_one(name, factory), name=f"judge:{name}")
+        for name, factory in task_factories.items()
+    }
+    done, pending = await asyncio.wait(
+        name_to_task.values(),
+        timeout=PANEL_BUDGET_S,
+        return_when=asyncio.ALL_COMPLETED,
     )
+    if pending:
+        logger.warning(
+            "panel.evaluate: [event_id=%s] panel budget %.0fs elapsed with"
+            " %d judge(s) still pending — marking as INSUFFICIENT_DATA and"
+            " aggregating the %d completed verdict(s).",
+            event_id,
+            PANEL_BUDGET_S,
+            len(pending),
+            len(done),
+        )
+        for task in pending:
+            task.cancel()
+        # Best-effort drain so cancelled tasks don't leak warnings.
+        await asyncio.gather(*pending, return_exceptions=True)
+
     results: dict[str, JudgeResult] = {}
-    for name, value in zip(task_factories.keys(), awaited):
-        if isinstance(value, Exception):
-            logger.warning(
-                "panel.evaluate: judge=%s crashed: %r", name, value
+    panel_partial = bool(pending)
+    pending_names = {
+        name for name, task in name_to_task.items() if task in pending
+    }
+    for name, task in name_to_task.items():
+        if name in pending_names:
+            # Hard gates (d1/d5/d8) cannot be silently soft-passed —
+            # treat them as INSUFFICIENT_DATA so the panel never anchors
+            # on a candidate whose hard gate never returned. Translation
+            # judges (bleu/comet) and d8 already self-skip via the per-
+            # judge soft-skip path; this branch only fires when the panel
+            # itself ran out of budget before _run_one could complete.
+            soft_skip_names = {"d8_duplicate_detection", "bleu", "comet"}
+            is_soft_skip = name in soft_skip_names
+            results[name] = JudgeResult(
+                name=name,
+                passed=is_soft_skip,
+                score=1.0 if is_soft_skip else 0.0,
+                reason=(
+                    f"INSUFFICIENT_DATA: panel budget {PANEL_BUDGET_S:.0f}s"
+                    " elapsed before judge returned"
+                ),
+                evidence={
+                    "timeout": True,
+                    "panel_budget_exceeded": True,
+                    "soft_skip": is_soft_skip,
+                    "partial": True,
+                },
             )
+            continue
+        try:
+            value = task.result()
+        except Exception as exc:  # pragma: no cover - _run_one already traps
+            logger.warning("panel.evaluate: judge=%s crashed: %r", name, exc)
+            results[name] = JudgeResult(
+                name=name,
+                passed=False,
+                score=0.0,
+                reason=f"judge crashed: {exc}",
+                evidence={"exception": repr(exc)},
+            )
+            continue
+        if isinstance(value, Exception):
+            logger.warning("panel.evaluate: judge=%s crashed: %r", name, value)
             results[name] = JudgeResult(
                 name=name,
                 passed=False,
@@ -345,12 +424,21 @@ async def evaluate(
             results[name] = value
 
     logger.info(
-        "panel.evaluate: collected %d/%d judges",
+        "panel.evaluate: [event_id=%s] collected %d/%d judges (partial=%s)",
+        event_id,
         sum(1 for v in results.values() if not v.evidence.get("timeout")),
         len(results),
+        panel_partial,
     )
 
     verdict = _aggregate(results)
+    if panel_partial:
+        verdict.notes.append(
+            f"Panel partial: {len(pending_names)} judge(s) "
+            f"({', '.join(sorted(pending_names))}) exceeded "
+            f"PANEL_BUDGET_S={PANEL_BUDGET_S:.0f}s; "
+            "aggregated from remaining verdicts."
+        )
     return verdict
 
 

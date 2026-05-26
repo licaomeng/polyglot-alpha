@@ -17,7 +17,9 @@ interface Props {
 }
 
 function deriveMode(pm: PM): "live" | "dry_run" | "mock" {
-  if (pm.mode) return pm.mode;
+  if (pm.mode === "live" || pm.mode === "real") return "live";
+  if (pm.mode === "dry_run" || pm.mode === "simulated") return "dry_run";
+  if (pm.mode === "mock") return "mock";
   if (pm.isSimulated === false) return "live";
   if (pm.isSimulated === true) return "dry_run";
   return "mock";

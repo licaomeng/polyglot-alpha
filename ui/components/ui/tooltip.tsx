@@ -41,7 +41,7 @@ export function Tooltip({
           // `w-max` lets the tooltip claim its natural content width (rather
           // than shrinking to the wrapper span's ~16px column), capped by
           // `widthClassName` (`max-w-xs` by default) so long copy still wraps.
-          "pointer-events-none absolute z-50 hidden w-max rounded-md border border-border/60 bg-popover px-3 py-2 text-[11px] leading-snug text-popover-foreground shadow-lg",
+          "pointer-events-none absolute z-50 hidden w-max rounded-md border border-border/60 bg-card px-3 py-2 text-[11px] leading-snug text-card-foreground shadow-lg",
           "group-hover:block group-focus-within:block",
           widthClassName,
           side === "top" ? "bottom-full mb-2" : "top-full mt-2",

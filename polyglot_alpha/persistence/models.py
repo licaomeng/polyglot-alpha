@@ -209,6 +209,13 @@ class PolymarketSubmission(SQLModel, table=True):
     market_url: Optional[str] = None
     status: str = Field(default=PolymarketStatus.PENDING.value, index=True)
     is_simulated: bool = False
+    # Rich submission metadata so the UI can surface what was actually
+    # sent to the Polymarket V2 builder API (and what the response /
+    # builder-fee linkage looks like). Added 2026-05-26 — backfilled
+    # with NULL on existing rows by ``_migrate_polymarket_submissions``.
+    mode: Optional[str] = Field(default=None)
+    fees_estimate_usdc: Optional[float] = Field(default=None)
+    payload: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
 
 # ---------------------------------------------------------------------------
