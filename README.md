@@ -46,77 +46,84 @@ The protocol does not privilege seeder agents. Seeders win exactly when their bi
 Section 1 showed the protocol / seeders / operators split. This section shows the actual **data flow through every component**, from a raw RSS poll to the recurring 90/10 fee split on every Polymarket fill. Every numbered arrow below is explained in Table 1; every box is owned by a real file in this repo and listed in Table 2.
 
 ```mermaid
-flowchart LR
-    classDef offchain fill:#1a2332,stroke:#00f0ff,color:#00f0ff
-    classDef onchain fill:#2a1a32,stroke:#ff6b00,color:#ff6b00
-    classDef external fill:#1a2332,stroke:#888,color:#888,stroke-dasharray: 5 5
-    classDef polymarket fill:#1a3322,stroke:#00ff80,color:#00ff80
+flowchart TB
+    classDef offchain fill:#0f1d2e,stroke:#38bdf8,stroke-width:2px,color:#f1f5f9
+    classDef onchain fill:#2a1325,stroke:#fb923c,stroke-width:2px,color:#fef3c7
+    classDef external fill:#1f2937,stroke:#a3a3a3,stroke-width:2px,color:#e5e7eb,stroke-dasharray: 5 5
+    classDef polymarket fill:#0f2a1c,stroke:#34d399,stroke-width:2px,color:#ecfdf5
+    classDef ipfs fill:#1e1b4b,stroke:#a78bfa,stroke-width:2px,color:#ede9fe
 
-    subgraph M["① Ingestion · Off-chain (we run)"]
-        direction TB
-        RSS["8 RSS feeds<br/>Xinhua · BBC zh · SCMP · RFI<br/>Asahi · DW · LeMonde"]
-        CR["cluster_events"]
-        SC["score_event_for_auction<br/>(Haiku 4.5) — <b>scoring only,<br/>no question text</b>"]
-        Q["Auction queue<br/>gate: quality ≥ 0.5"]
-        RSS -->|"1"| CR -->|"2"| SC -->|"3"| Q
-    end
-
-    subgraph BID["② Bidders"]
-        direction TB
-        subgraph S["Reference Seeders · we run"]
-            direction LR
-            SA["Alpha<br/>macro"]
-            SB["Beta<br/>geo"]
-            SG["Gamma<br/>markets"]
+    subgraph TOP[" "]
+        direction LR
+        subgraph M["① Ingestion · Off-chain (we run)"]
+            direction TB
+            RSS["8 RSS feeds<br/>Xinhua · BBC zh · SCMP<br/>RFI · Asahi · DW · LeMonde"]
+            CR["cluster_events"]
+            SC["score_event_for_auction<br/>(Haiku 4.5)<br/><b>scoring only · no question</b>"]
+            Q["Auction queue<br/>gate: quality ≥ 0.5"]
+            RSS -->|"1"| CR -->|"2"| SC -->|"3"| Q
         end
-        DEB["<b>internal debate loop (each seeder)</b><br/>propose 2 → critics A/B cross-review<br/>→ moderator picks → refine → sha256"]
-        subgraph EO["External · anyone can join"]
-            direction LR
-            OX["Op X<br/>single-shot"]
-            OY["Op Y<br/>RAG + FT"]
-            OZ["Op Z<br/>human-loop"]
+
+        subgraph BID["② Bidders"]
+            direction TB
+            subgraph S["Reference Seeders · we run"]
+                direction TB
+                SA["Alpha · macro"]
+                SB["Beta · geo"]
+                SG["Gamma · markets"]
+            end
+            DEB["<b>internal debate (each seeder)</b><br/>propose 2 → critics A/B<br/>→ moderator → refine → sha256"]
+            subgraph EO["External · anyone can join"]
+                direction TB
+                OX["Op X · single-shot"]
+                OY["Op Y · RAG + FT"]
+                OZ["Op Z · human-loop"]
+            end
+            S -.- DEB
         end
-        S -.- DEB
+
+        subgraph A["③ Arc Chain · 5 Contracts (trustless)"]
+            direction TB
+            TA["TranslationAuction<br/>openAuction / settleAuction"]
+            QR["QuestionRegistry<br/>commitQuestion(hash, cid)"]
+            BFR["BuilderFeeRouter<br/>record_fill_with_split<br/>90 / 10 auto-split"]
+            RR["ReputationRegistry<br/>registerAgent · 100 USDC"]
+            JP_C["JudgePanel.sol<br/>attestation"]
+        end
     end
 
-    subgraph I["④ IPFS · Provenance"]
-        direction TB
-        IPFS["Pinned candidate JSON<br/>content-addressed"]
-        VER["chain hash == sha256(IPFS)<br/>== Polymarket text"]
-        IPFS --> VER
-    end
+    subgraph BOT[" "]
+        direction LR
+        subgraph I["④ IPFS · Provenance"]
+            direction TB
+            IPFS["Pinned candidate JSON"]
+            VER["chain hash == sha256(IPFS)<br/>== Polymarket text"]
+            IPFS --> VER
+        end
 
-    subgraph A["③ Arc Chain · 5 Contracts (trustless)"]
-        direction TB
-        TA["TranslationAuction<br/>openAuction / settleAuction"]
-        QR["QuestionRegistry<br/>commitQuestion(hash, cid)"]
-        BFR["BuilderFeeRouter<br/>record_fill_with_split<br/>90 / 10 auto-split"]
-        RR["ReputationRegistry<br/>registerAgent · 100 USDC stake"]
-        JP_C["JudgePanel.sol<br/>attestation surface"]
-    end
+        subgraph J["⑤ 11-Judge Panel · Off-chain (we run)"]
+            direction TB
+            TJ["3 translation<br/>BLEU · COMET · MQM-LLM"]
+            STJ["8 style D1–D8"]
+            AGG["HARD: D1+D5+D8+MQM≥80<br/>SOFT: ≥ 4 / 5"]
+            TJ --> AGG
+            STJ --> AGG
+        end
 
-    subgraph J["⑤ 11-Judge Panel · Off-chain (we run)"]
-        direction TB
-        TJ["3 translation<br/>BLEU · COMET · MQM-LLM"]
-        STJ["8 style D1–D8"]
-        AGG["HARD: D1+D5+D8+MQM≥80<br/>SOFT: ≥ 4 / 5"]
-        TJ --> AGG
-        STJ --> AGG
-    end
-
-    subgraph P["⑥ Polymarket V2 · external"]
-        direction TB
-        PMQ["Question listed<br/>builder 0xa934…beb1"]
-        PMF["Trader fills<br/>0.4% builder fee"]
-        PMQ --> PMF
+        subgraph P["⑥ Polymarket V2 · external"]
+            direction TB
+            PMQ["Question listed<br/>builder 0xa934…beb1"]
+            PMF["Trader fills<br/>0.4% builder fee"]
+            PMQ --> PMF
+        end
     end
 
     Q -->|"4 · event_id + content_hash"| TA
     TA -->|"5 · auction.opened SSE (60s)"| BID
     BID -->|"6 · pin candidate JSON"| IPFS
-    BID -->|"7 · submitBid(bid, hash, stake)"| TA
+    BID -->|"7 · submitBid (bid, hash, stake)"| TA
     RR -->|"8 · reputation ≥ 0.70 gate"| TA
-    TA -->|"9 · settle: highest-score qualified wins"| AGG
+    TA -->|"9 · settle: highest-score wins"| AGG
     IPFS -->|"10 · winning candidate text"| AGG
     AGG -->|"11 · PASS verdict"| QR
     AGG -->|"11b · score → rep delta"| RR
@@ -125,13 +132,17 @@ flowchart LR
     PMF -->|"13 · 0.4% fee per fill"| BFR
     BFR -->|"14 · 90% auto"| BID
     BFR -->|"15 · 10% auto"| RR
-    RR -.->|"16 · updated reputation (next auction)"| BID
+    RR -.->|"16 · updated reputation"| BID
     JP_C -.->|"17 · slash on bias (Phase 2)"| RR
 
-    class M,J,I offchain
+    class M,J offchain
     class A,TA,QR,BFR,RR,JP_C onchain
     class EO,OX,OY,OZ external
     class P,PMQ,PMF polymarket
+    class I,IPFS,VER ipfs
+
+    style TOP fill:none,stroke:none
+    style BOT fill:none,stroke:none
 ```
 
 Solid arrows (`-->`) are flows live in the demo today. Dashed arrows (`-.->`) are Phase 2: on-chain judge attestation, judge-stake slashing, and the reputation feedback loop closure (waiting on real Polymarket markets to age into resolution).
