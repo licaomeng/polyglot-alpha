@@ -13,6 +13,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi import _rate_limit_exceeded_handler
 
+from ..llm import shutdown_anthropic
 from ..persistence import init_db
 from ..pubsub import get_pubsub
 from .rate_limit import limiter
@@ -44,7 +45,14 @@ ALLOWED_METHODS: tuple[str, ...] = ("GET", "POST", "OPTIONS")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Lifespan hook: create tables + warm pub/sub singleton."""
+    """Lifespan hook: create tables + warm pub/sub singleton.
+
+    On shutdown we explicitly ``aclose()`` the shared ``AsyncAnthropic``
+    client so its underlying ``httpx.AsyncClient`` is closed *while* the
+    event loop is still alive. Without this the SDK client gets
+    finalized post-loop-close and we see ``RuntimeError: Event loop is
+    closed`` tracebacks in the backend log on every shutdown.
+    """
 
     logger.info("polyglot_alpha: starting up; initializing DB")
     init_db()
@@ -53,6 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         logger.info("polyglot_alpha: shutting down")
+        await shutdown_anthropic()
 
 
 def _build_cors_origins() -> list[str]:

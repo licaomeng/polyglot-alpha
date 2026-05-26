@@ -53,26 +53,26 @@ flowchart TB
     classDef polymarket fill:#0f2a1c,stroke:#34d399,stroke-width:2px,color:#ecfdf5
     classDef ipfs fill:#1e1b4b,stroke:#a78bfa,stroke-width:2px,color:#ede9fe
 
-    subgraph TOP[" "]
+    subgraph R1[" "]
         direction LR
         subgraph M["① Ingestion · Off-chain (we run)"]
             direction TB
             RSS["8 RSS feeds<br/>Xinhua · BBC zh · SCMP<br/>RFI · Asahi · DW · LeMonde"]
             CR["cluster_events"]
             SC["score_event_for_auction<br/>(Haiku 4.5)<br/><b>scoring only · no question</b>"]
-            Q["Auction queue<br/>gate: quality ≥ 0.5"]
+            Q["Auction queue<br/>quality ≥ 0.5"]
             RSS -->|"1"| CR -->|"2"| SC -->|"3"| Q
         end
 
         subgraph BID["② Bidders"]
             direction TB
-            subgraph S["Reference Seeders · we run"]
+            subgraph S["Seeders · we run"]
                 direction TB
                 SA["Alpha · macro"]
                 SB["Beta · geo"]
                 SG["Gamma · markets"]
             end
-            DEB["<b>internal debate (each seeder)</b><br/>propose 2 → critics A/B<br/>→ moderator → refine → sha256"]
+            DEB["<b>internal debate</b><br/>2 candidates → critics A/B<br/>→ moderator → refine → sha256"]
             subgraph EO["External · anyone can join"]
                 direction TB
                 OX["Op X · single-shot"]
@@ -81,7 +81,10 @@ flowchart TB
             end
             S -.- DEB
         end
+    end
 
+    subgraph R2[" "]
+        direction LR
         subgraph A["③ Arc Chain · 5 Contracts (trustless)"]
             direction TB
             TA["TranslationAuction<br/>openAuction / settleAuction"]
@@ -90,17 +93,17 @@ flowchart TB
             RR["ReputationRegistry<br/>registerAgent · 100 USDC"]
             JP_C["JudgePanel.sol<br/>attestation"]
         end
-    end
 
-    subgraph BOT[" "]
-        direction LR
         subgraph I["④ IPFS · Provenance"]
             direction TB
             IPFS["Pinned candidate JSON"]
             VER["chain hash == sha256(IPFS)<br/>== Polymarket text"]
             IPFS --> VER
         end
+    end
 
+    subgraph R3[" "]
+        direction LR
         subgraph J["⑤ 11-Judge Panel · Off-chain (we run)"]
             direction TB
             TJ["3 translation<br/>BLEU · COMET · MQM-LLM"]
@@ -141,8 +144,9 @@ flowchart TB
     class P,PMQ,PMF polymarket
     class I,IPFS,VER ipfs
 
-    style TOP fill:none,stroke:none
-    style BOT fill:none,stroke:none
+    style R1 fill:none,stroke:none
+    style R2 fill:none,stroke:none
+    style R3 fill:none,stroke:none
 ```
 
 Solid arrows (`-->`) are flows live in the demo today. Dashed arrows (`-.->`) are Phase 2: on-chain judge attestation, judge-stake slashing, and the reputation feedback loop closure (waiting on real Polymarket markets to age into resolution).

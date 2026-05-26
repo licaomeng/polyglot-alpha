@@ -238,6 +238,16 @@ def event_id_from_event(event_id_str: str) -> bytes:
 _NONCE_LOCKS: Dict[str, "asyncio.Lock"] = {}
 _REGISTRY_GUARD = threading.Lock()
 
+# Tracks the last nonce we *handed out* per address, even if the Arc
+# sequencer / RPC has not yet surfaced the prior TX in its mempool view.
+# Used in tandem with ``eth_getTransactionCount(addr, "pending")``: we take
+# ``max(chain_pending, _LAST_USED_NONCE[addr] + 1)`` so a slow RPC cannot
+# hand back a stale nonce when multiple TXs are submitted in rapid
+# succession from the same wallet. Guarded by the per-address asyncio.Lock
+# from ``nonce_lock_for`` (which serializes the build-tx -> send sequence
+# within this process) plus ``_REGISTRY_GUARD`` for initial dict access.
+_LAST_USED_NONCE: Dict[str, int] = {}
+
 
 def nonce_lock_for(address: str) -> "asyncio.Lock":
     """Return the shared ``asyncio.Lock`` for ``address`` (checksum-normalized).
@@ -330,10 +340,30 @@ class OnChainClient:
         tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
         return tx_hash.hex()
 
+    def _next_nonce(self, address: str) -> int:
+        """Return the nonce to use for the next TX from ``address``.
+
+        Reads ``eth_getTransactionCount(addr, "pending")`` so in-mempool
+        TXs from the same wallet are accounted for, then takes the max
+        with our locally tracked ``_LAST_USED_NONCE + 1`` to guard
+        against RPCs that lag behind their own mempool. The chosen nonce
+        is recorded in ``_LAST_USED_NONCE`` for the next call.
+
+        Callers must already hold ``nonce_lock_for(address)`` so the
+        read-then-record sequence is atomic within the process.
+        """
+
+        key = Web3.to_checksum_address(address)
+        chain_pending = self.w3.eth.get_transaction_count(key, "pending")
+        last_used = _LAST_USED_NONCE.get(key, -1)
+        nonce = max(chain_pending, last_used + 1)
+        _LAST_USED_NONCE[key] = nonce
+        return nonce
+
     def _build_base_txn(self, account: LocalAccount) -> Dict[str, Any]:
         return {
             "from": account.address,
-            "nonce": self.w3.eth.get_transaction_count(account.address),
+            "nonce": self._next_nonce(account.address),
             "chainId": self.config.chain_id,
             "gasPrice": self.w3.eth.gas_price,
         }

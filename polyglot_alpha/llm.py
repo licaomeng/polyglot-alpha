@@ -23,11 +23,87 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 import httpx
 
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from anthropic import AsyncAnthropic as _AsyncAnthropicType
+
 LOGGER = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Shared AsyncAnthropic singleton
+# ---------------------------------------------------------------------------
+#
+# The Anthropic SDK's ``AsyncAnthropic`` owns an internal ``httpx.AsyncClient``
+# that registers an async finalizer. If we instantiate one client per
+# ``AnthropicLLM`` and let it get garbage-collected after the FastAPI event
+# loop has already closed, the finalizer fires on a dead loop and prints the
+# infamous ``RuntimeError: Event loop is closed`` "Task exception was never
+# retrieved" traceback.
+#
+# Strategy A: keep a single module-level ``AsyncAnthropic`` instance that is
+# lazily constructed on first use and explicitly ``aclose()``-ed from the
+# FastAPI shutdown hook (see :func:`shutdown_anthropic` and
+# ``polyglot_alpha.api.main.lifespan``). All ``AnthropicLLM`` instances share
+# this client; ``model`` / ``system`` / ``temperature`` differentiation lives
+# at the call site, not in the SDK client.
+
+_ANTHROPIC_CLIENT: "_AsyncAnthropicType | None" = None
+_ANTHROPIC_CLIENT_LOCK = asyncio.Lock()
+
+
+def get_anthropic_client(api_key: str | None = None) -> "_AsyncAnthropicType":
+    """Return the process-wide shared ``AsyncAnthropic`` instance.
+
+    Lazy-initialised on first call. Subsequent calls reuse the same client
+    so its underlying ``httpx.AsyncClient`` is opened exactly once and
+    closed exactly once (by :func:`shutdown_anthropic`).
+
+    Raises :class:`LLMError` if the ``anthropic`` SDK isn't installed or
+    if no API key is available.
+    """
+
+    global _ANTHROPIC_CLIENT
+    if _ANTHROPIC_CLIENT is not None:
+        return _ANTHROPIC_CLIENT
+
+    try:
+        from anthropic import AsyncAnthropic  # type: ignore
+    except ImportError as exc:  # pragma: no cover - env error path
+        raise LLMError(
+            "anthropic SDK not installed; pip install anthropic"
+        ) from exc
+
+    resolved_key = api_key or os.getenv("ANTHROPIC_API_KEY")
+    if not resolved_key:
+        raise LLMError("ANTHROPIC_API_KEY is not set")
+
+    _ANTHROPIC_CLIENT = AsyncAnthropic(api_key=resolved_key)
+    return _ANTHROPIC_CLIENT
+
+
+async def shutdown_anthropic() -> None:
+    """Close the shared ``AsyncAnthropic`` client cleanly.
+
+    Safe to call multiple times and safe to call when the client was
+    never initialised. Intended to be wired into FastAPI's shutdown
+    lifespan so the underlying ``httpx.AsyncClient`` is closed *before*
+    the event loop tears down — avoiding the
+    ``RuntimeError: Event loop is closed`` finalizer noise.
+    """
+
+    global _ANTHROPIC_CLIENT
+    client = _ANTHROPIC_CLIENT
+    if client is None:
+        return
+    _ANTHROPIC_CLIENT = None
+    try:
+        await client.aclose()
+    except Exception as exc:  # pragma: no cover - shutdown best-effort
+        LOGGER.warning("AsyncAnthropic.aclose() raised during shutdown: %s", exc)
 
 # ---------------------------------------------------------------------------
 # Model constants
@@ -62,6 +138,88 @@ LLMCallable = Callable[[str], Awaitable[str]]
 
 class LLMError(RuntimeError):
     """Raised when no backend is configured or all backends fail."""
+
+
+# ---------------------------------------------------------------------------
+# Anthropic concurrency throttle
+# ---------------------------------------------------------------------------
+#
+# All ``AnthropicLLM`` instances share a single module-level
+# ``asyncio.Semaphore`` so that the 11-judge panel + seeders cannot burst
+# past the account's per-minute request budget (typical personal tier ~=
+# 200 RPM, comfortably served by ~5 in-flight). Without this lock the
+# ``asyncio.gather`` that fans out MQM + D1/D3/D5/D6/D7 in parallel — plus
+# the internal-debate seeders firing concurrently — routinely tripped 429
+# with non-trivial ``Retry-After`` spikes (see backend event 159 log).
+#
+# Lazy init binds the semaphore to whatever event loop first asks for it,
+# which keeps unit tests that create their own loops happy. The limit is
+# read once on first use and frozen for the process lifetime.
+
+_ANTHROPIC_MAX_CONCURRENCY_DEFAULT = 5
+_ANTHROPIC_SEMA: asyncio.Semaphore | None = None
+_RETRY_AFTER_FALLBACK_SECONDS = 2.0
+_RETRY_AFTER_MAX_RETRIES = 3
+
+
+def _get_anthropic_semaphore() -> asyncio.Semaphore:
+    """Return the shared semaphore that throttles every Anthropic call.
+
+    Module-level (not per-instance) so multiple :class:`AnthropicLLM`
+    objects spun up by different judges / seeders all share one
+    concurrency budget. Limit comes from ``ANTHROPIC_MAX_CONCURRENCY``
+    once on first use; defaults to ``5``.
+    """
+
+    global _ANTHROPIC_SEMA
+    if _ANTHROPIC_SEMA is None:
+        try:
+            limit = int(
+                os.environ.get(
+                    "ANTHROPIC_MAX_CONCURRENCY",
+                    str(_ANTHROPIC_MAX_CONCURRENCY_DEFAULT),
+                )
+            )
+        except ValueError:
+            limit = _ANTHROPIC_MAX_CONCURRENCY_DEFAULT
+        if limit < 1:
+            limit = 1
+        _ANTHROPIC_SEMA = asyncio.Semaphore(limit)
+    return _ANTHROPIC_SEMA
+
+
+def _reset_anthropic_semaphore_for_tests() -> None:
+    """Drop the cached semaphore so the next call re-reads the env var.
+
+    Test-only helper; not exported.
+    """
+
+    global _ANTHROPIC_SEMA
+    _ANTHROPIC_SEMA = None
+
+
+def _extract_retry_after_seconds(exc: Exception) -> float | None:
+    """Return the ``Retry-After`` header in seconds if the SDK error carries one.
+
+    Accepts numeric (delta-seconds) form directly; falls back to a small
+    fixed backoff for HTTP-date form since RFC 7231 date parsing isn't
+    worth the dependency here. Returns ``None`` when no header is set so
+    the caller can decide whether to back off heuristically.
+    """
+
+    response = getattr(exc, "response", None)
+    if response is None:
+        return None
+    headers = getattr(response, "headers", None)
+    if not headers:
+        return None
+    raw = headers.get("retry-after") or headers.get("Retry-After")
+    if not raw:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except (TypeError, ValueError):
+        return _RETRY_AFTER_FALLBACK_SECONDS
 
 
 # ---------------------------------------------------------------------------
@@ -115,20 +273,12 @@ class AnthropicLLM:
         temperature: float = 0.2,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> None:
-        # Lazy import so unit tests that monkey-patch ``make_llm`` to a
-        # ``MockLLM`` don't pay the SDK import cost / need the SDK
-        # installed.
-        try:
-            from anthropic import AsyncAnthropic  # type: ignore
-        except ImportError as exc:  # pragma: no cover - env error path
-            raise LLMError(
-                "anthropic SDK not installed; pip install anthropic"
-            ) from exc
-
-        resolved_key = api_key or os.getenv("ANTHROPIC_API_KEY")
-        if not resolved_key:
-            raise LLMError("ANTHROPIC_API_KEY is not set")
-        self._client = AsyncAnthropic(api_key=resolved_key)
+        # Use the process-wide shared ``AsyncAnthropic`` so the underlying
+        # ``httpx.AsyncClient`` is opened once and closed deterministically
+        # from ``shutdown_anthropic()`` — instead of being GC'd after the
+        # event loop closes, which spams ``RuntimeError: Event loop is
+        # closed`` on shutdown.
+        self._client = get_anthropic_client(api_key=api_key)
         self.model = model
         self._default_system = system
         self._default_temperature = temperature
@@ -142,14 +292,46 @@ class AnthropicLLM:
         max_tokens: int = DEFAULT_MAX_TOKENS,
         temperature: float = 0.7,
     ) -> str:
-        resp = await self._client.messages.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
-        return resp.content[0].text
+        # Throttle every Anthropic SDK call through the shared module
+        # semaphore so concurrent judges/seeders don't burst past the
+        # account's RPM limit. On 429 we honour the server-provided
+        # ``Retry-After`` rather than relying on the SDK's built-in
+        # retry, which has historically over-fired (see event 159 log).
+        sema = _get_anthropic_semaphore()
+        last_exc: Exception | None = None
+        for attempt in range(_RETRY_AFTER_MAX_RETRIES + 1):
+            async with sema:
+                try:
+                    resp = await self._client.messages.create(
+                        model=self.model,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        system=system,
+                        messages=[{"role": "user", "content": user}],
+                    )
+                except Exception as exc:  # noqa: BLE001 - SDK has many error types
+                    status = getattr(exc, "status_code", None)
+                    if status != 429 or attempt >= _RETRY_AFTER_MAX_RETRIES:
+                        raise
+                    last_exc = exc
+                    retry_after = (
+                        _extract_retry_after_seconds(exc)
+                        or _RETRY_AFTER_FALLBACK_SECONDS
+                    )
+                    LOGGER.warning(
+                        "Anthropic 429 (attempt %d/%d) — sleeping %.2fs per Retry-After",
+                        attempt + 1,
+                        _RETRY_AFTER_MAX_RETRIES,
+                        retry_after,
+                    )
+                else:
+                    return resp.content[0].text
+            # Release the slot before sleeping so other coroutines can
+            # make progress while we wait out the server-imposed pause.
+            await asyncio.sleep(retry_after)
+        # Loop exhausted — re-raise the most recent 429.
+        assert last_exc is not None  # for type-checkers
+        raise last_exc
 
     async def __call__(self, prompt: str) -> str:
         """``LLMCallable`` shape used everywhere in the pipeline."""
@@ -468,5 +650,7 @@ __all__ = [
     "QWEN_25",
     "complete",
     "complete_json",
+    "get_anthropic_client",
     "make_llm",
+    "shutdown_anthropic",
 ]

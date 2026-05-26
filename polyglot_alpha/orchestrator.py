@@ -422,8 +422,12 @@ async def _collect_bids(
        a bid dict, which we project into :class:`BidRecord`. Falls back
        to the legacy on-chain real-auction path if the dispatch package
        is missing.
-    3. Anything else -> fall back to a deterministic mock bid so the
-       lifecycle always completes.
+    3. Anything else -> consult the passive chain listener if configured.
+
+    Honesty rule: if no real bids are observed, return an empty list. The
+    caller (``_run_lifecycle_inner``) treats that as a terminal ``FAILED``
+    event with ``reason='no_bids'``. We never fabricate a synthetic winner
+    just to keep the downstream pipeline running.
     """
 
     if mock_bids is not None:
@@ -478,12 +482,16 @@ async def _collect_bids(
         if bids:
             return bids
         logger.warning(
-            "real auction produced 0 bids; falling back to deterministic mock"
+            "real auction produced 0 bids; event will terminate as FAILED"
         )
+        # Honesty: do NOT fabricate a synthetic bid here. Returning an
+        # empty list lets the caller mark the event FAILED(no_bids).
+        return []
 
-    # Legacy / offline fallback path: try the passive chain listener,
-    # then emit a deterministic placeholder so the lifecycle still
-    # completes for demos.
+    # Non-real / offline path: try the passive chain listener for any
+    # observed on-chain bids. If nothing is observed we still return an
+    # empty list — the lifecycle terminates as FAILED(no_bids) rather
+    # than running the downstream pipeline against a fabricated winner.
     auction_client = _get_chain_auction_client()
     if auction_client is not None:
         try:
@@ -506,17 +514,7 @@ async def _collect_bids(
                 exc,
             )
 
-    await asyncio.sleep(min(window_seconds, 2.0))
-    return [
-        BidRecord(
-            agent_address="0x" + ("a" * 40),
-            bid_amount=1.0,
-            candidate_hash=hashlib.sha256(
-                f"mock:{event_id}".encode()
-            ).hexdigest(),
-            tx_hash="0xmockbid",
-        )
-    ]
+    return []
 
 
 async def _settle_auction(
@@ -1341,18 +1339,21 @@ async def _run_lifecycle_inner(
     phases_completed: int = 0
 
     async def _finalize(
-        event_id_: Optional[int], terminal_status: str
+        event_id_: Optional[int],
+        terminal_status: str,
+        *,
+        reason: str | None = None,
     ) -> None:
         """Emit ``event.finalized`` at the end of every terminal path."""
 
-        await publish(
-            "event.finalized",
-            {
-                "event_id": event_id_,
-                "terminal_status": terminal_status,
-                "total_phases_completed": phases_completed,
-            },
-        )
+        payload: dict[str, Any] = {
+            "event_id": event_id_,
+            "terminal_status": terminal_status,
+            "total_phases_completed": phases_completed,
+        }
+        if reason is not None:
+            payload["reason"] = reason
+        await publish("event.finalized", payload)
 
     # ----- Step 1: Persist event + broadcast event.created -----
     # When ``precreated_event_id`` is provided, the caller already did the
@@ -1419,7 +1420,7 @@ async def _run_lifecycle_inner(
         await publish(
             "auction.failed", {"event_id": event_id, "reason": "no_bids"}
         )
-        await _finalize(event_id, EventStatus.FAILED.value)
+        await _finalize(event_id, EventStatus.FAILED.value, reason="no_bids")
         return {"event_id": event_id, "status": EventStatus.FAILED.value, "reason": "no_bids"}
 
     with session_scope() as session:
