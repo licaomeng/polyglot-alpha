@@ -439,6 +439,38 @@ function renderPhaseBody(
     }
 
     case "Polymarket V2 Submission": {
+      // When the event was REJECTED by the judge panel (or FAILED in the
+      // pipeline) no Polymarket submission was attempted. Surface that
+      // explicitly so reviewers don't see a contradictory MOCK chip + market
+      // placeholder for a market that doesn't exist.
+      const overallStatus = String(event.status ?? "").toUpperCase();
+      const submissionSkipped =
+        event.polymarket == null &&
+        (overallStatus === "REJECTED" || overallStatus === "FAILED");
+      if (submissionSkipped) {
+        const reason =
+          overallStatus === "REJECTED"
+            ? "REJECTED by the 11-judge panel"
+            : "FAILED during lifecycle execution";
+        return wrap(
+          <div
+            data-testid="polymarket-empty-rejected"
+            className="rounded-md border border-muted-foreground/30 bg-muted/[0.04] p-3 text-xs"
+          >
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              submission skipped
+            </p>
+            <p className="mt-1 text-foreground/85">
+              No Polymarket market was created for this event — the quality
+              panel verdict was <span className="font-mono">{reason}</span>.
+            </p>
+            <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+              mode · — · market_id · — · builder_code · —
+            </p>
+          </div>,
+        );
+      }
+
       const pmDetails = detailsAt(phases, idx);
       // Backend exposes `builder_code` at the top level of `EventDetail`
       // (snake_case) in addition to the phase-level details payload, so we
@@ -475,6 +507,30 @@ function renderPhaseBody(
     }
 
     case "Streaming Revenue": {
+      const overallStatus = String(event.status ?? "").toUpperCase();
+      const streamingSkipped =
+        event.polymarket == null &&
+        (overallStatus === "REJECTED" || overallStatus === "FAILED");
+      if (streamingSkipped) {
+        return wrap(
+          <div
+            data-testid="revenue-empty-rejected"
+            className="rounded-md border border-muted-foreground/30 bg-muted/[0.04] p-3 text-xs"
+          >
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              streaming skipped
+            </p>
+            <p className="mt-1 text-foreground/85">
+              No streaming revenue — the Polymarket market was never created
+              because the event was{" "}
+              <span className="font-mono">{overallStatus}</span>.
+            </p>
+            <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+              cumulative fee · — · entries · — · last fill · —
+            </p>
+          </div>,
+        );
+      }
       const stream = event.polymarket?.revenueStream;
       const fills = event.polymarket?.recentFills;
       if (!stream || stream.length === 0) {

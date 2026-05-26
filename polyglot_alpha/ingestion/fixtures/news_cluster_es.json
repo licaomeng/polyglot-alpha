@@ -1,0 +1,29 @@
+{
+  "title": "Inflación de Argentina cae al 2.1% mensual en abril, la cifra más baja desde la asunción de Milei",
+  "sources": [
+    {
+      "name": "Infobae",
+      "url": "https://example.com/sim/infobae/argentina-inflacion-abril-2026",
+      "language": "es"
+    },
+    {
+      "name": "La Nación",
+      "url": "https://example.com/sim/lanacion/indec-ipc-abril-2026",
+      "language": "es"
+    }
+  ],
+  "language": "es",
+  "category": "macro/latam_inflation",
+  "summary": "El Instituto Nacional de Estadística y Censos (INDEC) informó este viernes que el Índice de Precios al Consumidor registró una variación mensual del 2.1% en abril de 2026, marcando el undécimo mes consecutivo de desaceleración inflacionaria desde el récord del 25.5% de diciembre de 2024. El presidente Javier Milei celebró el dato en redes sociales calificándolo como la confirmación de su programa de estabilización fiscal. La inflación interanual quedó en 38.7%, todavía elevada pero significativamente por debajo del 211% registrado a finales de 2024. Economistas advierten que el último tramo de la desinflación será más difícil y dependerá de la salida del cepo cambiario.",
+  "scoring": {
+    "event_quality_score": 0.86,
+    "primary_category": "macro/latam_inflation",
+    "sub_categories": ["argentina", "monetary_policy", "indec", "milei"],
+    "key_entities": ["INDEC", "Javier Milei", "Argentina", "IPC", "BCRA"],
+    "source_credibility": 0.83,
+    "timeliness_score": 0.96,
+    "raw_summary": "Argentina's INDEC reported April 2026 monthly CPI at 2.1%, lowest since Milei took office in late 2023. YoY inflation at 38.7%, down from 211% peak.",
+    "rejection_reason": null,
+    "model": "mock-fixture-es"
+  }
+}

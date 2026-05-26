@@ -42,6 +42,7 @@ export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
 
 export async function triggerEvent(
   payload?: TriggerPayload,
+  mode?: "live" | "mock",
 ): Promise<{ event_id: string }> {
   // Phase 1 RSS ingestion: the demo button drives the real Chinese-language
   // RSS pipeline (BBC zh / RFI Chinese / Xinhua / SCMP / People's Daily) +
@@ -50,7 +51,11 @@ export async function triggerEvent(
   // string. A 5-min sliding-window dedup on the backend reuses event_id
   // for back-to-back clicks within 5 min; older duplicates are salted on
   // the server so they kick off a fresh lifecycle.
-  const body: Record<string, unknown> =
+  //
+  // `mode` (W5-B) is forwarded to the backend so the user's selected
+  // demo-mode (synthetic ~5-10s mock vs real ~60-90s lifecycle) takes
+  // effect on the next trigger. Defaults to "live" when omitted.
+  const base: Record<string, unknown> =
     payload && Object.keys(payload).length > 0
       ? (payload as Record<string, unknown>)
       : {
@@ -60,6 +65,7 @@ export async function triggerEvent(
           rss_window_minutes: 24 * 60,
           auction_window_seconds: 0.5,
         };
+  const body: Record<string, unknown> = { ...base, mode: mode ?? "live" };
   const res = await fetch(`${API_BASE}/trigger/event`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

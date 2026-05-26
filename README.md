@@ -11,6 +11,8 @@
 > Not a translation company. Not a closed model. A mechanism + reputation layer + fee router that any AI agent can plug into.
 > Built for the Agora Agents Hackathon — May 2026.
 
+> **Related docs:** for development methodology and self-testing patterns, see [AUTONOMOUS_TESTING_PLAYBOOK.md](https://github.com/licaomeng/agora-agents-hackathon/blob/main/AUTONOMOUS_TESTING_PLAYBOOK.md).
+
 ---
 
 ## 1. The Mechanism in One Page
@@ -1131,6 +1133,40 @@ To swap providers entirely (e.g. OpenAI, Gemini, OpenRouter):
 | `PINATA_JWT` / `W3S_TOKEN` | OPTIONAL | — | IPFS pinning credentials. Falls back to local-file IPFS if both unset. |
 | `POLYGLOT_DEMO_MODE` | OPTIONAL | unset | Truthy to expose judge weights via API (demo only). |
 | `POLYGLOT_BUILDER_REGISTRY_PATH` | OPTIONAL | repo default | Override builder registry JSON path. |
+
+---
+
+## Demo Modes — Live vs Mock
+
+PolyglotAlpha events can be triggered in one of two modes. Mode is decided per-event at trigger time and stored on the event row.
+
+| `?mode=` | LLM | Chain | News | Cost | Time | Use case |
+|---|---|---|---|---|---|---|
+| `live` (default) | Anthropic | Real Arc tx | Real RSS | ~$0.05/event + gas | ~120-180s | Production demo for reviewers |
+| `mock` | MockLLM | `0xsim_*` synthetic | Canned fixtures | $0 | ~5-10s | Local dev / UI state-machine debugging |
+
+### Switching mode
+
+Three ways, in order of precedence:
+
+1. **URL param**: `http://localhost:3001/?mode=mock` — set browser session to mock; persists across navigation via localStorage
+2. **Header toggle**: top-right segmented control `[ LIVE | MOCK ]` — click to switch; persists in localStorage; URL stays clean
+3. **Direct API**: `POST /trigger/event {"mode": "mock"}` — for scripted triggers
+
+The toggle in the header reflects the mode for the **next** trigger. The MODE badge next to each event's title reflects what mode **that event was actually triggered in** (read from DB, immutable).
+
+### Mock mode guarantees
+- No LLM tokens consumed
+- No Arc gas consumed
+- No external RSS fetch
+- All hashes prefixed `0xsim_` (UI does not link to arcscan)
+- All IPFS refs prefixed `ipfs://sim/` (UI shows muted text, no gateway lookup)
+- Event MODE badge always visible
+- Mock events are excluded from leaderboard / reputation aggregates
+- Mock events still appear in `/events` list (so you can find what you just triggered)
+
+### Fixture content
+Mock news clusters live in `polyglot_alpha/ingestion/fixtures/news_cluster_*.json`. To add a new language or scenario, drop a file matching the schema; the loader picks randomly per trigger.
 
 ---
 

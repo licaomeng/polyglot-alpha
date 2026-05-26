@@ -455,6 +455,21 @@ def make_llm(
     if mock:
         return MockLLM(model_id=model_id)
 
+    # W5-A3 mock-mode short-circuit: when the active lifecycle was triggered
+    # with ``event.mode='mock'``, force every LLM call site onto MockLLM
+    # regardless of ``LLM_BACKEND`` / API-key presence. This bypasses the
+    # 4-8 s Anthropic round-trip cost without touching the registry or
+    # plumbing ``mode=`` through every call site (synthesizer, critics,
+    # moderator, refine, gemini/qwen/deepseek agents, ...). The contextvar
+    # is set by the orchestrator before the first LLM call fires.
+    try:
+        from .logging_ctx import get_event_mode
+
+        if get_event_mode() == "mock":
+            return MockLLM(model_id=model_id)
+    except ImportError:  # pragma: no cover - defensive
+        pass
+
     backend = LLM_BACKEND
 
     if backend == "anthropic":

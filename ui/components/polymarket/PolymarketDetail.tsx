@@ -50,6 +50,17 @@ function ModeBadge({ mode }: { mode: "live" | "dry_run" | "mock" }) {
   );
 }
 
+// Demo footgun guard — the dry-run → real promotion is only exposed when this
+// env var is explicitly set, so a reviewer doing a screenshot tour can't
+// accidentally trigger a live Polymarket submission. Read at render time so
+// tests can flip the flag between cases without remounting the module.
+function shouldShowSubmitReal(): boolean {
+  return (
+    typeof process !== "undefined" &&
+    process.env.NEXT_PUBLIC_SHOW_SUBMIT_REAL === "true"
+  );
+}
+
 export function PolymarketDetail({ polymarket, eventId }: Props) {
   const mode = deriveMode(polymarket);
   const [showPayload, setShowPayload] = useState(false);
@@ -57,6 +68,7 @@ export function PolymarketDetail({ polymarket, eventId }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const showSubmitReal = shouldShowSubmitReal();
 
   const handleSubmitReal = async () => {
     setSubmitting(true);
@@ -114,7 +126,22 @@ export function PolymarketDetail({ polymarket, eventId }: Props) {
               <p className="text-amber-200/90">
                 This submission was simulated (dry-run). Promote it to Polymarket production?
               </p>
-              {!confirming ? (
+              {/* Demo footgun: hide the Submit Real button by default so a
+                  reviewer can't accidentally promote a dry-run to prod during
+                  a screenshot tour. Enable via the
+                  `NEXT_PUBLIC_SHOW_SUBMIT_REAL=true` env var when actually
+                  operating the live tooling. */}
+              {!showSubmitReal ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled
+                  title="Dev-only: enable via NEXT_PUBLIC_SHOW_SUBMIT_REAL=true"
+                  aria-label="Submit Real (disabled — set NEXT_PUBLIC_SHOW_SUBMIT_REAL=true to enable)"
+                >
+                  Submit Real · disabled
+                </Button>
+              ) : !confirming ? (
                 <Button
                   size="sm"
                   variant="outline"

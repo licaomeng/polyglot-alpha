@@ -1,4 +1,13 @@
-"""/leaderboard route."""
+"""/leaderboard route.
+
+W5-A1 (2026-05-26): the leaderboard reads from ``AgentReputation``, a
+precomputed snapshot that is updated incrementally by
+``orchestrator._upsert_reputation``. To keep mock-fixture lifecycles out
+of the public stats, the orchestrator skips the reputation upsert when
+``events.mode='mock'`` (see ``_run_lifecycle_inner``). The contract is
+therefore enforced at write-time: any row visible here implicitly
+reflects ``WHERE events.mode='live'`` aggregates.
+"""
 
 from __future__ import annotations
 

@@ -20,10 +20,12 @@ audit (README §5.27 — evaluator IP must be closed in production).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import inspect
 import json
 import logging
 import os
+import random
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -197,6 +199,107 @@ def _maybe_await(value: Any) -> Awaitable[Any]:
     return _wrap()
 
 
+# --------------------------------------------------------------------------- #
+# Mock-mode synthetic verdict                                                 #
+# --------------------------------------------------------------------------- #
+#
+# Stable judge name list — the dossier MUST mirror what the real panel emits
+# so any UI component (W2-1) iterating ``translation_scores._judges`` renders
+# identically in mock and live mode. Order matches ``task_factories`` below.
+_MOCK_JUDGE_NAMES: tuple[str, ...] = (
+    "bleu",
+    "comet",
+    "mqm_llm",
+    "d1_structural",
+    "d2_stylistic",
+    "d3_framing",
+    "d4_granularity",
+    "d5_resolution_clarity",
+    "d6_source_reliability",
+    "d7_leading_check",
+    "d8_duplicate_detection",
+)
+
+
+def _mock_panel_verdict(question: PanelQuestion) -> PanelVerdict:
+    """Synthesize a deterministic PASS dossier for ``event.mode='mock'``.
+
+    All 11 judges score 0.85-0.95 (uniform within a seeded range so the
+    dossier looks plausible without being suspicious-perfect), every gate
+    passes, and the verdict bucket is PASS with ``overall_score=88``.
+    Each judge carries a one-line ``reason`` that flags it as a mock skip
+    so log analyses can distinguish mock dossiers from real ones.
+
+    The output shape matches the real :class:`PanelVerdict` exactly —
+    same ``translation_scores`` keys (``bleu``/``comet``/``mqm`` plus the
+    ``_judges`` / ``_panelPartial`` / ``_pendingJudgeNames`` smuggled
+    metadata), same ``style_alignment_passes`` keys (``d1``..``d8``),
+    same ``JudgeResult`` schema.
+    """
+
+    # Seed deterministically off the question title so the same fixture
+    # produces the same scores run-to-run. This keeps test snapshots and
+    # debugging output stable even though we use random() under the hood.
+    seed_bytes = hashlib.sha256(
+        (question.title or "mock").encode("utf-8")
+    ).digest()
+    rng = random.Random(int.from_bytes(seed_bytes[:8], "big"))
+
+    judge_results: list[JudgeResult] = []
+    judge_dossier: list[dict[str, Any]] = []
+    for name in _MOCK_JUDGE_NAMES:
+        score = round(0.85 + rng.random() * 0.10, 4)  # 0.85-0.95
+        reason = "Mock mode: judge skipped"
+        jr = JudgeResult(
+            name=name,
+            passed=True,
+            score=score,
+            reason=reason,
+            evidence={"mock": True, "soft_skip": False, "timeout": False},
+        )
+        judge_results.append(jr)
+        judge_dossier.append(
+            {
+                "name": name,
+                "passed": True,
+                "score": score,
+                "reason": reason,
+                "panelBudgetExceeded": False,
+                "softSkip": False,
+                "timeout": False,
+                "panelPartial": False,
+            }
+        )
+
+    style_passes: dict[str, bool] = {f"d{i}": True for i in range(1, 9)}
+
+    translation_scores: dict[str, Any] = {
+        # Plausible mock raw values so any UI that reads them renders a
+        # sensible row. BLEU is 0-100, COMET is 0-1, MQM score is 0-100.
+        "bleu": 38.5,
+        "comet": 0.85,
+        "mqm": {
+            "score": 92,
+            "major_count": 0,
+            "minor_count": 1,
+            "errors": [],
+        },
+        "_judges": judge_dossier,
+        "_panelPartial": False,
+        "_pendingJudgeNames": [],
+    }
+
+    return PanelVerdict(
+        overall_pass=True,
+        verdict=VERDICT_PASS,
+        overall_score=88,
+        translation_scores=translation_scores,
+        style_alignment_passes=style_passes,
+        judge_results=judge_results,
+        notes=["Mock mode: panel.evaluate short-circuited with synthetic PASS."],
+    )
+
+
 async def evaluate(
     question: PanelQuestion | Mapping[str, Any],
     reference_translation: Optional[str] = None,
@@ -217,10 +320,38 @@ async def evaluate(
             ``llm_call`` if not supplied.
         d8_index_path: Override FAISS index location.
         allow_weight_access: Demo-mode toggle for ``_weights``.
+
+    Mock mode (W5-A3): when the lifecycle contextvar
+    ``event_mode == "mock"`` we bypass all 11 judges (including the
+    cold-loading COMET model and FAISS index in d8) and return a
+    deterministic PASS dossier via :func:`_mock_panel_verdict`. The
+    output shape is bit-identical to the real path so any UI consumer
+    that already renders ``judge_results`` / ``translation_scores`` keeps
+    working.
     """
 
     if not isinstance(question, PanelQuestion):
         question = PanelQuestion.from_mapping(question)
+
+    # ---- W5-A3 mock short-circuit ----
+    # Read the lifecycle mode via the logging_ctx contextvar so we don't
+    # have to thread an explicit ``mode=`` argument through every caller.
+    # The contextvar is set by ``run_lifecycle`` before any judge is
+    # dispatched. Live mode (the default) falls through to the real path.
+    try:
+        from polyglot_alpha.logging_ctx import get_event_mode
+
+        if get_event_mode() == "mock":
+            event_id = getattr(question, "event_id", None) or "?"
+            logger.info(
+                "panel.evaluate: [event_id=%s] mock mode — returning"
+                " synthetic PASS verdict (skipping all 11 judges)",
+                event_id,
+            )
+            await asyncio.sleep(0)  # yield once so the call is still async
+            return _mock_panel_verdict(question)
+    except ImportError:  # pragma: no cover - defensive
+        pass
 
     if allow_weight_access:
         _ALLOW_WEIGHT_ACCESS["value"] = True

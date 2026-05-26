@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -126,6 +127,29 @@ class TriggerBid(BaseModel):
 
 _VALID_EVENT_SOURCES = ("user_payload", "hardcoded", "rss")
 
+# Lifecycle ``mode`` values accepted by ``POST /trigger/event``. ``live`` runs
+# the real LLM + Arc tx + RSS + judge panel; ``mock`` short-circuits each
+# subsystem with deterministic fixtures (other W5 agents own those impls).
+_VALID_EVENT_MODES: tuple[str, ...] = ("live", "mock")
+_DEFAULT_EVENT_MODE_ENV: str = "DEFAULT_EVENT_MODE"
+_FALLBACK_DEFAULT_EVENT_MODE: str = "live"
+
+
+def _resolve_default_event_mode() -> str:
+    """Return the env-configured default mode, falling back to ``"live"``."""
+
+    raw = os.environ.get(_DEFAULT_EVENT_MODE_ENV, _FALLBACK_DEFAULT_EVENT_MODE)
+    candidate = (raw or _FALLBACK_DEFAULT_EVENT_MODE).strip().lower()
+    if candidate not in _VALID_EVENT_MODES:
+        logger.warning(
+            "trigger: %s=%r is invalid; falling back to %r",
+            _DEFAULT_EVENT_MODE_ENV,
+            raw,
+            _FALLBACK_DEFAULT_EVENT_MODE,
+        )
+        return _FALLBACK_DEFAULT_EVENT_MODE
+    return candidate
+
 
 class TriggerRequest(BaseModel):
     # ``title`` is required for ``user_payload`` mode but becomes optional
@@ -181,6 +205,21 @@ class TriggerRequest(BaseModel):
             "Optional override list of {agent_address, bid_amount, ...}. "
             "When omitted, the orchestrator drives a real on-chain auction "
             "across the 4 reference agents (auction_mode='real')."
+        ),
+    )
+    # ``mode`` is the W5 lifecycle mode (``"live"`` | ``"mock"``). We accept
+    # it as a free-form string here and validate in the handler so the
+    # 400-on-invalid contract isn't masked by Pydantic's 422 default.
+    # When omitted, the handler falls back to the ``DEFAULT_EVENT_MODE``
+    # env var (and ultimately to ``"live"``) to preserve back-compat.
+    mode: str | None = Field(
+        default=None,
+        max_length=16,
+        description=(
+            "Lifecycle execution mode for this event. ``live`` (default) "
+            "runs the real LLM + Arc tx + RSS + judge panel. ``mock`` "
+            "short-circuits each subsystem with deterministic fixtures. "
+            "Invalid values return HTTP 400."
         ),
     )
 
@@ -300,7 +339,42 @@ async def _fetch_rss_demo_event(window_minutes: int) -> dict[str, Any] | None:
 
     Returns ``None`` on RSS failure or sub-threshold score so the caller
     degrades to the bundled hardcoded sample.
+
+    Mock-mode short-circuit (W5-A3): when the lifecycle contextvar
+    ``event_mode == "mock"`` (set by the trigger handler / orchestrator
+    after :func:`set_event_mode`), we skip the live RSS poll entirely
+    and pick a canned multi-language cluster from
+    :mod:`polyglot_alpha.ingestion.fixtures`. The fixture matches the
+    same return shape as the real path so the caller is fully agnostic.
     """
+
+    # ---- W5-A3 fixture short-circuit ----
+    try:
+        from polyglot_alpha.logging_ctx import get_event_mode
+    except ImportError:  # pragma: no cover - defensive
+        get_event_mode = None  # type: ignore[assignment]
+    if get_event_mode is not None and get_event_mode() == "mock":
+        try:
+            from polyglot_alpha.ingestion.fixtures import pick_mock_cluster
+
+            cluster = pick_mock_cluster()
+            logger.info(
+                "trigger: mock-mode short-circuit — fixture title=%r",
+                (cluster.get("title") or "")[:80],
+            )
+            return {
+                "title": cluster["title"],
+                "sources": list(cluster.get("sources") or []),
+                "language": cluster.get("language", "zh"),
+                "category": cluster.get("category", "geopolitics"),
+                "summary": cluster.get("summary"),
+                "scoring": cluster.get("scoring"),
+            }
+        except (FileNotFoundError, RuntimeError, ImportError) as exc:
+            logger.warning(
+                "trigger: mock fixture load failed (%s); falling through to RSS",
+                exc,
+            )
 
     try:
         from polyglot_alpha.ingestion import (
@@ -417,6 +491,100 @@ async def trigger_event(
     payload: TriggerRequest,
     background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
+    # --- Resolve the W5 lifecycle mode (live | mock) ---------------------
+    # Validate explicitly here so we can return HTTP 400 (not 422) on
+    # ``mode='bogus'`` per the W5-A1 contract. If the client omits ``mode``
+    # entirely we fall back to ``DEFAULT_EVENT_MODE`` and then to ``"live"``.
+    if payload.mode is None:
+        lifecycle_mode = _resolve_default_event_mode()
+    else:
+        candidate = (payload.mode or "").strip().lower()
+        if candidate not in _VALID_EVENT_MODES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"mode must be one of {list(_VALID_EVENT_MODES)}; "
+                    f"got {payload.mode!r}"
+                ),
+            )
+        lifecycle_mode = candidate
+
+    # --- W5-A3 mock short-circuit ----------------------------------------
+    # In ``mode='mock'`` the lifecycle never touches the live RSS feed,
+    # Haiku scorer, or any external network. We pick one of the 5 bundled
+    # multi-language news clusters and run it through the full lifecycle.
+    # This bypasses the ``event_source`` branching below entirely because
+    # we already have the resolved event body (title, sources, language,
+    # category, summary, scoring) in hand from the fixture.
+    if lifecycle_mode == "mock":
+        from ...ingestion.fixtures import pick_mock_cluster  # local import to
+        # keep cold-start light on the live path
+
+        try:
+            cluster = pick_mock_cluster()
+        except (FileNotFoundError, RuntimeError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"mock fixture load failed: {exc}",
+            ) from exc
+
+        try:
+            bids = _coerce_bids(payload.mock_bids)
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=exc.errors(),
+            ) from exc
+
+        # Build event_dict in the same shape ``_fetch_rss_demo_event``
+        # would have produced — :func:`run_lifecycle` is the source of
+        # truth on the contract so we just pass the fixture through.
+        mock_event_dict: dict[str, Any] = {
+            "title": cluster["title"],
+            "sources": list(cluster.get("sources") or []),
+            "language": cluster.get("language", "zh"),
+            "category": cluster.get("category", "geopolitics"),
+        }
+        if cluster.get("summary") is not None:
+            mock_event_dict["summary"] = cluster["summary"]
+        if isinstance(cluster.get("scoring"), dict):
+            mock_event_dict["scoring"] = cluster["scoring"]
+
+        # Salt the title with a per-click token so repeated mock triggers
+        # always produce a NEW lifecycle (content_hash dedup would
+        # otherwise collapse every click in the same minute back onto the
+        # first event_id, breaking the demo button's "fresh run on each
+        # click" expectation). Suffix is hidden inside square brackets so
+        # the UI still shows a clean headline.
+        unique_token = uuid.uuid4().hex[:8]
+        mock_event_dict["title"] = f"{mock_event_dict['title']} [mock:{unique_token}]"
+
+        prep = await create_pending_event(mock_event_dict, mode=lifecycle_mode)
+        precreated_event_id_mock: int = int(prep["event_id"])
+
+        async def _mock_runner() -> None:
+            await run_lifecycle(
+                mock_event_dict,
+                auction_window_seconds=payload.auction_window_seconds,
+                mock_bids=bids,
+                # Force ``auction_mode='mock'`` in mock mode so the
+                # auction sub-system also uses its deterministic seeder
+                # path (no external agent dispatch / on-chain calls).
+                auction_mode=payload.auction_mode or "mock",
+                confirm_real_polymarket=payload.confirm_real_polymarket,
+                precreated_event_id=precreated_event_id_mock,
+                mode=lifecycle_mode,
+            )
+
+        background_tasks.add_task(_mock_runner)
+        return {
+            "event_id": precreated_event_id_mock,
+            "status": "PENDING",
+            "scheduled": True,
+            "title": mock_event_dict["title"],
+            "mode": lifecycle_mode,
+        }
+
     # --- Resolve the event body depending on event_source -----------------
     # ``user_payload`` (default) — trust the body. Title is mandatory.
     # ``hardcoded``                — read outputs/sample_0.json.
@@ -468,7 +636,7 @@ async def trigger_event(
             "language": payload.language or "zh",
             "category": payload.category or "geopolitics",
         }
-        prep = await create_pending_event(placeholder_dict)
+        prep = await create_pending_event(placeholder_dict, mode=lifecycle_mode)
         precreated_event_id_rss: int = int(prep["event_id"])
 
         async def _rss_then_lifecycle() -> None:
@@ -543,6 +711,7 @@ async def trigger_event(
                 auction_mode=payload.auction_mode,
                 confirm_real_polymarket=payload.confirm_real_polymarket,
                 precreated_event_id=precreated_event_id_rss,
+                mode=lifecycle_mode,
             )
 
         background_tasks.add_task(_rss_then_lifecycle)
@@ -551,6 +720,7 @@ async def trigger_event(
             "status": "PENDING",
             "scheduled": True,
             "title": placeholder_title,
+            "mode": lifecycle_mode,
         }
     elif source_mode == "hardcoded":
         hard = _load_hardcoded_sample() or _fallback_demo_event()
@@ -619,6 +789,7 @@ async def trigger_event(
                     "status": same_title_recent.status,
                     "scheduled": False,
                     "deduped": True,
+                    "mode": same_title_recent.mode or "live",
                 }
 
         # NOTE: the previous ``source_mode == "rss"`` 5-min-bucket salt that
@@ -632,7 +803,7 @@ async def trigger_event(
     # Arc anchor → Polymarket) runs as a FastAPI BackgroundTask. The UI
     # detail page subscribes to SSE and animates the Timeline as each
     # lifecycle phase publishes its event.
-    prep = await create_pending_event(event_dict)
+    prep = await create_pending_event(event_dict, mode=lifecycle_mode)
     if prep.get("deduped"):
         # Permanent content_hash dedup still fires for back-to-back
         # identical payloads >5 min apart that survived our salt. Surface
@@ -647,6 +818,7 @@ async def trigger_event(
             "status": prep.get("status"),
             "scheduled": False,
             "deduped": True,
+            "mode": prep.get("mode") or "live",
         }
     precreated_event_id: int = int(prep["event_id"])
 
@@ -659,6 +831,7 @@ async def trigger_event(
                 auction_mode=payload.auction_mode,
                 confirm_real_polymarket=payload.confirm_real_polymarket,
                 precreated_event_id=precreated_event_id,
+                mode=lifecycle_mode,
             )
 
         background_tasks.add_task(_runner)
@@ -667,6 +840,7 @@ async def trigger_event(
             "event_id": precreated_event_id,
             "status": "PENDING",
             "title": resolved_title,
+            "mode": lifecycle_mode,
         }
 
     # Default demo path: schedule lifecycle in the background so the
@@ -680,6 +854,7 @@ async def trigger_event(
             auction_mode=payload.auction_mode,
             confirm_real_polymarket=payload.confirm_real_polymarket,
             precreated_event_id=precreated_event_id,
+            mode=lifecycle_mode,
         )
 
     background_tasks.add_task(_bg_runner)
@@ -687,4 +862,5 @@ async def trigger_event(
         "event_id": precreated_event_id,
         "status": "PENDING",
         "scheduled": True,
+        "mode": lifecycle_mode,
     }

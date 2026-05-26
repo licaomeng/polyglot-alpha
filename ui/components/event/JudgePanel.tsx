@@ -115,7 +115,38 @@ interface JudgePanelProps {
   };
 }
 
+interface DossierJudgeShape {
+  name: string;
+  passed: boolean;
+  score: number;
+  reason?: string;
+  panelBudgetExceeded?: boolean;
+  softSkip?: boolean;
+  panelPartial?: boolean;
+}
+
+function isDossierShape(x: unknown): x is DossierJudgeShape {
+  if (typeof x !== "object" || x === null) return false;
+  const j = x as Record<string, unknown>;
+  return typeof j.name === "string" && typeof j.passed === "boolean";
+}
+
 export function JudgePanel({ event }: JudgePanelProps) {
+  // Build a lookup of dossier rows keyed by judge name (lowercased) so we can
+  // surface ``panelBudgetExceeded`` / ``softSkip`` flags on the per-cell
+  // verdict pills. The backend emits the same names in both the dossier and
+  // the legacy translation_scores / style_alignment_passes maps, so reading
+  // both keeps the existing tests passing while letting the partial pill
+  // override the "BELOW threshold" copy when a judge timed out.
+  const dossierByName = useMemo<Map<string, DossierJudgeShape>>(() => {
+    const out = new Map<string, DossierJudgeShape>();
+    const raw = (event.judges ?? []) as unknown[];
+    for (const j of raw) {
+      if (isDossierShape(j)) out.set(j.name.toLowerCase(), j);
+    }
+    return out;
+  }, [event.judges]);
+
   const translationCells = useMemo<TranslationScoreCell[]>(() => {
     const scores =
       (event.translation_scores as Record<string, unknown> | undefined) ?? {};
@@ -146,12 +177,48 @@ export function JudgePanel({ event }: JudgePanelProps) {
     return null;
   }
 
+  const panelPartial =
+    Boolean(event.panelPartial)
+    || Array.from(dossierByName.values()).some((j) => j.panelBudgetExceeded);
+  const partialCount = Array.from(dossierByName.values()).filter(
+    (j) => j.panelBudgetExceeded,
+  ).length;
+  const totalDossier = dossierByName.size;
+  const completedCount = totalDossier > 0 ? totalDossier - partialCount : 0;
+  const pendingNames =
+    Array.isArray(event.pendingJudgeNames) && event.pendingJudgeNames.length > 0
+      ? event.pendingJudgeNames
+      : Array.from(dossierByName.values())
+          .filter((j) => j.panelBudgetExceeded)
+          .map((j) => j.name);
+
   return (
     <section
       aria-label="11-judge breakdown"
       data-testid="judge-panel-breakdown"
       className="space-y-4"
     >
+      {panelPartial && totalDossier > 0 && (
+        <div
+          data-testid="judge-panel-partial-banner"
+          className="rounded-md border border-amber-500/40 bg-amber-500/[0.06] p-3 text-xs"
+        >
+          <p className="font-mono text-[10px] uppercase tracking-wider text-amber-300">
+            Partial · {completedCount}/{totalDossier} judges completed
+          </p>
+          <p className="mt-1 text-foreground/85">
+            {partialCount} judge(s) returned
+            <span className="font-mono"> INSUFFICIENT_DATA</span> because the
+            panel budget was exceeded. Pending judges are excluded from the
+            verdict aggregation.
+          </p>
+          {pendingNames.length > 0 && (
+            <p className="mt-1 font-mono text-[10px] text-amber-300/80">
+              pending judges · {pendingNames.join(", ")}
+            </p>
+          )}
+        </div>
+      )}
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold">11-Judge Panel · Breakdown</h3>
@@ -184,13 +251,18 @@ export function JudgePanel({ event }: JudgePanelProps) {
         </p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {translationCells.map((cell) => {
-            const isDecider = isFail && cell.status === "fail";
+            const dossier = dossierByName.get(cell.key.toLowerCase());
+            const isPartial = Boolean(dossier?.panelBudgetExceeded);
+            const isSoftSkip = Boolean(dossier?.softSkip) && !isPartial;
+            const isDecider = isFail && cell.status === "fail" && !isPartial;
             return (
               <Card
                 key={cell.key}
+                data-testid={`judge-cell-${cell.key.toLowerCase()}`}
                 className={cn(
                   "border-border/60",
                   isDecider && "border-amber-400/60 ring-1 ring-amber-400/30",
+                  isPartial && "border-amber-500/40",
                 )}
               >
                 <CardContent className="p-3">
@@ -201,31 +273,49 @@ export function JudgePanel({ event }: JudgePanelProps) {
                       </span>
                       <MetricInfo metric={cell.key} />
                     </div>
-                    {cell.status === "pass" && (
+                    {isPartial ? (
+                      <MinusCircle
+                        className="h-3.5 w-3.5 text-amber-300"
+                        aria-label={`${cell.key} insufficient data`}
+                      />
+                    ) : cell.status === "pass" ? (
                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" aria-label="passed" />
-                    )}
-                    {cell.status === "fail" && (
+                    ) : cell.status === "fail" ? (
                       <XCircle className="h-3.5 w-3.5 text-destructive" aria-label="failed" />
-                    )}
-                    {cell.status === "na" && (
+                    ) : (
                       <MinusCircle className="h-3.5 w-3.5 text-muted-foreground" aria-label="not available" />
                     )}
                   </div>
                   <p
                     className={cn(
                       "mt-1 font-mono text-lg leading-none",
-                      cell.status === "pass"
-                        ? "text-emerald-300"
-                        : cell.status === "fail"
-                          ? "text-destructive"
-                          : "text-muted-foreground",
+                      isPartial
+                        ? "text-amber-300"
+                        : cell.status === "pass"
+                          ? "text-emerald-300"
+                          : cell.status === "fail"
+                            ? "text-destructive"
+                            : "text-muted-foreground",
                     )}
                   >
                     {cell.display}
                   </p>
-                  <p className="mt-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                    {cell.status === "na" ? "no reference data" : cell.status}
-                  </p>
+                  {isPartial ? (
+                    <Badge
+                      data-testid={`judge-cell-${cell.key.toLowerCase()}-partial`}
+                      className="mt-1 border-amber-500/40 bg-amber-500/10 font-mono text-[9px] uppercase tracking-wider text-amber-300"
+                    >
+                      INSUFFICIENT_DATA · partial
+                    </Badge>
+                  ) : isSoftSkip ? (
+                    <Badge className="mt-1 border-cyan-500/40 bg-cyan-500/10 font-mono text-[9px] uppercase tracking-wider text-cyan-300">
+                      soft-skip
+                    </Badge>
+                  ) : (
+                    <p className="mt-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                      {cell.status === "na" ? "no reference data" : cell.status}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             );

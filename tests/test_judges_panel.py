@@ -360,6 +360,77 @@ async def test_panel_accepts_dict_payload() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# W5-A3 mock-mode short-circuit                                               #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_panel_evaluate_mock_mode_returns_synthetic_pass(
+    good_question: PanelQuestion,
+) -> None:
+    """In ``event.mode='mock'`` the panel must skip all 11 judges and
+    return a deterministic PASS dossier in <100 ms — no LLM, no FAISS,
+    no COMET cold-load."""
+
+    from polyglot_alpha.logging_ctx import set_event_mode
+
+    set_event_mode("mock")
+    try:
+        verdict = await panel.evaluate(good_question)
+    finally:
+        set_event_mode("live")  # restore default for other tests
+
+    assert verdict.overall_pass is True
+    assert verdict.verdict == "PASS"
+    assert verdict.overall_score == 88
+    # All 11 judges must be present with mock-mode reason.
+    assert len(verdict.judge_results) == 11
+    assert all(j.passed for j in verdict.judge_results)
+    assert all("Mock mode" in j.reason for j in verdict.judge_results)
+    # Style passes for d1..d8 all True.
+    for d in ("d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8"):
+        assert verdict.style_alignment_passes[d] is True, d
+    # Dossier shape mirrors the real panel (same keys).
+    dossier = verdict.translation_scores["_judges"]
+    assert len(dossier) == 11
+    for row in dossier:
+        assert set(row.keys()) == {
+            "name",
+            "passed",
+            "score",
+            "reason",
+            "panelBudgetExceeded",
+            "softSkip",
+            "timeout",
+            "panelPartial",
+        }
+    assert verdict.translation_scores["_panelPartial"] is False
+    assert verdict.translation_scores["_pendingJudgeNames"] == []
+
+
+def test_pick_mock_cluster_returns_valid_fixture() -> None:
+    """Every bundled fixture must satisfy the basic event_dict contract
+    (title, sources, language, category, scoring)."""
+
+    from polyglot_alpha.ingestion.fixtures import (
+        available_languages,
+        load_fixture,
+    )
+
+    langs = available_languages()
+    assert set(langs) == {"zh", "ru", "es", "ja", "ar"}
+    for lang in langs:
+        cluster = load_fixture(lang)
+        assert cluster.get("title"), f"missing title for {lang}"
+        assert cluster.get("language") == lang
+        sources = cluster.get("sources") or []
+        assert isinstance(sources, list) and len(sources) >= 1
+        scoring = cluster.get("scoring") or {}
+        # Above the auction quality threshold so judges accept it.
+        assert float(scoring.get("event_quality_score") or 0.0) >= 0.5
+
+
+# --------------------------------------------------------------------------- #
 # Closed-IP weight guard                                                      #
 # --------------------------------------------------------------------------- #
 

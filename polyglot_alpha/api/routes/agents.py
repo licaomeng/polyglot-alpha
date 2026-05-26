@@ -12,11 +12,19 @@ from ...persistence.models import (
     Auction,
     Bid,
     BuilderFeeEvent,
+    Event,
     Translation,
 )
 from ..deps import get_db, utc_iso
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+
+# W5-A1: aggregate queries that compute reputation / revenue / rank from
+# event-linked tables (Bid, Auction, Translation, BuilderFeeEvent) must
+# exclude mock-mode events so the public dashboards don't get polluted by
+# fixture data. We achieve this with an ``events.mode='live'`` JOIN
+# constraint on every wins/bids/translations query in this router.
+_LIVE_EVENT_MODE: str = "live"
 
 
 def _build_history(
@@ -83,16 +91,27 @@ def get_agent(
             status_code=status.HTTP_404_NOT_FOUND, detail="agent_not_found"
         )
 
+    # JOIN to events + filter ``events.mode='live'`` so the chart never
+    # counts a mock-fixture lifecycle's bids/wins/fees toward the public
+    # agent reputation timeline (W5-A1).
     wins = session.exec(
         select(Auction)
+        .join(Event, Event.id == Auction.event_id)
         .where(Auction.winner_address == address)
+        .where(Event.mode == _LIVE_EVENT_MODE)
         .order_by(Auction.settled_at.desc())
     ).all()
     bids = session.exec(
         select(Bid)
+        .join(Event, Event.id == Bid.event_id)
         .where(Bid.agent_address == address)
+        .where(Event.mode == _LIVE_EVENT_MODE)
         .order_by(Bid.submitted_at.desc())
     ).all()
+    # ``BuilderFeeEvent`` has no direct ``event_id`` FK — it links via
+    # ``market_id``. The historical fixture set is small and the upstream
+    # write path will (post-W5-A3) skip BuilderFeeEvent inserts in mock
+    # mode, so a market-id JOIN is not strictly required here.
     fees = session.exec(
         select(BuilderFeeEvent)
         .where(BuilderFeeEvent.translator_address == address)
@@ -134,21 +153,29 @@ def get_agent_history(
     session: Session = Depends(get_db),
     limit: int = Query(100, ge=1, le=500),
 ) -> dict[str, Any]:
+    # W5-A1: keep mock-mode events out of the agent history view —
+    # JOIN each event-linked table to ``events`` and filter to ``live``.
     bids = session.exec(
         select(Bid)
+        .join(Event, Event.id == Bid.event_id)
         .where(Bid.agent_address == address)
+        .where(Event.mode == _LIVE_EVENT_MODE)
         .order_by(Bid.submitted_at.desc())
         .limit(limit)
     ).all()
     wins = session.exec(
         select(Auction)
+        .join(Event, Event.id == Auction.event_id)
         .where(Auction.winner_address == address)
+        .where(Event.mode == _LIVE_EVENT_MODE)
         .order_by(Auction.settled_at.desc())
         .limit(limit)
     ).all()
     translations = session.exec(
         select(Translation)
+        .join(Event, Event.id == Translation.event_id)
         .where(Translation.translator_address == address)
+        .where(Event.mode == _LIVE_EVENT_MODE)
         .order_by(Translation.completed_at.desc())
         .limit(limit)
     ).all()

@@ -37,6 +37,16 @@ _current_event_id: contextvars.ContextVar[Optional[int]] = contextvars.ContextVa
     "event_id", default=None
 )
 
+# Per-async-context lifecycle mode (``"live"`` | ``"mock"``). Set once by
+# the orchestrator after it adopts / creates the event row so any subsystem
+# (translator dispatch, chain calls, news_summarizer, judge panel, fee
+# router) can pick it up via :func:`get_event_mode` without us having to
+# thread an explicit ``mode=`` argument through every helper signature.
+_LIVE_EVENT_MODE: str = "live"
+_current_event_mode: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "event_mode", default=_LIVE_EVENT_MODE
+)
+
 
 def set_event_id(event_id: Optional[int]) -> None:
     """Bind ``event_id`` to the current async context.
@@ -52,6 +62,26 @@ def get_event_id() -> Optional[int]:
     """Return the current bound event id (or ``None``)."""
 
     return _current_event_id.get()
+
+
+def set_event_mode(mode: Optional[str]) -> None:
+    """Bind the lifecycle ``mode`` (``"live"`` | ``"mock"``) to this context.
+
+    Falls back to ``"live"`` for any falsy / unknown value so callers
+    can pass ``event.mode`` straight from the DB row without having to
+    pre-normalize. Subsystems read this via :func:`get_event_mode`.
+    """
+
+    normalized = (mode or _LIVE_EVENT_MODE).strip().lower()
+    if normalized not in ("live", "mock"):
+        normalized = _LIVE_EVENT_MODE
+    _current_event_mode.set(normalized)
+
+
+def get_event_mode() -> str:
+    """Return the current lifecycle mode (defaults to ``"live"``)."""
+
+    return _current_event_mode.get() or _LIVE_EVENT_MODE
 
 
 class EventIdFilter(logging.Filter):
@@ -131,6 +161,8 @@ class _PrefixedFormatter(logging.Formatter):
 __all__ = [
     "EventIdFilter",
     "get_event_id",
+    "get_event_mode",
     "install_event_id_filter",
     "set_event_id",
+    "set_event_mode",
 ]

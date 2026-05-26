@@ -303,9 +303,11 @@ async def test_bid_to_settle_contract() -> None:
         "must be ignored by the gate."
     )
 
-    # In mock mode the settlement tx hash is a deterministic stub.
-    assert tx_hash is not None and tx_hash.startswith("0x")
-    assert len(tx_hash) == 66  # 0x + 64 hex chars
+    # In mock mode the settlement tx hash is a synthetic ``0xsim_*``
+    # sentinel (W5-A2). UI gates explorer links on the ``0xsim_`` prefix.
+    assert tx_hash is not None and tx_hash.startswith("0xsim_")
+    # ``0xsim_`` (6) + 28-byte hex (56) = 62 chars total.
+    assert len(tx_hash) == 62, f"unexpected sim tx hash length: {len(tx_hash)}"
 
 
 # --------------------------------------------------------------------------- #
@@ -407,8 +409,9 @@ async def test_panel_to_commit_contract() -> None:
         auction_mode="mock",
     )
     assert question_id.startswith("0x") and len(question_id) == 42
-    assert tx_hash is not None and tx_hash.startswith("0x")
-    assert len(tx_hash) == 66
+    # W5-A2: mock-mode tx hash is the synthetic ``0xsim_*`` sentinel.
+    assert tx_hash is not None and tx_hash.startswith("0xsim_")
+    assert len(tx_hash) == 62, f"unexpected sim tx hash length: {len(tx_hash)}"
 
     # ---- real path with chain pkg unavailable: pending sentinel ----
     # Patch ``_get_chain_question_registry`` to return None.

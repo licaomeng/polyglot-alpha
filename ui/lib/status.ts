@@ -64,15 +64,18 @@ const STATUS_DISPLAY: Record<
   EVALUATING: { label: "Judging", variant: "warning", bucket: "running" },
   COMMITTED: { label: "Anchored", variant: "success", bucket: "completed" },
   SUBMITTED: { label: "Settled", variant: "success", bucket: "completed" },
+  // Rejected = quality-panel verdict ⇒ destructive red. Failed = system /
+  // pipeline crash ⇒ muted grey so reviewers can visually tell them apart in
+  // the events list and the page header.
   REJECTED: { label: "Rejected", variant: "destructive", bucket: "failed" },
-  FAILED: { label: "Failed", variant: "destructive", bucket: "failed" },
+  FAILED: { label: "Failed", variant: "muted", bucket: "failed" },
 
   // Legacy lowercase strings still emitted by some code paths.
   live: { label: "LIVE", variant: "info", bucket: "running" },
   running: { label: "Running", variant: "info", bucket: "running" },
   pending: { label: "Queued", variant: "secondary", bucket: "pending" },
   completed: { label: "Settled", variant: "success", bucket: "completed" },
-  failed: { label: "Failed", variant: "destructive", bucket: "failed" },
+  failed: { label: "Failed", variant: "muted", bucket: "failed" },
   historical: { label: "Historical", variant: "secondary", bucket: "completed" },
 };
 

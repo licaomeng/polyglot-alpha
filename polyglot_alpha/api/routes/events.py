@@ -51,6 +51,11 @@ def _serialize_event_summary(event: Event) -> dict[str, Any]:
         first = event.sources[0] if isinstance(event.sources, list) else None
         if isinstance(first, dict):
             source_name = str(first.get("name") or first.get("url") or "")
+    # ``mode`` is the W5 lifecycle mode (``"live"`` | ``"mock"``). Older
+    # rows pre-W5-A1 have NULL — the DB migration backfills them with
+    # ``'live'`` but we also guard here defensively for any path that
+    # bypassed the migration.
+    event_mode = getattr(event, "mode", None) or "live"
     return {
         "id": str(event.id) if event.id is not None else None,
         "content_hash": event.content_hash,
@@ -62,7 +67,7 @@ def _serialize_event_summary(event: Event) -> dict[str, Any]:
         "triggered_at": _utc_iso(event.triggered_at),
         "ingestedAt": _utc_iso(event.triggered_at),
         "status": event.status,
-        "mode": "mock",
+        "mode": event_mode,
     }
 
 

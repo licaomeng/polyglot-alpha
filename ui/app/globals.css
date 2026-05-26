@@ -53,8 +53,10 @@
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
     /* Avoid horizontal page scrolling on mobile when nested elements
-       briefly overflow (e.g. while ReactFlow lays out). */
-    overflow-x: hidden;
+       briefly overflow (e.g. while ReactFlow lays out).
+       Use `clip` instead of `hidden` — `hidden` creates a scrolling
+       context which breaks `position: sticky` on the site header. */
+    overflow-x: clip;
   }
 
   body {

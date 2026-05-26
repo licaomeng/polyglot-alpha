@@ -1,0 +1,29 @@
+{
+  "title": "ЕС утвердил 16-й пакет санкций против России, ограничивающий экспорт Газпрома в Европу",
+  "sources": [
+    {
+      "name": "TASS",
+      "url": "https://example.com/sim/tass/eu-sanctions-16-2026",
+      "language": "ru"
+    },
+    {
+      "name": "Interfax",
+      "url": "https://example.com/sim/interfax/gazprom-sanctions-2026",
+      "language": "ru"
+    }
+  ],
+  "language": "ru",
+  "category": "geopolitics/sanctions",
+  "summary": "Совет Европейского союза в четверг официально утвердил 16-й пакет санкций против Российской Федерации, направленный на дальнейшее ограничение энергетического экспорта. В пакет включены меры по сокращению поставок СПГ от Газпрома в страны-члены ЕС к концу 2026 года, а также вторичные санкции в отношении судовладельцев, перевозящих российскую нефть выше ценового потолка G7. Президент России Владимир Путин назвал решение «экономически неоправданным» и заявил, что Россия будет искать альтернативные рынки в Азии и Латинской Америке. Аналитики ожидают волатильности на европейских газовых биржах TTF в ближайшие недели.",
+  "scoring": {
+    "event_quality_score": 0.85,
+    "primary_category": "geopolitics/sanctions",
+    "sub_categories": ["energy", "russia", "european_union", "lng"],
+    "key_entities": ["European Union", "Gazprom", "Vladimir Putin", "Russia", "TTF"],
+    "source_credibility": 0.80,
+    "timeliness_score": 0.93,
+    "raw_summary": "The EU Council formally adopted a 16th sanctions package targeting Russian LNG exports via Gazprom, with phase-out by end-2026 and secondary sanctions on price-cap evaders.",
+    "rejection_reason": null,
+    "model": "mock-fixture-ru"
+  }
+}

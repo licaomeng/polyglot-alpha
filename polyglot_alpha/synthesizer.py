@@ -126,7 +126,25 @@ def _llm_merge(
     Resolution: when ``ANTHROPIC_API_KEY`` is set we route to the
     Anthropic SDK (Claude Haiku 4.5). Otherwise we warn and return
     ``None`` so the caller falls back to the longest-criteria heuristic.
+
+    Mock-mode (W5-A3): when the lifecycle contextvar reports
+    ``event_mode == "mock"`` we deliberately return ``None`` so the
+    caller's longest-criteria heuristic path runs instead. The heuristic
+    is fully offline (no LLM, no API key) and produces a deterministic
+    Question from whatever the agents already proposed.
     """
+
+    try:
+        from .logging_ctx import get_event_mode
+
+        if get_event_mode() == "mock":
+            logger.info(
+                "synthesizer: mock mode — skipping LLM merge, deferring to "
+                "longest-criteria heuristic"
+            )
+            return None
+    except ImportError:  # pragma: no cover - defensive
+        pass
 
     if not os.getenv("ANTHROPIC_API_KEY"):
         logger.warning(

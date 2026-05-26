@@ -308,3 +308,88 @@ async def test_commit_question_returns_none_when_chain_unavailable(
     )
     assert tx_hash is None
     assert question_id.startswith("pending-")
+
+
+# ---------------------------------------------------------------------------
+# W5-A2: mock-mode chain subroutines must return ``0xsim_*`` hashes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_mock_mode_chain_calls_return_sim_hashes() -> None:
+    """Every chain-touching helper, in ``auction_mode='mock'``, must return a
+    synthetic ``0xsim_*`` tx hash and never invoke the chain package.
+
+    Covers the public contract relied on by the UI muted-text gate
+    (``arcscan link hidden iff hash starts with 0xsim_``) so the gate
+    keeps working as the orchestrator evolves.
+    """
+
+    from polyglot_alpha import orchestrator
+    from polyglot_alpha.chain.sim_helpers import SIM_TX_HASH_PREFIX, is_sim_hash
+
+    # _open_onchain_auction
+    open_tx = await orchestrator._open_onchain_auction(
+        event_id=7, content_hash="deadbeef", auction_mode="mock"
+    )
+    assert open_tx is not None and open_tx.startswith(SIM_TX_HASH_PREFIX)
+    assert is_sim_hash(open_tx)
+
+    # _settle_auction
+    bids = [
+        orchestrator.BidRecord(agent_address="0xa", bid_amount=0.5, reputation=1.0),
+        orchestrator.BidRecord(agent_address="0xb", bid_amount=1.0, reputation=1.0),
+    ]
+    _, settle_tx = await orchestrator._settle_auction(
+        event_id=7, bids=bids, auction_mode="mock"
+    )
+    assert settle_tx is not None and is_sim_hash(settle_tx)
+
+    # _commit_question_onchain
+    qid, commit_tx = await orchestrator._commit_question_onchain(
+        event_id=7,
+        candidate_hash="cafe" * 16,
+        builder_code="POLYGLOT",
+        pipeline_trace_ipfs=None,
+        auction_mode="mock",
+    )
+    assert qid.startswith("0x")
+    assert commit_tx is not None and is_sim_hash(commit_tx)
+
+
+@pytest.mark.asyncio
+async def test_mock_mode_via_contextvar() -> None:
+    """When :func:`logging_ctx.set_event_mode('mock')` is set, chain calls
+    must return synthetic hashes even without an explicit ``auction_mode``
+    argument. This proves W5-A1's contextvar plumbing is wired into the
+    chain layer.
+    """
+
+    from polyglot_alpha import orchestrator
+    from polyglot_alpha.chain.sim_helpers import is_sim_hash
+    from polyglot_alpha.logging_ctx import set_event_mode
+
+    set_event_mode("mock")
+    try:
+        # ``_record_builder_fee_on_chain`` does NOT take an ``auction_mode``
+        # argument — it reads the contextvar via ``is_mock_mode()``.
+        tx = await orchestrator._record_builder_fee_on_chain(
+            market_id="m-test", fill_amount_usdc=1.0, translator_address="0xt"
+        )
+        assert tx is not None and is_sim_hash(tx)
+
+        # ``_record_builder_fee_split_on_chain`` returns a dict with both legs.
+        split = await orchestrator._record_builder_fee_split_on_chain(
+            market_id="m-test",
+            fill_amount_usdc=1.0,
+            winner_address="0x" + "11" * 20,
+            treasury_address="0x" + "22" * 20,
+        )
+        assert split is not None
+        assert is_sim_hash(split["winner_tx"])
+        assert is_sim_hash(split["treasury_tx"])
+        # 90/10 split math preserved.
+        assert split["winner_amount"] == pytest.approx(0.9)
+        assert split["treasury_amount"] == pytest.approx(0.1)
+    finally:
+        set_event_mode("live")

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Play, Check, Loader2 } from "lucide-react";
 import { triggerEvent, type SseEventType } from "@/lib/api";
 import { useEventStream } from "@/hooks/useEventStream";
+import { useDemoMode } from "@/contexts/ModeContext";
 
 // Lifecycle phase → human-readable progress label. Keys are the named SSE
 // event types so the hook can drive UI directly from server emissions.
@@ -32,6 +33,7 @@ const NAVIGATE_FALLBACK_MS = 120_000;
 
 export function TriggerButton() {
   const router = useRouter();
+  const { mode } = useDemoMode();
   const [busy, setBusy] = useState(false);
   const [triggered, setTriggered] = useState(false);
   // Track the event id returned by POST so the SSE filter can be re-applied
@@ -78,9 +80,12 @@ export function TriggerButton() {
   // browsing /operators / /leaderboard / etc. — see G1 finding C1.
 
   const label = useMemo(() => {
-    if (!busy) return triggered ? "Triggered" : "Trigger live demo";
+    if (!busy) {
+      if (triggered) return "Triggered";
+      return mode === "mock" ? "Trigger mock demo" : "Trigger live demo";
+    }
     return progressLabel ?? FALLBACK_INITIAL_LABEL;
-  }, [busy, triggered, progressLabel]);
+  }, [busy, triggered, progressLabel, mode]);
 
   return (
     <div className="flex flex-col gap-2">
@@ -97,7 +102,9 @@ export function TriggerButton() {
           // animate the button text; the effect above navigates once
           // `event.finalized` lands (or after NAVIGATE_FALLBACK_MS).
           try {
-            const result = await triggerEvent();
+            // Forward the user-selected demo mode (W5-B) so the backend can
+            // pick the synthetic mock lifecycle vs. the real RSS pipeline.
+            const result = await triggerEvent(undefined, mode);
             if (result?.event_id) {
               const newId = String(result.event_id);
               setEventId(newId);

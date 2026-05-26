@@ -27,6 +27,7 @@ from eth_account.signers.local import LocalAccount
 from web3 import Web3
 
 from .. import analysts, quality_eval, synthesizer, translators
+from ..chain.sim_helpers import is_mock_mode, sim_tx_hash
 from ..llm import LLMCallable, make_llm
 from ..onchain import (
     OnChainClient,
@@ -302,12 +303,24 @@ class BaseTranslatorAgent:
         bid_amount: float,
         candidate_metadata_hash: bytes,
     ) -> str:
-        """Submit a bid to the on-chain auction. Returns the tx hash."""
+        """Submit a bid to the on-chain auction. Returns the tx hash.
+
+        W5-A2: in ``mode='mock'`` lifecycles we MUST NOT issue an RPC.
+        Return a synthetic ``0xsim_*`` hash immediately so the caller can
+        persist a non-null tx_hash without burning gas. The UI's arcscan
+        gate keys off the ``0xsim_`` prefix and renders muted text.
+        """
 
         if bid_amount <= 0:
             raise ValueError("bid_amount must be > 0")
         if len(candidate_metadata_hash) != 32:
             raise ValueError("candidate_metadata_hash must be 32 bytes")
+        if is_mock_mode():
+            logger.info(
+                "agent=%s submit_bid skipped (mock mode); returning sim hash",
+                self.AGENT_NAME,
+            )
+            return sim_tx_hash()
         event_id_b = event_id_from_event(event_id)
         bid_units = usdc_to_units(bid_amount)
         return await send_with_nonce_lock(

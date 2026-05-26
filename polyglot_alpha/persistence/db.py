@@ -106,6 +106,7 @@ def init_db() -> None:
 
     SQLModel.metadata.create_all(engine)
     _migrate_polymarket_submissions(engine)
+    _migrate_events_add_mode(engine)
 
 
 # Columns added to ``polymarket_submissions`` after the table's first
@@ -162,6 +163,43 @@ def _migrate_polymarket_submissions(engine: Engine) -> None:
         logger.warning(
             "polymarket_submissions migration skipped (%s)", exc
         )
+
+
+def _migrate_events_add_mode(engine: Engine) -> None:
+    """Idempotently add the ``events.mode`` column + index.
+
+    The column is introduced in W5-A1 (2026-05-26) to distinguish live
+    lifecycles from mock-fixture lifecycles. Existing rows are backfilled
+    with ``'live'`` so historical events stay visible on the leaderboard.
+    Skipped silently if the table doesn't exist yet (fresh DB —
+    ``create_all`` will have rendered the full schema, including ``mode``).
+    """
+
+    from sqlalchemy import inspect as sa_inspect, text as sa_text
+
+    try:
+        inspector = sa_inspect(engine)
+        if "events" not in inspector.get_table_names():
+            return
+        existing_cols = {c["name"] for c in inspector.get_columns("events")}
+        with engine.begin() as conn:
+            if "mode" not in existing_cols:
+                conn.execute(
+                    sa_text(
+                        "ALTER TABLE events ADD COLUMN mode VARCHAR "
+                        "DEFAULT 'live' NOT NULL"
+                    )
+                )
+                logger.info("migrated events: added column mode VARCHAR (default 'live')")
+            # Index is cheap to recreate; CREATE INDEX IF NOT EXISTS is
+            # supported by both SQLite and Postgres.
+            conn.execute(
+                sa_text(
+                    "CREATE INDEX IF NOT EXISTS idx_events_mode ON events(mode)"
+                )
+            )
+    except Exception as exc:  # noqa: BLE001 — best-effort, keep startup alive
+        logger.warning("events.mode migration skipped (%s)", exc)
 
 
 def reset_engine(url: str) -> Engine:

@@ -1,0 +1,29 @@
+{
+  "title": "日銀、政策金利を0.75%に引き上げ 17年ぶりの追加利上げで円相場が急騰",
+  "sources": [
+    {
+      "name": "Nikkei",
+      "url": "https://example.com/sim/nikkei/boj-rate-hike-2026",
+      "language": "ja"
+    },
+    {
+      "name": "NHK",
+      "url": "https://example.com/sim/nhk/boj-policy-2026",
+      "language": "ja"
+    }
+  ],
+  "language": "ja",
+  "category": "macro/japan_monetary",
+  "summary": "日本銀行は金曜日の金融政策決定会合で、政策金利を現行の0.5%から0.75%に引き上げることを賛成多数で決定した。日銀の追加利上げは2007年以来17年ぶりであり、植田和男総裁は記者会見で「賃金と物価の好循環が確認された」と説明した。この決定を受けて外国為替市場では円が急騰し、ドル円相場は一時1ドル=142円台まで円高が進行した。日経平均株価は銀行株の上昇に支えられたものの、輸出関連株の下落により小幅安で取引を終えた。トヨタ自動車などの主要輸出企業は通期業績予想の下方修正を検討していると報じられている。",
+  "scoring": {
+    "event_quality_score": 0.87,
+    "primary_category": "macro/japan_monetary",
+    "sub_categories": ["central_bank", "japan", "jpy", "interest_rates"],
+    "key_entities": ["Bank of Japan", "BOJ", "Kazuo Ueda", "JPY", "Toyota", "Nikkei"],
+    "source_credibility": 0.91,
+    "timeliness_score": 0.94,
+    "raw_summary": "Bank of Japan hiked policy rate from 0.5% to 0.75%, first additional hike in 17 years. JPY rallied to 142 against USD. Toyota and exporters reviewing FY guidance.",
+    "rejection_reason": null,
+    "model": "mock-fixture-ja"
+  }
+}

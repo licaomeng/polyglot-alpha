@@ -77,6 +77,14 @@ class Event(SQLModel, table=True):
     # ``TranslationAuction.openAuction``. The orchestrator stores its own
     # auction tx hashes in :class:`Auction.settlement_tx_hash`.
     tx_hash: Optional[str] = None
+    # Execution mode for this lifecycle. ``"live"`` (default) runs real
+    # LLM + real Arc tx + real RSS + real judges. ``"mock"`` short-circuits
+    # the LLM, news fetch, judge panel, and chain calls with deterministic
+    # fixtures so the demo button can produce a reproducible result without
+    # external network calls. Indexed because the leaderboard / reputation
+    # aggregates filter on ``mode='live'`` to keep mock events out of
+    # public stats.
+    mode: str = Field(default="live", nullable=False, index=True)
 
 
 # ---------------------------------------------------------------------------

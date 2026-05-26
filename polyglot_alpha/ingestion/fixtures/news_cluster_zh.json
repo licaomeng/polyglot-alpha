@@ -1,0 +1,29 @@
+{
+  "title": "中国人民银行宣布全面降准0.5个百分点 释放长期资金约1万亿元",
+  "sources": [
+    {
+      "name": "Xinhua",
+      "url": "https://example.com/sim/xinhua/pboc-rrr-cut-2026",
+      "language": "zh"
+    },
+    {
+      "name": "Caixin",
+      "url": "https://example.com/sim/caixin/pboc-policy-2026",
+      "language": "zh"
+    }
+  ],
+  "language": "zh",
+  "category": "macro/china_monetary",
+  "summary": "中国人民银行周五宣布,自2026年6月15日起下调金融机构存款准备金率0.5个百分点(不含已执行5%存款准备金率的金融机构)。此次下调将向市场释放约1万亿元人民币长期资金,以支持实体经济和稳定经济增长。央行表示,此举旨在加强逆周期调节,保持流动性合理充裕,引导贷款市场利率下行。市场分析人士预计,本次降准将提振银行信贷投放能力,降低企业融资成本。",
+  "scoring": {
+    "event_quality_score": 0.88,
+    "primary_category": "macro/china_monetary",
+    "sub_categories": ["central_bank", "monetary_policy", "liquidity"],
+    "key_entities": ["People's Bank of China", "PBOC", "RRR", "RMB"],
+    "source_credibility": 0.92,
+    "timeliness_score": 0.95,
+    "raw_summary": "PBOC announced a 50bp cut to the reserve requirement ratio effective June 15 2026, releasing roughly 1 trillion RMB in long-term liquidity. The cut is framed as counter-cyclical adjustment to support credit growth.",
+    "rejection_reason": null,
+    "model": "mock-fixture-zh"
+  }
+}

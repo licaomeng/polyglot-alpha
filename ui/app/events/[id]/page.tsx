@@ -58,13 +58,24 @@ export default function EventDetailPage() {
     if (!livePhases?.length) return event;
     // Prefer the SSE-derived `status` per phase (more fresh) but keep
     // server-side `details` when SSE hasn't yet enriched them.
+    //
+    // Sticky "failed" rule: when the REST snapshot already reports a phase
+    // as `failed` (e.g. because the lifecycle was REJECTED and the backend
+    // marked the downstream phases failed), a stale SSE `completed` must
+    // NOT overwrite it. Otherwise the DAG rail (which renders REST data on
+    // first paint) and the timeline (which prefers live SSE) end up
+    // contradicting each other for the same phase. The backend is the
+    // canonical source of truth once a phase has terminated; live SSE only
+    // wins when both sides are still in transient states.
     const byName = new Map(livePhases.map((p) => [p.name, p]));
     const merged = event.phases.map((p) => {
       const live = byName.get(p.name);
       if (!live) return p;
+      const stickyFailed =
+        p.status === "failed" && live.status !== "failed" ? "failed" : null;
       return {
         ...p,
-        status: live.status,
+        status: stickyFailed ?? live.status,
         startedAt: live.startedAt ?? p.startedAt,
         completedAt: live.completedAt ?? p.completedAt,
         details: { ...(p.details ?? {}), ...(live.details ?? {}) },

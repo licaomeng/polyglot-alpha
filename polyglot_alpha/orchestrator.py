@@ -52,7 +52,13 @@ try:  # pragma: no cover - web3 is optional
 except ImportError:  # pragma: no cover
     pass
 
-from .logging_ctx import set_event_id
+from .chain.sim_helpers import (
+    is_mock_mode,
+    is_sim_hash,
+    sim_ipfs_hash,
+    sim_tx_hash,
+)
+from .logging_ctx import set_event_id, set_event_mode
 from .persistence import session_scope
 from .persistence.models import (
     Auction,
@@ -280,10 +286,10 @@ async def _open_onchain_auction(
     consumers can distinguish "no tx" from "fake tx".
     """
 
-    if auction_mode == "mock":
-        return "0x" + hashlib.sha256(
-            f"open:{event_id}:{content_hash}".encode()
-        ).hexdigest()
+    if is_mock_mode(auction_mode):
+        # W5-A2: synthetic ``0xsim_*`` so the UI can muted-text-render
+        # the arcscan link instead of dead-ending on a 404.
+        return sim_tx_hash()
     auction_client = _get_chain_auction_client()
     if auction_client is None:
         # Chain module not wired (parallel-agent has not landed it). Do
@@ -351,24 +357,32 @@ async def _drive_agent_bid(
         return None
 
     # ------------------------------------------------------------------
-    # Pre-flight: gas balance check
+    # Pre-flight: gas balance check (real-mode only)
     # ------------------------------------------------------------------
     # Reading balance is a cheap eth_call; skipping a doomed submit_bid
     # avoids spending the next-tx gas on a tx that will revert with
     # ``-32003 insufficient funds for gas * price + value``. Operators
     # see the WARNING and refund the seeder wallet.
-    try:
-        loop = asyncio.get_running_loop()
-        balance_wei = await loop.run_in_executor(
-            None, agent.onchain.w3.eth.get_balance, wallet.address
-        )
-    except Exception as exc:  # pragma: no cover - RPC failure
-        logger.warning(
-            "agent=%s gas balance check failed (%s); proceeding to submit_bid",
-            agent_name,
-            exc,
-        )
+    #
+    # W5-A2: in mock mode the bid never reaches a real wallet — skip the
+    # RPC entirely. Callers should normally have routed through
+    # ``_synthesize_mock_bids`` upstream, but the explicit guard keeps the
+    # function safe to call standalone (and unit-testable without RPC).
+    if is_mock_mode():
         balance_wei = None
+    else:
+        try:
+            loop = asyncio.get_running_loop()
+            balance_wei = await loop.run_in_executor(
+                None, agent.onchain.w3.eth.get_balance, wallet.address
+            )
+        except Exception as exc:  # pragma: no cover - RPC failure
+            logger.warning(
+                "agent=%s gas balance check failed (%s); proceeding to submit_bid",
+                agent_name,
+                exc,
+            )
+            balance_wei = None
 
     if balance_wei is not None and balance_wei < MIN_SEEDER_GAS_WEI:
         balance_eth = balance_wei / _WEI_PER_ETH
@@ -448,6 +462,53 @@ async def _drive_agent_bid(
         tx_hash=tx_hash,
         reputation=evaluation.estimated_quality,
     )
+
+
+# ---------------------------------------------------------------------------
+# W5-A2: mock-mode bid synthesis
+# ---------------------------------------------------------------------------
+
+# Deterministic seeder addresses for ``mode='mock'`` lifecycles. These are
+# the same agent identities used in the real-auction path, expressed as
+# valid 0x-hex 20-byte addresses so the downstream 90/10 fee-split path
+# (which checks ``len(addr) == 42``) treats them like real wallets.
+_MOCK_SEEDER_ADDRESSES: tuple[tuple[str, str], ...] = (
+    ("gemini",   "0x" + "10" * 20),
+    ("deepseek", "0x" + "20" * 20),
+    ("qwen",     "0x" + "30" * 20),
+)
+
+
+def _synthesize_mock_bids(event_id: int) -> list["BidRecord"]:
+    """Return 3 deterministic synthetic bids for a ``mode='mock'`` event.
+
+    No chain calls. No LLM calls. No wallet derivation. The winner is the
+    lowest bidder among the three; bid amounts are seeded off the event_id
+    so consecutive mock events are visibly different in the UI.
+    """
+
+    bids: list[BidRecord] = []
+    for idx, (agent_name, address) in enumerate(_MOCK_SEEDER_ADDRESSES):
+        # 0.50, 0.75, 1.00 USDC base bids, offset by a per-event jitter so
+        # repeated triggers don't all look identical in the leaderboard.
+        base = 0.50 + 0.25 * idx
+        jitter = (event_id % 7) * 0.01
+        bid_amount = round(base + jitter, 4)
+        # Deterministic 32-char hex candidate hash so the row is reproducible.
+        candidate_hash = hashlib.sha256(
+            f"mock:{event_id}:{agent_name}".encode()
+        ).hexdigest()
+        bids.append(
+            BidRecord(
+                agent_address=address,
+                bid_amount=bid_amount,
+                stake_amount=DEFAULT_STAKE_USDC,
+                candidate_hash=candidate_hash,
+                tx_hash=sim_tx_hash(),
+                reputation=1.0,
+            )
+        )
+    return bids
 
 
 async def _drive_real_auction(
@@ -544,18 +605,28 @@ async def _collect_bids(
     """
 
     if mock_bids is not None:
-        # Tests / demos hand us deterministic bids. Assign a deterministic
-        # stub tx_hash to any bid that doesn't already have one so the
-        # downstream UI / leaderboard always sees a non-None hash for the
-        # mock path (matches the mock-mode behavior of auction open/settle).
+        # Tests / demos hand us deterministic bids. Assign a synthetic
+        # ``0xsim_*`` tx_hash to any bid that doesn't already have one so
+        # the downstream UI / leaderboard always sees a non-None hash and
+        # the arcscan-link gate hides the explorer link for mock lifecycles.
         out: list[BidRecord] = []
         for b in mock_bids:
             if not b.tx_hash:
-                b.tx_hash = "0x" + hashlib.sha256(
-                    f"mockbid:{event_id}:{b.agent_address}".encode()
-                ).hexdigest()
+                b.tx_hash = sim_tx_hash()
             out.append(b)
         return out
+
+    # W5-A2 mock mode: synthesize 3 reference-seeder bids without ever
+    # touching the chain. Bid amounts are deterministic so the same
+    # event_id always produces the same winner — handy for replay/debug.
+    if is_mock_mode(auction_mode):
+        synthetic = _synthesize_mock_bids(event_id)
+        logger.info(
+            "orchestrator.mock_mode: synthesized %d bids for event_id=%s",
+            len(synthetic),
+            event_id,
+        )
+        return synthetic
 
     if auction_mode == "real" and event_dict is not None:
         dispatch = _get_dispatch()
@@ -664,10 +735,10 @@ async def _settle_auction(
         key=lambda b: b.bid_amount / max(b.reputation, 1.0),
     )
     tx_hash: str | None
-    if auction_mode == "mock":
-        tx_hash = "0x" + hashlib.sha256(
-            f"settle:{event_id}:{winner.agent_address}".encode()
-        ).hexdigest()
+    if is_mock_mode(auction_mode):
+        # W5-A2: synthetic ``0xsim_*`` instead of a sha256 (which the UI
+        # could mistake for a real, just-unindexed hash).
+        tx_hash = sim_tx_hash()
         return winner, tx_hash
     auction_client = _get_chain_auction_client()
     if auction_client is None:
@@ -752,9 +823,18 @@ async def _run_translator_pipeline(
     candidate_hash = hashlib.sha256(
         json.dumps(body, sort_keys=True).encode()
     ).hexdigest()
+    # W5-A2: mock mode uses the ``ipfs://sim/...`` prefix so the UI's
+    # muted-text gate (W2-3) hides the "Open in IPFS" link. Real-mode
+    # fallback (pipeline crashed but auction was real) keeps the legacy
+    # ``ipfs://mock/...`` marker.
+    trace_pointer = (
+        sim_ipfs_hash(candidate_hash)
+        if is_mock_mode(auction_mode)
+        else f"ipfs://mock/{candidate_hash[:12]}"
+    )
     return PipelineResult(
         final_question=body,
-        pipeline_trace_ipfs=f"ipfs://mock/{candidate_hash[:12]}",
+        pipeline_trace_ipfs=trace_pointer,
         candidate_hash=candidate_hash,
     )
 
@@ -855,13 +935,14 @@ async def _commit_question_onchain(
     accurately reflect whether the registration actually landed.
     """
 
-    if auction_mode == "mock":
+    if is_mock_mode(auction_mode):
+        # W5-A2: question id is just an opaque identifier (UI never links
+        # it to arcscan), but the tx hash MUST be the ``0xsim_*`` sentinel
+        # so the UI's arcscan-link gate hides the explorer link.
         question_id = "0x" + hashlib.sha256(
             f"qid:{event_id}:{candidate_hash}".encode()
         ).hexdigest()[:40]
-        tx_hash = "0x" + hashlib.sha256(
-            f"commit:{event_id}:{candidate_hash}".encode()
-        ).hexdigest()
+        tx_hash = sim_tx_hash()
         return question_id, tx_hash
 
     question_registry = _get_chain_question_registry()
@@ -921,7 +1002,25 @@ async def _submit_to_polymarket(
     :meth:`PolymarketV2Client.submit_question`. The Polymarket client
     itself picks dry-run vs real vs mock from ``POLYMARKET_MODE``;
     we just forward the quality gate inputs.
+
+    W5-A2: in ``mode='mock'`` lifecycles we short-circuit BEFORE
+    constructing the client (which would issue an outbound HTTP request
+    on import / connection setup) and return a fully-synthetic submission
+    record so the lifecycle is end-to-end offline.
     """
+
+    if is_mock_mode():
+        sim_market_id = f"sim-{uuid.uuid4().hex[:12]}"
+        return {
+            "market_id": sim_market_id,
+            "market_url": f"https://polymarket.com/market/{sim_market_id}",
+            "status": PolymarketStatus.SIMULATED.value,
+            "is_simulated": True,
+            "fees_estimate_usdc": 0.0,
+            "error": None,
+            "mode": "mock",
+            "payload": {"sim": True},
+        }
 
     try:
         from polyglot_alpha.polymarket import PolymarketV2Client
@@ -1021,7 +1120,14 @@ async def _record_builder_fee_on_chain(
     accrual as simulated, with ``arc_tx_hash=None``" — we never fabricate
     a fake hash so downstream consumers can distinguish "no tx" from
     "real tx".
+
+    W5-A2: in ``mode='mock'`` lifecycles a synthetic ``0xsim_*`` is
+    returned so the UI's arcscan-link gate hides the explorer link and
+    the persisted ``builder_fee_events`` row is flagged as simulated.
     """
+
+    if is_mock_mode():
+        return sim_tx_hash()
 
     builder_fee_router = _get_chain_builder_fee_router()
     if builder_fee_router is None:
@@ -1064,7 +1170,32 @@ async def _record_builder_fee_split_on_chain(
     ``polyglot_alpha.chain.builder_fee_router.record_fill_with_split`` for
     the canonical implementation. Returns the split dict on partial/full
     success, or ``None`` if the chain package is unavailable.
+
+    W5-A2: in ``mode='mock'`` lifecycles every leg returns a synthetic
+    ``0xsim_*`` hash and the 90/10 split math is preserved (round to 8 dp
+    so the contract's fee_within_fill constraint cannot underflow).
     """
+
+    if is_mock_mode():
+        # Mirror ``record_fill_with_split`` 90/10 split math without
+        # touching chain.builder_fee_router (which would raise if the
+        # operator wallet key is unset).
+        try:
+            from polyglot_alpha.chain import builder_fee_router as _bfr_mod
+            winner_share = getattr(_bfr_mod, "WINNER_SHARE", 0.90)
+        except Exception:  # pragma: no cover - chain pkg optional
+            winner_share = 0.90
+        treasury_share = 1.0 - winner_share
+        winner_amount = round(fill_amount_usdc * winner_share, 8)
+        treasury_amount = round(fill_amount_usdc * treasury_share, 8)
+        return {
+            "winner_tx": sim_tx_hash(),
+            "treasury_tx": sim_tx_hash(),
+            "winner_amount": winner_amount,
+            "treasury_amount": treasury_amount,
+            "winner": winner_address,
+            "treasury": treasury_address,
+        }
 
     builder_fee_router = _get_chain_builder_fee_router()
     if builder_fee_router is None:
@@ -1318,6 +1449,8 @@ def compute_content_hash(event_dict: dict[str, Any]) -> str:
 
 async def create_pending_event(
     event_dict: dict[str, Any],
+    *,
+    mode: str = "live",
 ) -> dict[str, Any]:
     """Synchronously persist a PENDING Event row and emit ``event.created``.
 
@@ -1325,7 +1458,16 @@ async def create_pending_event(
     navigate to ``/events/{id}`` while the lifecycle runs in a BackgroundTask.
     On a content-hash dedup hit, returns the existing event_id with
     ``deduped=True`` so the caller can surface HTTP 409.
+
+    ``mode`` is the W5 lifecycle mode (``"live"`` | ``"mock"``). It is
+    persisted on the new row and surfaced on the response so the trigger
+    handler can echo it back. On a dedup hit we surface the *existing*
+    row's mode rather than overwriting it.
     """
+
+    normalized_mode = (mode or "live").strip().lower()
+    if normalized_mode not in ("live", "mock"):
+        normalized_mode = "live"
 
     content_hash = compute_content_hash(event_dict)
     with session_scope() as session:
@@ -1338,6 +1480,7 @@ async def create_pending_event(
                 "status": existing.status,
                 "deduped": True,
                 "content_hash": content_hash,
+                "mode": existing.mode or "live",
             }
         event = Event(
             content_hash=content_hash,
@@ -1345,6 +1488,7 @@ async def create_pending_event(
             language=event_dict.get("language", "en"),
             title=event_dict.get("title"),
             status=EventStatus.PENDING.value,
+            mode=normalized_mode,
         )
         session.add(event)
         session.flush()
@@ -1354,13 +1498,18 @@ async def create_pending_event(
     hub = get_pubsub()
     await hub.publish(
         "event.created",
-        {"event_id": event_id, "content_hash": content_hash},
+        {
+            "event_id": event_id,
+            "content_hash": content_hash,
+            "mode": normalized_mode,
+        },
     )
     return {
         "event_id": event_id,
         "status": EventStatus.PENDING.value,
         "deduped": False,
         "content_hash": content_hash,
+        "mode": normalized_mode,
     }
 
 
@@ -1399,6 +1548,7 @@ async def run_lifecycle(
     auction_mode: str | None = None,
     confirm_real_polymarket: bool = False,
     precreated_event_id: int | None = None,
+    mode: str | None = None,
 ) -> dict[str, Any]:
     """Top-level wrapper that catches any unhandled exception in the inner
     lifecycle so events never stay forever in an in-flight status. On
@@ -1409,6 +1559,11 @@ async def run_lifecycle(
     default 1) so concurrent triggers queue up behind the active lifecycle
     instead of all running in parallel — protects the backend from the
     44-LLM-call burst that 4 simultaneous panel.evaluates would produce.
+
+    ``mode`` is the W5 lifecycle mode (``"live"`` | ``"mock"``). When
+    ``None`` (the historical default), the inner runner reads it from
+    the existing ``events.mode`` column on ``precreated_event_id`` and
+    falls back to ``"live"``.
     """
 
     sema = _get_lifecycle_sema()
@@ -1422,6 +1577,7 @@ async def run_lifecycle(
                 auction_mode=auction_mode,
                 confirm_real_polymarket=confirm_real_polymarket,
                 precreated_event_id=precreated_event_id,
+                mode=mode,
             )
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception(
@@ -1475,6 +1631,7 @@ async def _run_lifecycle_inner(
     auction_mode: str | None = None,
     confirm_real_polymarket: bool = False,
     precreated_event_id: int | None = None,
+    mode: str | None = None,
 ) -> dict[str, Any]:
     """Run the full lifecycle. Returns a summary dict.
 
@@ -1490,6 +1647,12 @@ async def _run_lifecycle_inner(
     * ``confirm_real_polymarket`` — explicit operator opt-in required
       before the Polymarket client posts to the live Gamma API. Without
       it, real-mode degrades to a blocked sentinel result.
+    * ``mode`` — W5 lifecycle mode (``"live"`` | ``"mock"``). When
+      ``None`` (back-compat), we read it off the existing ``events.mode``
+      column for ``precreated_event_id`` and ultimately fall back to
+      ``"live"``. Bound to a contextvar via :func:`set_event_mode` so
+      any subsystem can call :func:`get_event_mode` instead of plumbing
+      it through every helper.
     """
 
     window = (
@@ -1501,6 +1664,15 @@ async def _run_lifecycle_inner(
         auction_mode
         or os.environ.get("AUCTION_MODE", "real" if mock_bids is None else "mock")
     ).lower()
+    # W5-A2 note: the event-mode contextvar (``logging_ctx.set_event_mode``)
+    # is bound below once the event row is known (and the persisted
+    # ``Event.mode`` column is consulted). Chain-call subroutines read it
+    # via :func:`is_mock_mode`. We do NOT bind it here off
+    # ``resolved_auction_mode`` because that legacy knob uses the
+    # ``"real"`` / ``"mock"`` vocabulary while the lifecycle mode uses
+    # ``"live"`` / ``"mock"`` — keeping the bindings separate avoids
+    # surprising chain-layer fall-throughs when the caller only sets
+    # ``auction_mode='real'`` on a ``mode='mock'`` event.
     hub = get_pubsub()
     if publish is None:
         publish = hub.publish
@@ -1531,12 +1703,37 @@ async def _run_lifecycle_inner(
     # dedup check + insert + ``event.created`` publish (see
     # :func:`create_pending_event`), so we just adopt that row.
     content_hash = compute_content_hash(event_dict)
+    # Track the resolved W5 lifecycle mode so we can bind it to the
+    # contextvar after the event row is known. Subsystems read this via
+    # :func:`get_event_mode`; we also persist it on the DB row when we
+    # insert a fresh event (precreated rows already carry their own mode).
+    resolved_mode: str = (mode or "live").strip().lower()
+    if resolved_mode not in ("live", "mock"):
+        resolved_mode = "live"
+    # W5-A2: when the W5 lifecycle mode is ``"mock"``, force the legacy
+    # auction-mode knob to ``"mock"`` so the in-process auction path
+    # (deterministic bids, no chain calls) is taken regardless of the
+    # ``AUCTION_MODE`` env var. This keeps the two knobs from diverging.
+    if resolved_mode == "mock" and auction_mode is None:
+        resolved_auction_mode = "mock"
     if precreated_event_id is not None:
         event_id = precreated_event_id
         # Bind correlation id ASAP so every downstream log line in this
         # async context (auction, judges, polymarket, fee router) gets
         # the ``[event_id=N]`` prefix. See polyglot_alpha.logging_ctx.
         set_event_id(event_id)
+        # Pick up the persisted mode from the precreated row when the
+        # caller didn't pass an explicit ``mode=`` override. This keeps
+        # the contract "events.mode is the source of truth" intact.
+        if mode is None:
+            try:
+                with session_scope() as session:
+                    row = session.get(Event, event_id)
+                    if row is not None and row.mode:
+                        resolved_mode = row.mode
+            except Exception:  # pragma: no cover - defensive
+                pass
+        set_event_mode(resolved_mode)
         phases_completed = 1
     else:
         with session_scope() as session:
@@ -1551,6 +1748,7 @@ async def _run_lifecycle_inner(
                     "status": existing.status,
                     "deduped": True,
                     "content_hash": content_hash,
+                    "mode": existing.mode or "live",
                 }
             event = Event(
                 content_hash=content_hash,
@@ -1558,17 +1756,23 @@ async def _run_lifecycle_inner(
                 language=event_dict.get("language", "en"),
                 title=event_dict.get("title"),
                 status=EventStatus.PENDING.value,
+                mode=resolved_mode,
             )
             session.add(event)
             session.flush()
             event_id = event.id
             assert event_id is not None
 
-        # Bind correlation id for subsequent log lines in this lifecycle.
+        # Bind correlation id + lifecycle mode for subsequent log lines.
         set_event_id(event_id)
+        set_event_mode(resolved_mode)
         await publish(
             "event.created",
-            {"event_id": event_id, "content_hash": content_hash},
+            {
+                "event_id": event_id,
+                "content_hash": content_hash,
+                "mode": resolved_mode,
+            },
         )
         phases_completed = 1
 
@@ -1629,6 +1833,11 @@ async def _run_lifecycle_inner(
             "details": failure_details,
         }
 
+    # W5-A1: mock-mode lifecycles must not mutate the public
+    # ``AgentReputation`` snapshot. The Bid rows themselves are still
+    # persisted because event-linked queries JOIN through ``events.id``
+    # and filter ``events.mode='live'`` at query time.
+    is_mock_mode = resolved_mode == "mock"
     with session_scope() as session:
         for b in bids:
             session.add(
@@ -1641,12 +1850,13 @@ async def _run_lifecycle_inner(
                     tx_hash=b.tx_hash,
                 )
             )
-            _upsert_reputation(
-                session,
-                b.agent_address,
-                won=False,
-                quality=0.0,
-            )
+            if not is_mock_mode:
+                _upsert_reputation(
+                    session,
+                    b.agent_address,
+                    won=False,
+                    quality=0.0,
+                )
     for b in bids:
         await publish(
             "bid.submitted",
@@ -1763,13 +1973,16 @@ async def _run_lifecycle_inner(
             )
         )
         _set_status(session, event_id, EventStatus.COMMITTED)
-        _upsert_reputation(
-            session,
-            winner.agent_address,
-            won=True,
-            quality=judges.overall_score,
-            bump_bid=False,
-        )
+        # W5-A1: skip the win-record reputation upsert in mock mode so
+        # the public leaderboard stays free of fixture-driven wins.
+        if not is_mock_mode:
+            _upsert_reputation(
+                session,
+                winner.agent_address,
+                won=True,
+                quality=judges.overall_score,
+                bump_bid=False,
+            )
     await publish(
         "onchain.committed",
         {
@@ -1927,7 +2140,14 @@ async def _run_lifecycle_inner(
                 (winner.agent_address, builder_fee_amount, arc_tx_hash),
             ]
 
-        fee_is_simulated = all(tx is None for (_, _, tx) in legs)
+        # W5-A2: a leg is "simulated" when it has no real on-chain hash —
+        # either because the chain call failed (``tx_hash is None``) or
+        # because the lifecycle ran in ``mode='mock'`` and the hash is a
+        # synthetic ``0xsim_*`` sentinel. Treat both as simulated so the
+        # UI's status badge stays consistent across the two paths.
+        fee_is_simulated = all(
+            (tx is None or is_sim_hash(tx)) for (_, _, tx) in legs
+        )
 
         with session_scope() as session:
             for (recipient, amount, tx_hash) in legs:
@@ -1942,7 +2162,7 @@ async def _run_lifecycle_inner(
                         fee_amount=amount,
                         translator_address=recipient,
                         arc_tx_hash=tx_hash,
-                        is_simulated=(tx_hash is None),
+                        is_simulated=(tx_hash is None or is_sim_hash(tx_hash)),
                     )
                 )
             # Only the winner accrues against AgentReputation.cumulative_fees;

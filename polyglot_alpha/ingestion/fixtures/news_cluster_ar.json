@@ -1,0 +1,29 @@
+{
+  "title": "السعودية وأوبك+ تمددان تخفيضات إنتاج النفط الطوعية حتى نهاية 2026 لدعم الأسعار",
+  "sources": [
+    {
+      "name": "Al Arabiya",
+      "url": "https://example.com/sim/alarabiya/opec-saudi-cuts-2026",
+      "language": "ar"
+    },
+    {
+      "name": "Asharq",
+      "url": "https://example.com/sim/asharq/opec-plus-extension-2026",
+      "language": "ar"
+    }
+  ],
+  "language": "ar",
+  "category": "macro/energy_oil",
+  "summary": "أعلنت المملكة العربية السعودية ودول تحالف أوبك+ يوم الخميس عن تمديد تخفيضات الإنتاج الطوعية البالغة 2.2 مليون برميل يومياً حتى نهاية الربع الرابع من عام 2026، وذلك خلال اجتماع وزاري عُقد عبر الفيديو في فيينا. ووصف وزير الطاقة السعودي الأمير عبد العزيز بن سلمان القرار بأنه «إجراء وقائي لاستقرار السوق»، مشيراً إلى أن المملكة ستحافظ على تخفيضها الإضافي البالغ مليون برميل يومياً. وارتفعت أسعار خام برنت بأكثر من 3% بعد الإعلان لتتجاوز 88 دولاراً للبرميل، فيما حذر محللون من أن استمرار التخفيضات قد يثير توترات مع المستهلكين الرئيسيين بما في ذلك الولايات المتحدة والهند.",
+  "scoring": {
+    "event_quality_score": 0.84,
+    "primary_category": "macro/energy_oil",
+    "sub_categories": ["opec", "saudi_arabia", "oil_supply", "brent"],
+    "key_entities": ["OPEC+", "Saudi Arabia", "Prince Abdulaziz bin Salman", "Brent", "WTI"],
+    "source_credibility": 0.82,
+    "timeliness_score": 0.94,
+    "raw_summary": "Saudi Arabia and OPEC+ extended 2.2 million bpd voluntary production cuts through Q4 2026. Brent rose >3% above $88 on the announcement. Saudi keeps its extra 1 mbpd cut.",
+    "rejection_reason": null,
+    "model": "mock-fixture-ar"
+  }
+}
