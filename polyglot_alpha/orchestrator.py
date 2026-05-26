@@ -127,6 +127,57 @@ def _get_chain_question_registry():
 
 
 _builder_fee_import_warned: bool = False
+_reputation_import_warned: bool = False
+
+
+def _get_chain_reputation_registry():
+    """Return ``polyglot_alpha.chain.reputation_registry`` or ``None``.
+
+    Logged at most once per process so missing-chain environments don't
+    spam the log with identical ImportError lines.
+    """
+
+    global _reputation_import_warned
+    try:
+        from polyglot_alpha.chain import reputation_registry  # type: ignore
+
+        return reputation_registry
+    except ImportError as exc:  # pragma: no cover - chain pkg optional
+        if not _reputation_import_warned:
+            logger.warning(
+                "chain.reputation_registry unavailable (%s); "
+                "on-chain reputation updates will be skipped",
+                exc,
+            )
+            _reputation_import_warned = True
+        return None
+
+
+_judge_panel_import_warned: bool = False
+
+
+def _get_chain_judge_panel():
+    """Return ``polyglot_alpha.chain.judge_panel_client`` or ``None``.
+
+    W9-A wired the JudgePanel.sol adapter; missing-import is non-fatal
+    so events still finalize (with ``judges_attestation_tx=None``) on
+    machines without the chain package.
+    """
+
+    global _judge_panel_import_warned
+    try:
+        from polyglot_alpha.chain import judge_panel_client  # type: ignore
+
+        return judge_panel_client
+    except ImportError as exc:  # pragma: no cover - chain pkg optional
+        if not _judge_panel_import_warned:
+            logger.warning(
+                "chain.judge_panel_client unavailable (%s); on-chain "
+                "judge attestations will be skipped",
+                exc,
+            )
+            _judge_panel_import_warned = True
+        return None
 
 
 def _get_chain_builder_fee_router():
@@ -629,6 +680,17 @@ async def _collect_bids(
         return synthetic
 
     if auction_mode == "real" and event_dict is not None:
+        # W9-E: drive the 3 reference seeders to submit real ``submitBid``
+        # txs in parallel via the dispatch path. Each agent task in
+        # :func:`dispatch._safe_agent_bid` blocks on
+        # ``wait_for_transaction_receipt`` and only returns a non-None
+        # result when its ``submitBid`` mined with ``status=1`` — i.e.
+        # the bid is GUARANTEED to be present in
+        # ``TranslationAuction.auctions[eventId].bidders``. Bids that
+        # revert on the reputation gate / window-closed / insufficient
+        # gas are dropped at the dispatch layer so the orchestrator's
+        # pool reflects real on-chain auction state.
+        dispatch_bids: list[BidRecord] = []
         dispatch = _get_dispatch()
         if dispatch is not None and hasattr(dispatch, "collect_bids_inline"):
             try:
@@ -643,44 +705,166 @@ async def _collect_bids(
                     exc,
                 )
                 raw_bids = []
-            bids: list[BidRecord] = []
             for entry in raw_bids:
                 if not isinstance(entry, dict):
                     continue
-                bids.append(
+                # ``tx_hash`` is only present when the on-chain submitBid
+                # mined with status=1 (see dispatch._safe_agent_bid). Skip
+                # any stragglers without one (defence-in-depth — the
+                # dispatch layer already drops these).
+                if not entry.get("tx_hash"):
+                    continue
+                dispatch_bids.append(
                     BidRecord(
                         agent_address=str(entry.get("agent_address") or ""),
                         bid_amount=float(entry.get("bid_amount") or 0.0),
                         stake_amount=DEFAULT_STAKE_USDC,
                         candidate_hash=entry.get("candidate_hash"),
                         tx_hash=entry.get("tx_hash"),
-                        reputation=float(
-                            entry.get("reputation") or 1.0
-                        ),
+                        reputation=float(entry.get("reputation") or 1.0),
                     )
                 )
-            if bids:
-                logger.info(
-                    "dispatch.collect_bids_inline returned %d bids", len(bids)
-                )
-                return bids
-            logger.warning(
-                "dispatch.collect_bids_inline returned 0 bids; "
-                "falling back to legacy real-auction path"
+            logger.info(
+                "dispatch.collect_bids_inline: %d seeder(s) landed submitBid "
+                "on chain (event_id=%s)",
+                len(dispatch_bids),
+                event_id,
             )
 
-        # Legacy in-process real-auction path (drives 4 agents directly
-        # on-chain). Kept for callers who set HACKATHON_WALLET_PRIVATE_KEY
-        # and want each agent's submit_bid to hit the testnet.
-        bids = await _drive_real_auction(event_dict, event_id, window_seconds)
-        if bids:
-            return bids
-        logger.warning(
-            "real auction produced 0 bids; event will terminate as FAILED"
+        # If the dispatch path did not land any bids, fall back to the
+        # legacy in-process real-auction driver (kept for backward-compat
+        # with operators who funded their seeders before W9-E).
+        if not dispatch_bids:
+            logger.warning(
+                "dispatch.collect_bids_inline produced 0 on-chain bids; "
+                "falling back to legacy real-auction path"
+            )
+            dispatch_bids = await _drive_real_auction(
+                event_dict, event_id, window_seconds
+            )
+
+        if not dispatch_bids:
+            logger.warning(
+                "real auction produced 0 on-chain bids (event_id=%s); event "
+                "will terminate as FAILED",
+                event_id,
+            )
+            # Honesty: do NOT fabricate a synthetic bid here. Returning an
+            # empty list lets the caller mark the event FAILED(no_bids).
+            return []
+
+        # Reconcile against on-chain ``getBid(eventId, bidder)`` so the
+        # orchestrator only persists bids that actually sit in contract
+        # storage. ``submitBid`` overwrites earlier bids from the same
+        # bidder, so reading ``getBid`` is the canonical projection of
+        # ``BidSubmitted`` events. We use a direct ``eth_call`` instead
+        # of ``eth_getLogs`` because the upstream RPC at testnet.arc.
+        # network rejects unbounded log queries with HTTP 413.
+        confirmed_bids: list[BidRecord] = dispatch_bids
+        try:
+            from .onchain import OnChainClient, event_id_to_bytes32, units_to_usdc
+            onchain = OnChainClient()
+            # W11: route every call site through the canonical encoder so
+            # ``submitBid`` (dispatch) and ``getBid`` (here) cannot drift —
+            # both end up at the same ``mapping(bytes32 => Auction)`` slot.
+            eid_bytes = event_id_to_bytes32(event_id)
+            logger.debug(
+                "BID ENCODING: event_id=%s -> bytes32=0x%s (getBid lookup)",
+                event_id,
+                eid_bytes.hex(),
+            )
+            reconciled: list[BidRecord] = []
+            for bid in dispatch_bids:
+                try:
+                    bid_units, _ = onchain.auction.functions.getBid(
+                        eid_bytes, bid.agent_address
+                    ).call()
+                except Exception as exc:  # pragma: no cover - RPC noise
+                    logger.warning(
+                        "getBid lookup failed (event=%s bidder=%s): %s; "
+                        "trusting dispatch tx_hash",
+                        event_id,
+                        bid.agent_address,
+                        exc,
+                    )
+                    reconciled.append(bid)
+                    continue
+                if int(bid_units) <= 0:
+                    logger.warning(
+                        "on-chain getBid(%s, %s) returned 0 even though "
+                        "dispatch tx_hash=%s mined status=1; dropping",
+                        event_id,
+                        bid.agent_address,
+                        bid.tx_hash,
+                    )
+                    continue
+                # Use chain-canonical amount (units_to_usdc) so the DB
+                # row matches what ``settleAuction`` saw at execution
+                # time. Dispatch's float can drift by a USDC sub-unit.
+                reconciled.append(
+                    BidRecord(
+                        agent_address=bid.agent_address,
+                        bid_amount=units_to_usdc(int(bid_units)),
+                        stake_amount=bid.stake_amount,
+                        candidate_hash=bid.candidate_hash,
+                        tx_hash=bid.tx_hash,
+                        reputation=bid.reputation,
+                    )
+                )
+            confirmed_bids = reconciled
+        except (ImportError, AttributeError) as exc:
+            logger.warning(
+                "chain reconciliation skipped (%s); trusting dispatch tx hashes",
+                exc,
+            )
+
+        if not confirmed_bids:
+            logger.warning(
+                "real auction produced 0 chain-confirmed bids (event_id=%s); "
+                "event will terminate as FAILED",
+                event_id,
+            )
+            return []
+
+        # Ensure the on-chain auction deadline has passed before the
+        # caller invokes ``settleAuction`` (contract requires
+        # ``block.timestamp >= a.deadline``). The deadline is
+        # ``open_block.timestamp + AUCTION_WINDOW_SECONDS``; we sleep
+        # until current block timestamp clears it (plus a 2s safety
+        # margin for sequencer clock skew).
+        try:
+            from .onchain import OnChainClient, event_id_to_bytes32
+            onchain = OnChainClient()
+            # W11: same canonical encoder as the dispatch ``submitBid`` site.
+            eid_bytes = event_id_to_bytes32(event_id)
+            auction_state = onchain.auction.functions.getAuction(
+                eid_bytes
+            ).call()
+            deadline_ts = int(auction_state[1])
+            import time as _time
+            now_ts = int(_time.time())
+            sleep_s = max(0, deadline_ts - now_ts + 2)
+            if sleep_s > 0:
+                logger.info(
+                    "auction deadline=%d, sleeping %ds before settle",
+                    deadline_ts,
+                    sleep_s,
+                )
+                await asyncio.sleep(sleep_s)
+        except Exception as exc:  # pragma: no cover - best-effort wait
+            logger.warning(
+                "deadline-wait pre-settle failed (%s); proceeding immediately",
+                exc,
+            )
+
+        logger.info(
+            "real-auction: %d on-chain bid(s) confirmed for event_id=%s "
+            "(addresses=%s)",
+            len(confirmed_bids),
+            event_id,
+            [b.agent_address for b in confirmed_bids],
         )
-        # Honesty: do NOT fabricate a synthetic bid here. Returning an
-        # empty list lets the caller mark the event FAILED(no_bids).
-        return []
+        return confirmed_bids
 
     # Non-real / offline path: try the passive chain listener for any
     # observed on-chain bids. If nothing is observed we still return an
@@ -916,6 +1100,112 @@ async def _evaluate_with_judges(
             else JudgeVerdict.FAIL.value
         ),
     )
+
+
+# Hard timeout for the on-chain judge-panel attestation. The mock path
+# is synchronous so this only bites the live path; we keep it short to
+# avoid hanging the lifecycle when the Arc sequencer stalls.
+_JUDGE_ATTEST_TIMEOUT_S: float = 30.0
+
+
+async def _attest_judges_onchain(
+    event_id: int,
+    judges: JudgePanelResult,
+    *,
+    auction_mode: str = "real",
+) -> Optional[dict[str, Any]]:
+    """Stamp the 11-judge aggregate verdict on-chain (γ-strategy).
+
+    W9-A integration. The contract requires a registered judge address;
+    we use the operator wallet as the panel aggregator (lazy-registered
+    on first use). The full 11-judge dossier is hashed off-chain
+    (``keccak256(canonical_json)``) and only the digest + scaled overall
+    score are emitted via ``JudgePanel.recordAttestation``. The dossier
+    JSON stays in the DB / IPFS so anyone can re-hash and verify.
+
+    Returns the attestation result dict (tx_hash, attestation_hash,
+    score_scaled, aggregator_address) on success, ``None`` on hard
+    failure. Mock mode returns the dict with a ``0xsim_*`` tx_hash so
+    the UI muted-link gate keeps working.
+    """
+
+    judges_dossier = _build_judges_dossier_for_attestation(judges)
+    judge_panel = _get_chain_judge_panel()
+    if judge_panel is None:
+        logger.info(
+            "orchestrator: judge_panel client unavailable; skipping "
+            "on-chain attestation for event=%s",
+            event_id,
+        )
+        return None
+    try:
+        return await asyncio.wait_for(
+            judge_panel.record_aggregate_attestation(
+                event_id,
+                judges.overall_score,
+                judges_dossier,
+            ),
+            timeout=_JUDGE_ATTEST_TIMEOUT_S,
+        )
+    except asyncio.TimeoutError:
+        logger.error(
+            "orchestrator: judge panel on-chain attestation timed out "
+            "after %.0fs (event=%s); continuing without tx_hash",
+            _JUDGE_ATTEST_TIMEOUT_S,
+            event_id,
+        )
+        return None
+    except _CHAIN_RUNTIME_ERRORS as exc:
+        logger.error(
+            "orchestrator: judge panel on-chain attestation failed "
+            "(event=%s): %s",
+            event_id,
+            exc,
+        )
+        return None
+
+
+def _build_judges_dossier_for_attestation(
+    judges: JudgePanelResult,
+) -> list[dict[str, Any]]:
+    """Extract the 11-judge dossier from the (possibly-private) result.
+
+    The panel smuggles its full dossier through ``translation_scores``
+    under the ``_judges`` underscore-prefixed key (see ``judges/panel.py``
+    line 717). Pull it out so we can hash the full per-judge breakdown
+    on-chain. Falls back to synthesizing a minimal dossier from the
+    public translation_scores / style_alignment_passes when the panel
+    did not emit one (legacy mock paths).
+    """
+
+    if isinstance(judges.translation_scores, dict):
+        raw = judges.translation_scores.get("_judges")
+        if isinstance(raw, list) and raw:
+            return [dict(j) for j in raw if isinstance(j, dict)]
+    dossier: list[dict[str, Any]] = []
+    for name, score in (judges.translation_scores or {}).items():
+        if isinstance(name, str) and name.startswith("_"):
+            continue
+        dossier.append(
+            {
+                "name": str(name),
+                "passed": True,
+                "score": float(score) if isinstance(score, (int, float)) else 0.0,
+                "reason": "",
+            }
+        )
+    for name, passed in (judges.style_alignment_passes or {}).items():
+        if isinstance(name, str) and name.startswith("_"):
+            continue
+        dossier.append(
+            {
+                "name": str(name),
+                "passed": bool(passed),
+                "score": 1.0 if passed else 0.0,
+                "reason": "",
+            }
+        )
+    return dossier
 
 
 async def _commit_question_onchain(
@@ -1221,6 +1511,134 @@ async def _record_builder_fee_split_on_chain(
             market_id,
             winner_address,
             treasury_address,
+            exc,
+        )
+        return None
+
+
+# ---------------------------------------------------------------------------
+# W9-B: on-chain ReputationRegistry updates
+# ---------------------------------------------------------------------------
+
+
+# Per-call timeout for ReputationRegistry writes. Three signals max per
+# lifecycle (auction/quality/fee); we cap each at 30s so a stalled RPC
+# can't block the lifecycle's final SUBMITTED transition indefinitely.
+REPUTATION_UPDATE_TIMEOUT_SECONDS: float = 30.0
+
+
+async def _update_reputation_on_chain_post_commit(
+    winner_address: str,
+    *,
+    quality_passed: bool,
+    mode: str,
+) -> dict[str, str | None]:
+    """Push the (won, quality) reputation signals on-chain after Phase 5.
+
+    Returns a ``{"auction": tx, "quality": tx}`` dict on success (values
+    may be ``None`` on per-leg failure). Returns an empty dict in mock
+    mode or when the chain package is unavailable.
+
+    Errors are logged but never re-raised: an on-chain reputation update
+    must not block a lifecycle that has already committed the question
+    on-chain (Phase 5 success is the load-bearing step).
+    """
+
+    if mode != "live":
+        return {}
+    repo = _get_chain_reputation_registry()
+    if repo is None:
+        return {}
+    try:
+        result = await asyncio.wait_for(
+            repo.update_reputation(
+                winner_address,
+                won=True,
+                quality_passed=bool(quality_passed),
+            ),
+            timeout=REPUTATION_UPDATE_TIMEOUT_SECONDS,
+        )
+        logger.info(
+            "reputation_post_commit: winner=%s quality_passed=%s txs=%s",
+            winner_address,
+            bool(quality_passed),
+            result,
+        )
+        return result
+    except asyncio.TimeoutError:
+        logger.error(
+            "reputation_post_commit timed out after %.1fs (winner=%s)",
+            REPUTATION_UPDATE_TIMEOUT_SECONDS,
+            winner_address,
+        )
+        return {}
+    except _CHAIN_RUNTIME_ERRORS as exc:
+        logger.error(
+            "reputation_post_commit chain call failed (winner=%s): %s",
+            winner_address,
+            exc,
+        )
+        return {}
+    except RuntimeError as exc:
+        logger.error(
+            "reputation_post_commit failed (winner=%s): %s",
+            winner_address,
+            exc,
+        )
+        return {}
+
+
+async def _update_reputation_fee_on_chain(
+    winner_address: str,
+    *,
+    fee_usdc: float,
+    mode: str,
+) -> str | None:
+    """Push the fee signal on-chain after Phase 7 builder-fee split.
+
+    Returns the tx hash on success, or ``None`` on any failure (mock
+    mode, chain pkg missing, RPC error, contract revert, zero fee).
+    """
+
+    if mode != "live":
+        return None
+    if fee_usdc is None or fee_usdc <= 0:
+        return None
+    repo = _get_chain_reputation_registry()
+    if repo is None:
+        return None
+    try:
+        tx_hash = await asyncio.wait_for(
+            repo.update_reputation_fee_only(
+                winner_address, fee_usdc=float(fee_usdc)
+            ),
+            timeout=REPUTATION_UPDATE_TIMEOUT_SECONDS,
+        )
+        logger.info(
+            "reputation_fee_only: winner=%s fee_usdc=%.6f tx=%s",
+            winner_address,
+            float(fee_usdc),
+            tx_hash,
+        )
+        return tx_hash
+    except asyncio.TimeoutError:
+        logger.error(
+            "reputation_fee_only timed out after %.1fs (winner=%s)",
+            REPUTATION_UPDATE_TIMEOUT_SECONDS,
+            winner_address,
+        )
+        return None
+    except _CHAIN_RUNTIME_ERRORS as exc:
+        logger.error(
+            "reputation_fee_only chain call failed (winner=%s): %s",
+            winner_address,
+            exc,
+        )
+        return None
+    except RuntimeError as exc:
+        logger.error(
+            "reputation_fee_only failed (winner=%s): %s",
+            winner_address,
             exc,
         )
         return None
@@ -1922,11 +2340,42 @@ async def _run_lifecycle_inner(
     with session_scope() as session:
         _set_status(session, event_id, EventStatus.EVALUATING)
     judges = await _evaluate_with_judges(pipeline.final_question)
+
+    # W9-A: stamp the 11-judge aggregate verdict on-chain via
+    # ``JudgePanel.recordAttestation``. We do this BEFORE persisting the
+    # ``QualityScore`` row so the tx hash can be smuggled through the
+    # ``translation_scores`` JSON column (no schema migration). Mock
+    # mode produces a synthetic ``0xsim_*`` hash that the UI mutes.
+    # NB: ``is_mock_mode`` is locally shadowed by a bool above (line
+    # ~2125); call the helper as ``_attest_judges_onchain`` which
+    # imports the module-level function via the chain.judge_panel_client
+    # adapter and handles both mock and live paths.
+    judges_attestation: Optional[dict[str, Any]] = await _attest_judges_onchain(
+        event_id, judges, auction_mode=resolved_auction_mode
+    )
+
+    # Smuggle the attestation result through the QualityScore JSON
+    # column under an underscore-prefixed key (existing convention; see
+    # judges/panel.py for ``_judges`` / ``_panelPartial``). The API
+    # serializer surfaces this as the top-level ``judgesAttestation``
+    # field, which the UI's JudgePanel renders as an arcscan link.
+    translation_scores_for_db = dict(judges.translation_scores or {})
+    if judges_attestation is not None:
+        translation_scores_for_db["_judgesAttestation"] = {
+            "txHash": judges_attestation.get("tx_hash"),
+            "attestationHash": judges_attestation.get("attestation_hash"),
+            "scoreScaled": judges_attestation.get("score_scaled"),
+            "aggregatorAddress": judges_attestation.get(
+                "aggregator_address"
+            ),
+            "registerTx": judges_attestation.get("register_tx"),
+            "strategy": judges_attestation.get("strategy"),
+        }
     with session_scope() as session:
         session.add(
             QualityScore(
                 event_id=event_id,
-                translation_scores=judges.translation_scores,
+                translation_scores=translation_scores_for_db,
                 style_alignment_passes=judges.style_alignment_passes,
                 overall_score=judges.overall_score,
                 verdict=judges.verdict,
@@ -1938,6 +2387,11 @@ async def _run_lifecycle_inner(
             "event_id": event_id,
             "verdict": judges.verdict,
             "overall_score": judges.overall_score,
+            "judges_attestation_tx": (
+                judges_attestation.get("tx_hash")
+                if judges_attestation
+                else None
+            ),
         },
     )
     phases_completed = 4
@@ -1992,6 +2446,21 @@ async def _run_lifecycle_inner(
         },
     )
     phases_completed = 5
+
+    # ----- W9-B: push (won, quality) reputation signals on-chain -----
+    # Mock-mode lifecycles intentionally skip this so the on-chain
+    # ReputationRegistry is not polluted by fixture-driven wins. Live
+    # lifecycles push the two signals immediately after a successful
+    # commit so TranslationAuction's Sybil divisor reflects the win
+    # before the next auction opens. The fee signal is deferred to
+    # Phase 7 where the actual winner-share USDC amount is known.
+    reputation_post_commit_txs: dict[str, str | None] = (
+        await _update_reputation_on_chain_post_commit(
+            winner.agent_address,
+            quality_passed=(judges.verdict == JudgeVerdict.PASS.value),
+            mode=resolved_mode,
+        )
+    )
 
     # ----- Step 8: Submit to Polymarket -----
     market = await _submit_to_polymarket(
@@ -2195,6 +2664,20 @@ async def _run_lifecycle_inner(
                 "is_simulated": fee_is_simulated,
             },
         )
+
+        # ----- W9-B: push fee reputation signal on-chain -----
+        # The winner-leg USDC amount (90% of the builder fee) is the
+        # signal magnitude that feeds the on-chain ``cumulativeFeesEarned``
+        # term of the EMA reputation score. Mock mode and unrecognized
+        # winner addresses (e.g. ``0xagent_lo`` test fixtures) skip the
+        # call so the deployed contract stays free of fixture noise.
+        winner_leg_amount = builder_fee_amount * winner_share
+        if winner_addr_looks_real:
+            await _update_reputation_fee_on_chain(
+                winner.agent_address,
+                fee_usdc=winner_leg_amount,
+                mode=resolved_mode,
+            )
         phases_completed = 7
 
     await _finalize(event_id, EventStatus.SUBMITTED.value)

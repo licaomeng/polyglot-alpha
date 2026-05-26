@@ -39,7 +39,7 @@ flowchart TB
     class O op
 ```
 
-The protocol does not privilege seeder agents. Seeders win exactly when their bid produces the highest reputation-adjusted score — same gate every external operator passes through. A foreign-language news event triggers a 60-second sealed-bid auction; the winning bid is the one with the highest `score = bid * 1e18 / max(reputation, 1.0)` (on-chain truth at [`contracts/src/TranslationAuction.sol`](./contracts/src/TranslationAuction.sol)); the winner authors a candidate question; the 11-judge panel scores it; on PASS it is committed to `QuestionRegistry` and submitted to Polymarket V2 with our builder code attached. Every fill against that market thereafter pays a 0.4% builder fee to `BuilderFeeRouter`, which splits it 90% to the winning agent's wallet, 10% to the platform — forever, via the on-chain split helper `record_fill_with_split`.
+The protocol does not privilege seeder agents. Seeders win exactly when their bid produces the highest reputation-adjusted score — same gate every external operator passes through. A foreign-language news event triggers a 60-second sealed-bid auction; the winning bid is the one with the highest `score = bid * 1e18 / max(reputation, 1.0)` (on-chain truth at [`contracts/src/TranslationAuction.sol`](./contracts/src/TranslationAuction.sol)); the winner authors a candidate question; the 11-judge panel scores it off-chain and the operator (acting as γ-aggregator) commits **one aggregate attestation per event** — `keccak256(canonical_json(11_judge_dossier))` + `overall_score * 1000` — to `JudgePanel.sol`; the full per-judge dossier stays in the DB and on IPFS so anyone can re-hash and verify. On PASS the candidate is committed to `QuestionRegistry` and submitted to Polymarket V2 with our builder code attached. Every fill against that market thereafter pays a 0.4% builder fee to `BuilderFeeRouter`, which splits it 90% to the winning agent's wallet, 10% to the platform — forever, via the on-chain split helper `record_fill_with_split`. After each event the orchestrator also writes three on-chain reputation signals (`updateOnAuction`, `updateOnQuality`, `updateOnFee`) to `ReputationRegistry` so the EWMA state visible to the next auction is observable on Arc.
 
 ---
 
@@ -69,17 +69,17 @@ sequenceDiagram
     Arc->>J: settle: highest-score qualified bid wins
     IPFS->>J: winning candidate text (verified hash)
     J->>Arc: PASS verdict → QuestionRegistry
-    J->>Arc: score + reputation delta → ReputationRegistry
-    J-->>Arc: attestation → JudgePanel.sol (Phase 2)
+    J->>Arc: γ-aggregate attestation → JudgePanel.sol (W9-A live)
+    J->>Arc: 3× updateOn{Auction,Quality,Fee} → ReputationRegistry (W9-B live)
     Arc->>PM: commit_tx + question + builder code
     PM->>Arc: 0.4% builder fee per fill → BuilderFeeRouter
     Arc->>BID: 90% auto-split to winner wallet
     Arc->>Arc: 10% auto-split to treasury
-    Arc-->>BID: updated reputation (next auction, Phase 2)
+    Arc->>BID: updated reputation feeds next auction (live)
     Arc-->>Arc: slash on bias (JudgePanel → ReputationRegistry, Phase 2)
 ```
 
-Solid arrows (`->>`) are flows live in the demo today. Dashed arrows (`-->>`) are Phase 2: on-chain judge attestation, judge-stake slashing, and the reputation feedback loop closure (waiting on real Polymarket markets to age into resolution). Each lifeline is a major component; the seven lanes (left → right) correspond to the seven owners in Table 2 below.
+Solid arrows (`->>`) are flows live in the demo today (verified end-to-end on Arc testnet — including the γ-aggregate judge attestation in W9-A and the 3× `ReputationRegistry` updates in W9-B). Dashed arrows (`-->>`) are Phase 2 — judge-stake slashing on systematic bias detection (waiting on real Polymarket markets to age into resolution). Each lifeline is a major component; the seven lanes (left → right) correspond to the seven owners in Table 2 below.
 
 ### Table 1 · Numbered Flow Reference
 
@@ -98,12 +98,12 @@ Numbers below match the auto-numbered messages in the sequence diagram (top → 
 | 9 | IPFS → Judge panel | winning candidate text (verified hash) | `polyglot_alpha/judges/panel.py` |
 | 10 | Judge panel → Arc Chain | PASS verdict → QuestionRegistry | `polyglot_alpha/judges/panel.py` |
 | 11 | Judge panel → Arc Chain | score + reputation delta → ReputationRegistry | `polyglot_alpha/judges/panel.py` |
-| 12 | Judge panel → Arc Chain (Phase 2) | attestation → JudgePanel.sol | `contracts/src/JudgePanel.sol` |
+| 12 | Judge panel → Arc Chain (W9-A live) | γ-aggregate attestation: `keccak256(canonical_json(11-judge dossier))` + `overall_score * 1000`, one TX per event (~52,765 gas); full dossier stays in DB + IPFS for independent re-hash | `contracts/src/JudgePanel.sol`, `polyglot_alpha/chain/judge_panel.py::commit_aggregate_attestation` |
 | 13 | Arc Chain → Polymarket V2 | commit_tx hash + question payload + builder code | `polyglot_alpha/polymarket/client.py` |
 | 14 | Polymarket V2 → Arc Chain | 0.4% builder fee per fill → BuilderFeeRouter (forever) | `polyglot_alpha/polymarket/fill_listener.py` |
 | 15 | Arc Chain → winner wallet | 90% auto on-chain split | `contracts/src/BuilderFeeRouter.sol::recordFill` |
 | 16 | Arc Chain → Arc Chain | 10% auto on-chain split to treasury | `contracts/src/BuilderFeeRouter.sol` |
-| 17 | Arc Chain → bidders (Phase 2) | updated reputation feeds next auction | `polyglot_alpha/chain/reputation_registry.py` |
+| 17 | Arc Chain → bidders (W9-B live) | 3 on-chain updates per event — `updateOnAuction(won)`, `updateOnQuality(passed)`, `updateOnFee(amount)`; ~225k gas per event; EWMA recomputed in-contract and visible to the next auction | `polyglot_alpha/chain/reputation_registry.py` |
 | 18 | Arc Chain → Arc Chain (Phase 2) | slash on systematic bias (JudgePanel → ReputationRegistry) | `contracts/src/JudgePanel.sol` |
 
 ### Table 2 · Component Inventory
@@ -398,12 +398,12 @@ Implementation: [`polyglot_alpha/ipfs.py::pin_candidate`](./polyglot_alpha/ipfs.
 
 | Mechanism | How |
 |---|---|
-| Auction settlement | `TranslationAuction.settleAuction` — operator-permissioned; result is on-chain state |
+| Auction settlement | `TranslationAuction.settleAuction` — operator-permissioned; result is on-chain state. (Note: bid selection is currently DB-picked with a ceremonial on-chain settle; **W9-E is rolling out real `submitBid` from each bidder wallet + chain-read settle**.) |
 | Builder-fee routing | 90/10 split via two `recordFill` TXs; settled balances in `BuilderFeeRouter.cumulativeFees` |
-| Reputation accumulation | α=0.85 EWMA in `ReputationRegistry`; multi-authority slash |
+| Reputation accumulation | α=0.85 EWMA in `ReputationRegistry`; **W9-B live** — 3 updates per event (`updateOnAuction`, `updateOnQuality`, `updateOnFee`); ~225k gas/event; chain↔DB delta verified by `scripts/verify_chain_consistency.py` |
 | Candidate provenance | SHA-256 → IPFS → `QuestionRegistry.candidateHash` |
 | Anti-Sybil stake | 100 USDC `transferFrom` enforced before `registerAgent` |
-| Judge attestations | Quality scores attested via `JudgePanel.register*Judge` |
+| Judge attestations | **W9-A live** — γ-aggregate strategy: `keccak256(canonical_json(11-judge dossier))` + `overall_score * 1000` committed in one TX per event (~52,765 gas); operator-as-aggregator signs; full dossier stays in DB and IPFS so any third party can recompute the hash and challenge a mismatch. Per-judge attestation surface (`registerTranslationJudge` / `registerStyleJudge` / individual `recordAttestation`) remains available for Phase 2 expansion. |
 
 **Centralized today (and what we'd need to fix it):**
 
@@ -421,7 +421,7 @@ Implementation: [`polyglot_alpha/ipfs.py::pin_candidate`](./polyglot_alpha/ipfs.
 | `candidate_hash` → IPFS | trustless (verifiable) | IPFS pin lost → provenance audit fails until re-pin; content addressing means anyone can re-pin the same CID |
 | Builder-fee 90/10 split | trustless (`BuilderFeeRouter` enforced) | Arc chain halt; partial-leg success leaves treasury with > 90% briefly |
 | Reputation registration | trustless (`USDC.transferFrom` enforced) | Operator burns stake then re-registers; mitigated by reputation persistence on address |
-| 11-judge LLM panel | trusted (centralized in v1) | Platform could censor a question that passed; mitigated by public score broadcast over SSE |
+| 11-judge LLM panel | trusted (centralized in v1) + cryptographic commitment | LLM inferences run off-chain on operator-controlled infra. **W9-A live**: per event the operator commits `keccak256(canonical_json(11-judge dossier))` to `JudgePanel.sol` (γ-aggregate strategy); the full dossier is in the DB + on IPFS, so anyone re-running `canonical_json + keccak256` over the dossier can detect post-hoc tampering or omission. Platform can still censor by refusing to commit; mitigated by public score broadcast over SSE + the audit script `scripts/verify_chain_consistency.py`. |
 | RSS aggregator | trusted (centralized in v1) | Platform could filter newsworthy events out; mitigated by per-event `source_url` log |
 | Polymarket gateway | trusted (Polymarket centralized) | Out of scope — we publish to whatever Polymarket exposes |
 
@@ -862,7 +862,7 @@ The overall score is a weighted average over the 11 judges' individual `score` f
 | QuestionRegistry | `0x9b7D81064E76E6E70e238A6EA361A9E2da2a81B1` | `registerQuestion(...)` · `getQuestion(uint256 id)` | [`chain/question_registry.py`](./polyglot_alpha/chain/question_registry.py) |
 | BuilderFeeRouter | `0xcE7596d9b21333Eae441E912699514F6fBD150e5` | `recordFill(...)` · `claimFees(address translator)` · `fund(uint256 amount)` · `getCumulativeFees(address)` | [`chain/builder_fee_router.py`](./polyglot_alpha/chain/builder_fee_router.py) (incl. `record_fill_with_split` helper) |
 | ReputationRegistry | `0x00267FD2FFabDDB48bBF16e3a91C15DE260eF9F1` | `updateOnAuction` · `updateOnQuality` · `updateOnFee` · `slashReputation` · `getReputation` · `getStats` | [`chain/reputation_registry.py`](./polyglot_alpha/chain/reputation_registry.py) |
-| JudgePanel | `0x1eE7BADc48b52B36e086adb4a98E00cbff4efd9a` | `registerTranslationJudge` · `registerStyleJudge` · `recordAttestation` · `slashJudge` · `getJudgeInfo` | (read-only from off-chain panel — Phase 2 attestation) |
+| JudgePanel | `0x1eE7BADc48b52B36e086adb4a98E00cbff4efd9a` | `registerTranslationJudge` · `registerStyleJudge` · `recordAttestation` · `slashJudge` · `getJudgeInfo` | [`chain/judge_panel.py::commit_aggregate_attestation`](./polyglot_alpha/chain/judge_panel.py) — γ-aggregate (W9-A live, ~52,765 gas/event) |
 
 #### 11.4.1 What each contract does
 
@@ -872,9 +872,9 @@ The overall score is a weighted average over the 11 judges' individual `score` f
 
 - **BuilderFeeRouter** ([`contracts/src/BuilderFeeRouter.sol`](./contracts/src/BuilderFeeRouter.sol)). The 0.4% Polymarket builder fee lands in this contract per fill via `recordFill` ([`BuilderFeeRouter.sol`](./contracts/src/BuilderFeeRouter.sol)). The new `record_fill_with_split` helper at [`chain/builder_fee_router.py`](./polyglot_alpha/chain/builder_fee_router.py) (W7) implements the 90% winner / 10% treasury split — historically the contract paid 100% to the winner; the 10% platform cut is now routed through this helper. Winners pull via `claimFees`.
 
-- **ReputationRegistry** ([`contracts/src/ReputationRegistry.sol`](./contracts/src/ReputationRegistry.sol)). EWMA reputation with α=0.85. Three pull signals: `updateOnAuction(won)`, `updateOnQuality(passed)`, `updateOnFee(amount)`. The `_recompute` function at [`ReputationRegistry.sol`](./contracts/src/ReputationRegistry.sol) blends the three. Slashing via `slashReputation` is `onlyAuthorized`. Stake-on-register is 100 USDC; the contract holds USDC until the operator un-stakes.
+- **ReputationRegistry** ([`contracts/src/ReputationRegistry.sol`](./contracts/src/ReputationRegistry.sol)). EWMA reputation with α=0.85. Three pull signals: `updateOnAuction(won)`, `updateOnQuality(passed)`, `updateOnFee(amount)`. The `_recompute` function at [`ReputationRegistry.sol`](./contracts/src/ReputationRegistry.sol) blends the three. **W9-B made all three signals live on-chain** — every event now writes ~225k gas worth of updates and the contract state is what feeds the next auction's reputation gate; the audit script `scripts/verify_chain_consistency.py` checks `chain.getStats(winner) - chain.getStats_pre == DB.expected_delta`. Slashing via `slashReputation` is `onlyAuthorized`. Stake-on-register is 100 USDC; the contract holds USDC until the operator un-stakes. **Quirk worth knowing:** the EWMA formula uses 85% retention on the prior, so a winner with prior reputation `1.0` and `won=true, passed=true` ends up around `0.753` immediately after `_recompute` — the formula is intended for steady-state aging, and a single event cannot in one shot exceed the prior. See `outputs/W9B_reputation_verification.json` for the live delta example.
 
-- **JudgePanel** ([`contracts/src/JudgePanel.sol`](./contracts/src/JudgePanel.sol)). Attestation surface: judges register their wallet + USDC stake (`registerTranslationJudge` 2 USDC, `registerStyleJudge` 1 USDC) and call `recordAttestation` to write their score on-chain. Phase-2: panel will push every verdict here so any third party can replay aggregation independently. `slashJudge` exists for systematic bias detection.
+- **JudgePanel** ([`contracts/src/JudgePanel.sol`](./contracts/src/JudgePanel.sol)). Attestation surface: judges register their wallet + USDC stake (`registerTranslationJudge` 2 USDC, `registerStyleJudge` 1 USDC) and call `recordAttestation` to write their score on-chain. **W9-A made one aggregate attestation per event live** — the orchestrator (acting as γ-aggregator) computes `keccak256(canonical_json([d1, d2, ..., d8, bleu, comet, mqm]))` over the 11-judge dossier and submits a single `recordAttestation` carrying that hash plus `overall_score * 1000`. Measured gas: 52,765 per event. The full per-judge dossier (rationales, scores, model ids, timings) stays in the DB + on IPFS so any third party can re-fetch and recompute the keccak; mismatch ⇒ tampering. Per-judge `recordAttestation` is still available and reserved for a future N-of-M challenge mode. `slashJudge` exists for systematic bias detection (Phase 2).
 
 #### 11.4.2 Why Arc, not Ethereum / Polygon / Solana?
 
@@ -972,20 +972,28 @@ Honest accounting — what reviewers see when they pull this repo and run the de
 - 3 reference seeder agents with distinct wallets, distinct prompts/personas/temperatures, and distinct bid strategies — real Claude Haiku 4.5 calls on every auction (one Anthropic snapshot, three personas)
 - Real RSS ingestion from 8 multilingual feeds (Xinhua, BBC Chinese, RFI Chinese, Caixin, SCMP, Asahi Shimbun, Le Monde, Deutsche Welle)
 - 11-judge panel — judges make real LLM calls on Anthropic Claude Haiku 4.5 (MQM, D1-LLM, D2/D3/D6/D7 batched, D5-LLM); BLEU/COMET/D8/D4 are deterministic or model-backed offline
-- `TranslationAuction.openAuction` / `submitBid` / `settleAuction` — real on-chain TX, recorded in [`outputs/tx_hashes.json`](./outputs/tx_hashes.json)
+- **`JudgePanel.sol` γ-aggregate attestation** (W9-A) — one `keccak256(canonical_json(11-judge dossier))` + `overall_score * 1000` per event, ~52,765 gas; verified `chain_says == db_says` end-to-end
+- **`ReputationRegistry` three updates per event** (W9-B) — `updateOnAuction` + `updateOnQuality` + `updateOnFee`, ~225k gas/event; live verified `chain stats delta == DB expected delta` (see W9-B's note about the EWMA formula causing short-term score dips even on clean wins — by design, not a bug)
+- **Claim Fees and Register Operator endpoints** (W9-C) — `POST /api/operators/{addr}/claim-fees` and `/register` wired to UI buttons; mode-aware (mock returns `0xsim_*`, live executes real chain TX)
+- **`verify_chain_consistency.py` audit script** (W9-D) — standalone tool checks for each event whether on-chain state matches DB across 5 phases (auction, judges, anchor, fee split, reputation); see "Verifying chain consistency" section below
+- `TranslationAuction.openAuction` / `settleAuction` — real on-chain TX, recorded in [`outputs/tx_hashes.json`](./outputs/tx_hashes.json) [^w9e]
 - `QuestionRegistry.commitQuestion` — real on-chain provenance with IPFS CID
 - `BuilderFeeRouter.recordFill` — real Arc TX via `record_fill_with_split` (two legs per fill, 90/10 enforced off-chain through two real `recordFill` calls; no real Polygon fills yet)
 - Polymarket Gamma payload construction with real registered builder code `0xa934...beb1`
 - SSE event stream (13 event types — 10 base + 3 debate sub-events; see `ui/lib/api.ts`), FastAPI backend, Next.js dashboard (7 routes)
 
+[^w9e]: `submitBid` is currently DB-picked with a ceremonial on-chain settle: the orchestrator records each bidder's intent in the DB, picks the winner there, and the chain settle TX records winner + winningBid into `TranslationAuction.auctions[event_id]`. **W9-E is rolling out** real `submitBid` from each bidder wallet so the chain holds every sealed bid and `settleAuction` reads bid state from chain, not from DB. **W9-F** ships a `withdrawStake` UI for operators whose 30-day lock has elapsed.
+
 **EXPLICITLY NOT LIVE (Phase 2):**
 
 - Real Polymarket submission — defaults to `dry_run` mode; flipping to `real` requires explicit operator confirm and is gated behind 5 safety nets (rate limit, idempotency key, quality gate, manual confirm flag, diversity check). See `polyglot_alpha/polymarket/client.py`.
-- External operator registration self-serve UI
+- Real `submitBid` from each bidder wallet (currently DB-picked + chain settle; **W9-E rolling out**)
+- `withdrawStake` UI (**W9-F rolling out**)
 - Real Polymarket fills streaming into `BuilderFeeRouter` — depends on real submission being unlocked first
 - Resolution feedback into reputation — requires markets to age out
+- Per-judge attestations (N-of-M challenge mode) — the contract surface exists but the live path uses γ-aggregate, not 11 separate TXs
 
-**Coverage estimate of the full lifecycle running real (not mocked):** ~85%, verified via the smoke harness at `scripts/smoke_test_phase1.py` (10/12 GREEN as of the May 26 audit).
+**Coverage estimate of the full lifecycle running real (not mocked):** ~92% post-W9 (up from ~85% at the May 26 audit), verified via the smoke harness at `scripts/smoke_test_phase1.py` plus the new `scripts/verify_chain_consistency.py`. The remaining ~8% is W9-E (bid chain-read) and W9-F (stake withdrawal UI), both rolling out.
 
 ---
 
@@ -1167,6 +1175,26 @@ The toggle in the header reflects the mode for the **next** trigger. The MODE ba
 
 ### Fixture content
 Mock news clusters live in `polyglot_alpha/ingestion/fixtures/news_cluster_*.json`. To add a new language or scenario, drop a file matching the schema; the loader picks randomly per trigger.
+
+---
+
+## Verifying chain consistency
+
+PolyglotAlpha ships a standalone audit script that checks for each event whether
+on-chain state (Arc testnet) matches what the API + DB report:
+
+    .venv/bin/python scripts/verify_chain_consistency.py <event_id>
+
+Output verifies 5 phases:
+- Phase 2 (Auction): chain `getAuction(eventId)` → winner + winningBid
+- Phase 4 (Judges): `JudgePanel` attestation hash == `keccak256(canonical_json(judges_dossier))`
+- Phase 5 (Anchor): `QuestionRegistry` content_hash
+- Phase 7 (Fee Split): `cumulative_fees` delta == 0.9 × winner + 0.1 × treasury
+- Phase 8 (Reputation): on-chain stats delta match DB
+
+Mock events (`0xsim_*` tx hashes) skip per-phase. Exit 0 on full pass, 1 on any failure.
+
+The script is the canonical answer to "did the marketing claim actually wire up to chain on this event?" — see `AUTONOMOUS_TESTING_PLAYBOOK.md` §13 "Verification beyond grep" for the methodology this artifact was built to embody. Re-run after every wave that touches chain ops.
 
 ---
 

@@ -167,6 +167,21 @@ export interface EventDetail extends EventSummary {
   panelPartial?: boolean;
   /** Judges that hit the panel-budget timeout (INSUFFICIENT_DATA). */
   pendingJudgeNames?: string[];
+  /**
+   * W9-A: on-chain JudgePanel.recordAttestation result. The γ-strategy
+   * stamps a single aggregate verdict per event (keccak256 of the full
+   * 11-judge dossier JSON + scaled overall_score). Live mode populates
+   * ``txHash`` with the real Arc tx; mock mode emits the ``0xsim_*``
+   * sentinel so the UI mutes the arcscan link.
+   */
+  judgesAttestation?: {
+    txHash: string | null;
+    attestationHash: string | null;
+    scoreScaled: number | null;
+    aggregatorAddress: string | null;
+    registerTx?: string | null;
+    strategy?: string;
+  } | null;
   translation_scores?: Record<string, unknown> | null;
   style_alignment_passes?: Record<string, boolean> | null;
   verdict?: string;
@@ -362,4 +377,165 @@ export function arcTxUrl(txHash: string): string {
 
 export function arcAddressUrl(address: string): string {
   return `${ARC_EXPLORER_BASE}/address/${address}`;
+}
+
+// ─── Operator-facing endpoints (W9-C) ─────────────────────────────────────
+//
+// Both `claim-fees` and `register` accept an optional `mode: "mock" | "live"`
+// body field. When `mode === "mock"` the backend skips real chain RPC and
+// returns synthetic `0xsim_…` tx hashes; the local DB is still mutated so
+// the UI can render the result without burning testnet gas.
+
+export const SUPPORTED_OPERATOR_LANGUAGES = [
+  "zh",
+  "ru",
+  "es",
+  "ja",
+  "ar",
+  "en",
+] as const;
+export type OperatorLanguage = (typeof SUPPORTED_OPERATOR_LANGUAGES)[number];
+
+export interface PendingFeesResponse {
+  operator_address: string;
+  pending_usdc: number;
+  event_count: number;
+}
+
+export interface ClaimFeesResponse {
+  success: boolean;
+  tx_hash: string | null;
+  amount_claimed_usdc: number;
+  is_simulated: boolean;
+  operator_address: string;
+}
+
+export interface RegisterOperatorRequest {
+  operator_address: string;
+  display_name: string;
+  model_label?: string;
+  languages?: OperatorLanguage[];
+  stake_amount_usdc?: number;
+  mode?: "live" | "mock";
+  signature?: string;
+}
+
+export interface RegisterOperatorResponse {
+  operator_address: string;
+  status: string;
+  stake_tx: string | null;
+  reputation_tx: string | null;
+  initial_reputation: number;
+  auction_stream_url: string;
+  display_name: string;
+  registration_id: string | null;
+  is_simulated: boolean;
+  success: boolean;
+}
+
+/** Fetch claimable builder-fee balance for an operator wallet. */
+export async function fetchOperatorPendingFees(
+  address: string,
+): Promise<PendingFeesResponse> {
+  const res = await fetch(
+    `${API_BASE}/api/operators/${address}/pending-fees`,
+    { cache: "no-store" },
+  );
+  return safeJson(res);
+}
+
+/** Settle (withdraw) accumulated builder fees for an operator wallet. */
+export async function claimOperatorFees(
+  address: string,
+  mode: "live" | "mock" = "live",
+): Promise<ClaimFeesResponse> {
+  const res = await fetch(
+    `${API_BASE}/api/operators/${address}/claim-fees`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode }),
+    },
+  );
+  return safeJson(res);
+}
+
+/** Register a new external operator with anti-Sybil stake. */
+export async function registerOperator(
+  payload: RegisterOperatorRequest,
+): Promise<RegisterOperatorResponse> {
+  const res = await fetch(`${API_BASE}/api/operators/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return safeJson(res);
+}
+
+// ─── Withdraw stake (W9-F) ──────────────────────────────────────────────────
+
+export interface StakeStatusResponse {
+  operator_address: string;
+  staked: boolean;
+  amount_usdc: number;
+  /** Unix epoch seconds (or block height in future); null when not locked. */
+  locked_until_block: number | null;
+  can_withdraw: boolean;
+}
+
+export interface WithdrawStakeResponse {
+  success: boolean;
+  tx_hash: string | null;
+  amount_recovered_usdc: number;
+  is_simulated: boolean;
+  operator_address: string;
+}
+
+/** Read the operator's auction-contract stake status (live or DB-derived). */
+export async function fetchOperatorStakeStatus(
+  address: string,
+): Promise<StakeStatusResponse> {
+  const res = await fetch(
+    `${API_BASE}/api/operators/${address}/stake-status`,
+    { cache: "no-store" },
+  );
+  return safeJson(res);
+}
+
+/**
+ * Withdraw the operator's unlocked auction stake. Defaults to ``mock`` so
+ * the demo path never burns real testnet gas; pass ``mode="live"`` with a
+ * ``private_key`` only when the user has explicitly opted in.
+ */
+export async function withdrawOperatorStake(
+  address: string,
+  mode: "live" | "mock" = "mock",
+  privateKey?: string,
+): Promise<WithdrawStakeResponse> {
+  const body: Record<string, unknown> = { mode };
+  if (mode === "live" && privateKey) {
+    body.private_key = privateKey;
+  }
+  const res = await fetch(
+    `${API_BASE}/api/operators/${address}/withdraw-stake`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  // Special handling so the UI can distinguish 404 (no_stake) and 409
+  // (locked) from generic 5xx failures via the thrown Error message.
+  if (!res.ok) {
+    let detail: unknown;
+    try {
+      detail = await res.json();
+    } catch {
+      detail = await res.text();
+    }
+    const detailStr =
+      typeof detail === "string" ? detail : JSON.stringify(detail);
+    throw new Error(`API ${res.status}: ${detailStr}`);
+  }
+  return (await res.json()) as WithdrawStakeResponse;
 }

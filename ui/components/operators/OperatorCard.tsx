@@ -2,6 +2,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Cpu, Wallet, Award, TrendingUp } from "lucide-react";
 import { shortAddr, formatReputation, formatUsd } from "@/lib/utils";
+import { ClaimFeesButton } from "./ClaimFeesButton";
+import { WithdrawStakeButton } from "./WithdrawStakeButton";
 
 /**
  * Single operator card for the /operators marketplace listing.
@@ -29,7 +31,17 @@ export interface OperatorCardData {
 
 const UNKNOWN_PLACEHOLDER = "—";
 
-export function OperatorCard({ operator }: { operator: OperatorCardData }) {
+export function OperatorCard({
+  operator,
+  showClaimFees = false,
+  claimMode = "mock",
+}: {
+  operator: OperatorCardData;
+  /** When true, render an inline "Claim Fees" button for this operator. */
+  showClaimFees?: boolean;
+  /** Mock mode is the default — see ClaimFeesButton for semantics. */
+  claimMode?: "mock" | "live";
+}) {
   const isReference = operator.kind === "reference";
   return (
     <Card
@@ -109,6 +121,24 @@ export function OperatorCard({ operator }: { operator: OperatorCardData }) {
             </p>
           </div>
         </div>
+
+        {showClaimFees ? (
+          <div className="space-y-3 border-t border-border/40 pt-3">
+            <ClaimFeesButton
+              address={operator.address}
+              mode={claimMode}
+              initialPendingUsdc={
+                typeof operator.totalFees === "number"
+                  ? operator.totalFees
+                  : undefined
+              }
+            />
+            <WithdrawStakeButton
+              address={operator.address}
+              mode={claimMode}
+            />
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

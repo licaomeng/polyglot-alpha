@@ -34,7 +34,7 @@ from polyglot_alpha.chain import (
     question_registry as qr_mod,
     reputation_registry as rep_mod,
 )
-from polyglot_alpha.onchain import OnChainClient
+from polyglot_alpha.onchain import OnChainClient, event_id_to_bytes32
 
 
 # --------------------------------------------------------------------------- #
@@ -150,6 +150,22 @@ def test_abi_files_load_correctly(contract_name: str) -> None:
     with path.open() as fh:
         abi = json.load(fh)["abi"]
     assert isinstance(abi, list) and abi, f"empty ABI for {contract_name}"
+
+
+# --------------------------------------------------------------------------- #
+# W11 — canonical eventId -> bytes32 encoder (bug C regression guard)         #
+# --------------------------------------------------------------------------- #
+
+
+def test_event_id_to_bytes32_is_deterministic_for_int() -> None:
+    """Same int input must produce the same bytes32 (bug C reproducer guard)."""
+    assert event_id_to_bytes32(216) == event_id_to_bytes32(216) == event_id_to_bytes32("216")
+
+
+def test_event_id_to_bytes32_matches_auction_client_helper() -> None:
+    """Dispatch (``_event_id_bytes``) and orchestrator (``event_id_to_bytes32``) must agree."""
+    from polyglot_alpha.chain.auction_client import _event_id_bytes
+    assert _event_id_bytes(216) == event_id_to_bytes32(216) and len(_event_id_bytes(216)) == 32
 
 
 # --------------------------------------------------------------------------- #

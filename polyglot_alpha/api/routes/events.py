@@ -598,6 +598,23 @@ def _serialize_event_detail(
             for k, v in translation_scores_raw.items()
             if not (isinstance(k, str) and k.startswith("_"))
         }
+    # W9-A: surface the on-chain 11-judge attestation (γ-strategy) as a
+    # top-level ``judgesAttestation`` field. The orchestrator stashes it
+    # in ``translation_scores._judgesAttestation`` so persistence works
+    # without a schema migration; the API hoists it out of the private
+    # underscore namespace so the UI can render an arcscan link.
+    judges_attestation_public: Optional[dict[str, Any]] = None
+    if isinstance(translation_scores_raw, dict):
+        raw_attest = translation_scores_raw.get("_judgesAttestation")
+        if isinstance(raw_attest, dict):
+            judges_attestation_public = {
+                "txHash": raw_attest.get("txHash"),
+                "attestationHash": raw_attest.get("attestationHash"),
+                "scoreScaled": raw_attest.get("scoreScaled"),
+                "aggregatorAddress": raw_attest.get("aggregatorAddress"),
+                "registerTx": raw_attest.get("registerTx"),
+                "strategy": raw_attest.get("strategy", "gamma_aggregate"),
+            }
 
     detail: dict[str, Any] = _serialize_event_summary(event)
     detail.update(
@@ -612,6 +629,7 @@ def _serialize_event_detail(
                 quality.style_alignment_passes if quality is not None else None
             ),
             "judges": judges_dossier,
+            "judgesAttestation": judges_attestation_public,
             "panelPartial": panel_partial,
             "pendingJudgeNames": pending_judge_names,
             "question_id": getattr(question, "question_id_onchain", None),

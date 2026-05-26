@@ -201,7 +201,12 @@ export default function OperatorsPage() {
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {referenceOperators.map((operator) => (
-            <OperatorCard key={operator.address} operator={operator} />
+            <OperatorCard
+              key={operator.address}
+              operator={operator}
+              showClaimFees
+              claimMode="mock"
+            />
           ))}
         </div>
       </section>
@@ -232,7 +237,12 @@ export default function OperatorsPage() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {externalOperators.map((operator) => (
-              <OperatorCard key={operator.address} operator={operator} />
+              <OperatorCard
+              key={operator.address}
+              operator={operator}
+              showClaimFees
+              claimMode="mock"
+            />
             ))}
           </div>
         )}

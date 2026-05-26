@@ -210,6 +210,33 @@ def event_id_from_event(event_id_str: str) -> bytes:
     return Web3.keccak(text=event_id_str)
 
 
+def event_id_to_bytes32(event_id: Any) -> bytes:
+    """Canonical ``bytes32 eventId`` encoder shared by every chain call site.
+
+    The TranslationAuction contract stores per-auction state under
+    ``mapping(bytes32 => Auction) auctions``. Every ``submitBid`` /
+    ``getBid`` / ``settleAuction`` / ``openAuction`` call MUST pass the
+    same bytes32 derived from a given Python ``event_id`` or the contract
+    will read/write the wrong storage slot — which manifests as
+    ``getBid(eventId, bidder) -> 0`` even though the bid tx mined with
+    ``status=1`` (bug C, W10-4 stress audit).
+
+    Accepts:
+      * ``bytes`` / ``bytearray`` of length 32 — returned verbatim.
+      * Any other ``bytes`` / ``bytearray`` — hashed to bytes32 via
+        :func:`event_id_from_event` (after hex-decoding).
+      * Anything else — string-coerced and fed to
+        :func:`event_id_from_event` (which keccak-hashes the decimal
+        representation; ``"216"`` -> ``keccak("216")``).
+    """
+
+    if isinstance(event_id, (bytes, bytearray)):
+        if len(event_id) == 32:
+            return bytes(event_id)
+        return event_id_from_event(bytes(event_id).hex())
+    return event_id_from_event(str(event_id))
+
+
 # ---------------------------------------------------------------------------
 # Per-wallet nonce serialization
 # ---------------------------------------------------------------------------

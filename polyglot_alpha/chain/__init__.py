@@ -24,12 +24,14 @@ from __future__ import annotations
 from . import (
     auction_client,
     builder_fee_router,
+    judge_panel_client,
     question_registry,
     reputation_registry,
     sim_helpers,
 )
 from .auction_client import AuctionClient
 from .builder_fee_router import BuilderFeeRouter
+from .judge_panel_client import JudgePanelClient, record_aggregate_attestation
 from .question_registry import QuestionRegistry
 from .reputation_registry import ReputationRegistryClient
 from .sim_helpers import (
@@ -49,6 +51,7 @@ from .sim_helpers import (
 __all__ = [
     "AuctionClient",
     "BuilderFeeRouter",
+    "JudgePanelClient",
     "QuestionRegistry",
     "ReputationRegistryClient",
     "SIM_IPFS_PREFIX",
@@ -59,7 +62,9 @@ __all__ = [
     "is_mock_mode",
     "is_sim_hash",
     "is_sim_ipfs",
+    "judge_panel_client",
     "question_registry",
+    "record_aggregate_attestation",
     "reputation_registry",
     "reset_event_mode",
     "set_event_mode",

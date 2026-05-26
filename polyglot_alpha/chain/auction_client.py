@@ -24,6 +24,7 @@ from eth_account.signers.local import LocalAccount
 from ..onchain import (
     OnChainClient,
     event_id_from_event,
+    event_id_to_bytes32,
     send_with_nonce_lock,
     units_to_usdc,
     usdc_to_units,
@@ -38,7 +39,14 @@ logger = logging.getLogger(__name__)
 _ZERO_HASH = b"\x00" * 32
 
 DEFAULT_GAS_OPEN = 250_000
-DEFAULT_GAS_SETTLE = 250_000
+# settleAuction loops over the bidders array AND, when a
+# ``ReputationRegistry`` is wired, performs one ``updateOnAuction`` call
+# per bidder (4 storage writes each). With 3 seeders that's
+# ~3 * 100k = 300k for the rep updates alone, plus the loop body. 250k
+# was insufficient (observed: ``out of gas: gas required exceeds: 250000``
+# on Arc testnet event 34929875). Bump to 600k for safety; Arc's L2
+# pricing means the extra gas cost is negligible.
+DEFAULT_GAS_SETTLE = 600_000
 
 
 def _operator_account() -> LocalAccount:
@@ -52,13 +60,16 @@ def _operator_account() -> LocalAccount:
 
 
 def _event_id_bytes(event_id: Any) -> bytes:
-    """Coerce a sqlite int or string to the contract's ``bytes32 eventId``."""
+    """Coerce a sqlite int or string to the contract's ``bytes32 eventId``.
 
-    if isinstance(event_id, (bytes, bytearray)):
-        if len(event_id) == 32:
-            return bytes(event_id)
-        return event_id_from_event(event_id.hex() if isinstance(event_id, (bytes, bytearray)) else str(event_id))
-    return event_id_from_event(str(event_id))
+    Thin wrapper around the canonical :func:`onchain.event_id_to_bytes32`
+    so every chain call site (open / submit / settle / getBid lookup)
+    derives the same bytes32 from a given Python ``event_id``. W11 fix:
+    bug C surfaced when this site and the orchestrator's ``getBid``
+    reconciliation site went through different code paths.
+    """
+
+    return event_id_to_bytes32(event_id)
 
 
 def _content_hash_bytes(content_hash: Optional[str]) -> bytes:

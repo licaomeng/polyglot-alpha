@@ -345,6 +345,17 @@ async def _place_bid_on_chain(
         raise ValueError(
             f"dispatch._place_bid_on_chain: missing auction event_id for {agent_name}"
         )
+    # W11 bug-C guard: log the canonical bytes32 we are about to write
+    # ``submitBid`` against so it can be diffed against the orchestrator's
+    # ``getBid`` lookup site (which now also logs at DEBUG). Same helper
+    # on both sides => same bytes32 => same storage slot.
+    from ..onchain import event_id_to_bytes32  # local import — avoid cycles
+    logger.debug(
+        "BID ENCODING: agent=%s event_id=%s -> bytes32=0x%s (submitBid)",
+        agent_name,
+        auction_event_id,
+        event_id_to_bytes32(auction_event_id).hex(),
+    )
     client = AuctionClient()
     return await client.submit_bid(
         event_id=auction_event_id,
@@ -360,27 +371,33 @@ async def _safe_agent_bid(
     event_dict: dict[str, Any],
     *,
     auction_event_id: Any = None,
-) -> dict[str, Any]:
-    """Drive one agent's pre-bid evaluation + on-chain ``placeBid``.
+) -> Optional[dict[str, Any]]:
+    """Drive one agent's pre-bid evaluation + on-chain ``submitBid``.
+
+    W9-E: this function now returns ``None`` when the on-chain
+    ``submitBid`` does NOT land successfully (insufficient gas, reverted
+    on the reputation gate, window closed, etc.). That way the
+    orchestrator's bid pool only contains seeders whose bids actually
+    made it into ``TranslationAuction`` storage — settle picks a winner
+    from REAL on-chain bidders, not from a DB-only synthesis.
 
     On any LLM / construction failure we **propagate** the exception so the
     orchestrator records the bid as failed and moves on — no synthetic
-    fallback bid is ever returned (the previous fallback emitted a
-    placeholder candidate hash and a flat 1.0 USDC bid that got committed
-    on-chain as a "real" agent vote).
+    fallback bid is ever returned.
 
-    After a successful evaluation, the agent's wallet signs a real
-    ``TranslationAuction.placeBid`` transaction and the returned dict
-    carries the resulting ``tx_hash``. If the agent has no resolvable
-    private key (eval-only path, e.g. tests without operator PK) we skip
-    the on-chain write and leave ``tx_hash`` unset — the orchestrator
-    persists the bid row with ``tx_hash=NULL`` in that case, which is
-    honest about the on-chain state.
+    After a successful evaluation, the agent's wallet calls
+    ``ensure_registered()`` (idempotent — a no-op when already
+    registered) and then signs+sends a real ``submitBid`` transaction
+    on ``TranslationAuction``. We block on
+    ``wait_for_transaction_receipt`` to confirm the tx mined with
+    ``status=1`` (i.e. did not revert on ``"window closed"`` /
+    ``"reputation gate"`` / ``"not registered"``) before reporting the
+    bid as landed.
     """
 
     coerced = _coerce_event(event_dict)
 
-    # Prefer the agent's real signing key (so ``placeBid`` is signed by the
+    # Prefer the agent's real signing key (so ``submitBid`` is signed by the
     # same address used everywhere else). Fall back to a throwaway PK only
     # for evaluation purposes when the operator PK is unavailable.
     real_pk = _resolve_agent_signing_key(agent_name)
@@ -405,43 +422,122 @@ async def _safe_agent_bid(
         "llm_model": agent_cls.MODEL_ID,
     }
 
-    # On-chain placeBid: only attempted when we have a real signing key
-    # AND the orchestrator passed the auction's event_id. Sub-agent β is
-    # serialising nonces on ``OnChainClient.sign_and_send``, so we can
-    # fire these in parallel across the 4 agents without colliding.
-    chain_event_id = auction_event_id
-    if chain_event_id is None:
-        # Fallback: best-effort derive from the event_dict for callers that
-        # pass the event_id inline (e.g. CLI demos). The orchestrator path
-        # always passes ``auction_event_id`` explicitly.
-        chain_event_id = (
-            coerced.get("event_id")
-            or coerced.get("eventId")
-            or coerced.get("id")
+    # The orchestrator's real-auction path ALWAYS passes
+    # ``auction_event_id`` explicitly (the integer DB event id used to
+    # derive bytes32 in ``auction_client``). Callers that pass ``None``
+    # (e.g. unit tests, CLI dry-run, eval-only metrics) are signalling
+    # "don't touch chain" — we return the bid metadata without a
+    # ``tx_hash`` so the caller can still inspect bid spread, candidate
+    # hash, reputation, etc. The orchestrator filters out tx-hash-less
+    # bids before passing them into the auction settle pool, so this
+    # cannot accidentally enter on-chain auction state.
+    if auction_event_id is None:
+        logger.info(
+            "dispatch.collect_bids_inline: agent=%s eval-only (no "
+            "auction_event_id supplied); returning bid without tx_hash",
+            agent_name,
         )
-    if real_pk is not None and chain_event_id not in (None, ""):
-        try:
-            tx_hash = await _place_bid_on_chain(
-                agent_name=agent_name,
-                agent_pk=real_pk,
-                auction_event_id=chain_event_id,
-                bid_amount=bid_amount,
-                candidate_hash_hex=candidate_hash_hex,
-            )
-            result["tx_hash"] = tx_hash
-        except Exception as exc:
-            # On-chain failure does not invalidate the bid evaluation — log
-            # and leave ``tx_hash`` unset so the orchestrator can decide
-            # whether to persist or retry. We do NOT swallow the error
-            # silently: the bid record will carry ``_chain_error`` for the
-            # API layer to surface.
-            logger.warning(
-                "dispatch.collect_bids_inline: agent=%s placeBid failed: %s",
+        return result
+
+    if real_pk is None or auction_event_id in (None, ""):
+        logger.warning(
+            "dispatch.collect_bids_inline: agent=%s skipped on-chain "
+            "submitBid (no signing key); dropping bid",
+            agent_name,
+        )
+        return None
+    chain_event_id = auction_event_id
+
+    # ------------------------------------------------------------------
+    # Ensure the seeder is registered on-chain (defensive — most live
+    # deployments register the seeders once via scripts/register_agents.py
+    # but the invariant is "submitBid requires registered"). Errors are
+    # logged but not fatal; the subsequent submitBid will revert if the
+    # agent is still unregistered, and we will surface that below.
+    # ------------------------------------------------------------------
+    try:
+        reg_tx = await agent.ensure_registered()
+        if reg_tx:
+            logger.info(
+                "dispatch.collect_bids_inline: agent=%s registered on-chain "
+                "tx=%s",
                 agent_name,
-                exc,
+                reg_tx,
             )
-            result["_chain_error"] = f"placeBid:{exc}"
+    except Exception as exc:  # pragma: no cover - depends on chain state
+        logger.warning(
+            "dispatch.collect_bids_inline: agent=%s ensure_registered "
+            "failed: %s; will still attempt submitBid",
+            agent_name,
+            exc,
+        )
+
+    # ------------------------------------------------------------------
+    # Submit + confirm bid on-chain
+    # ------------------------------------------------------------------
+    try:
+        tx_hash = await _place_bid_on_chain(
+            agent_name=agent_name,
+            agent_pk=real_pk,
+            auction_event_id=chain_event_id,
+            bid_amount=bid_amount,
+            candidate_hash_hex=candidate_hash_hex,
+        )
+    except Exception as exc:
+        logger.warning(
+            "dispatch.collect_bids_inline: agent=%s submitBid send failed: %s; "
+            "dropping bid (will not enter on-chain auction state)",
+            agent_name,
+            exc,
+        )
+        return None
+
+    # Confirm the tx actually mined with status=1. A status=0 receipt
+    # means submitBid reverted (window closed / reputation gate / not
+    # registered) — the bid never entered ``TranslationAuction`` storage,
+    # so we drop it from the orchestrator's bid pool.
+    try:
+        confirmed = await _confirm_bid_tx(agent.onchain.w3, tx_hash)
+    except Exception as exc:  # pragma: no cover - RPC error
+        logger.warning(
+            "dispatch.collect_bids_inline: agent=%s submitBid receipt "
+            "lookup failed (%s); dropping bid",
+            agent_name,
+            exc,
+        )
+        return None
+
+    if not confirmed:
+        logger.warning(
+            "dispatch.collect_bids_inline: agent=%s submitBid reverted on "
+            "chain (tx=%s); dropping bid",
+            agent_name,
+            tx_hash,
+        )
+        return None
+
+    result["tx_hash"] = tx_hash
+    logger.info(
+        "dispatch.collect_bids_inline: agent=%s submitBid landed "
+        "(bid=%.4f USDC, tx=%s)",
+        agent_name,
+        bid_amount,
+        tx_hash,
+    )
     return result
+
+
+async def _confirm_bid_tx(w3, tx_hash: str, *, timeout_s: float = 30.0) -> bool:
+    """Poll ``eth_getTransactionReceipt`` until mined; return ``True`` iff
+    ``status == 1`` (submitBid did not revert)."""
+
+    loop = asyncio.get_running_loop()
+
+    def _wait() -> Any:
+        return w3.eth.wait_for_transaction_receipt(tx_hash, timeout=timeout_s)
+
+    receipt = await loop.run_in_executor(None, _wait)
+    return int(getattr(receipt, "status", 0)) == 1
 
 
 async def collect_bids_inline(
@@ -494,12 +590,20 @@ async def collect_bids_inline(
         )
         for task in done:
             try:
-                bids.append(task.result())
+                result = task.result()
             except Exception as exc:  # task itself raised — log + skip
                 logger.warning(
                     "dispatch.collect_bids_inline: agent task crashed: %s",
                     exc,
                 )
+                continue
+            # W9-E: _safe_agent_bid returns None when the on-chain
+            # submitBid did NOT land (insufficient gas / reverted / window
+            # closed). Drop those so the orchestrator's bid pool reflects
+            # the real on-chain auction state.
+            if result is None:
+                continue
+            bids.append(result)
         for task in pending:
             task.cancel()
     except asyncio.CancelledError:

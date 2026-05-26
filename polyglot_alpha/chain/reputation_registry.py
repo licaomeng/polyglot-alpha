@@ -119,6 +119,13 @@ async def update_reputation(
     """Send any combination of the three reputation signals.
 
     Returns a dict of ``{signal: tx_hash}`` for every signal sent.
+
+    A ``fee_usdc`` of ``0`` is treated as "no fee update" because
+    ``updateOnFee(addr, 0)`` still recomputes the EMA score with the
+    full fee history and would burn gas for no semantic change. Callers
+    that want to fire the fee leg with a real amount should pass a
+    strictly positive ``fee_usdc``; the dedicated Phase 7 site uses
+    :func:`update_reputation_fee_only` for clarity.
     """
 
     client = onchain or OnChainClient()
@@ -131,11 +138,86 @@ async def update_reputation(
         out["quality"] = await _send_update(
             client, "updateOnQuality", [agent, bool(quality_passed)]
         )
-    if fee_usdc is not None:
+    if fee_usdc is not None and fee_usdc > 0:
         out["fee"] = await _send_update(
             client, "updateOnFee", [agent, usdc_to_units(max(0.0, fee_usdc))]
         )
     return out
+
+
+async def update_reputation_fee_only(
+    agent: str,
+    *,
+    fee_usdc: float,
+    onchain: Optional[OnChainClient] = None,
+) -> Optional[str]:
+    """Send only the ``updateOnFee`` signal for ``agent``.
+
+    Returns the tx hash, or ``None`` if ``fee_usdc <= 0`` (no-op).
+    """
+
+    if fee_usdc is None or fee_usdc <= 0:
+        return None
+    client = onchain or OnChainClient()
+    return await _send_update(
+        client, "updateOnFee", [agent, usdc_to_units(max(0.0, fee_usdc))]
+    )
+
+
+async def is_authorized(
+    address: str, *, onchain: Optional[OnChainClient] = None
+) -> bool:
+    """Return ``True`` iff ``address`` is in the ``authorized`` map.
+
+    The owner is also implicitly authorized (the contract's
+    ``onlyAuthorized`` modifier accepts ``msg.sender == owner``), so this
+    helper additionally returns ``True`` when ``address`` matches
+    ``owner()``.
+    """
+
+    client = onchain or OnChainClient()
+    loop = asyncio.get_running_loop()
+    checksum = Web3.to_checksum_address(address)
+
+    def _check() -> bool:
+        if bool(client.reputation.functions.authorized(checksum).call()):
+            return True
+        owner = client.reputation.functions.owner().call()
+        return Web3.to_checksum_address(owner) == checksum
+
+    return await loop.run_in_executor(None, _check)
+
+
+async def set_authorized(
+    address: str,
+    allowed: bool,
+    *,
+    onchain: Optional[OnChainClient] = None,
+) -> str:
+    """Owner-only: grant or revoke ``authorized`` permission for ``address``.
+
+    Returns the tx hash. Raises ``RuntimeError`` if the operator wallet
+    is not the contract owner.
+    """
+
+    client = onchain or OnChainClient()
+    account = _operator_account()
+    checksum = Web3.to_checksum_address(address)
+
+    def _send() -> str:
+        base = client._build_base_txn(account)
+        txn = client.reputation.functions.setAuthorized(
+            checksum, bool(allowed)
+        ).build_transaction({**base, "gas": 80_000})
+        return client._send(txn, account)
+
+    tx_hash = await send_with_nonce_lock(account, _send)
+    if not tx_hash.startswith("0x"):
+        tx_hash = "0x" + tx_hash
+    logger.info(
+        "setAuthorized(%s, %s) tx=%s", checksum, bool(allowed), tx_hash
+    )
+    return tx_hash
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +367,9 @@ __all__ = [
     "ReputationRegistryClient",
     "ANTI_SYBIL_STAKE_USDC",
     "get_reputation",
+    "is_authorized",
     "register_agent_with_stake",
+    "set_authorized",
     "update_reputation",
+    "update_reputation_fee_only",
 ]

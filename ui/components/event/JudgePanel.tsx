@@ -5,7 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, XCircle, MinusCircle } from "lucide-react";
 import { MetricInfo, METRIC_DOCS } from "./MetricExplainer";
-import { cn } from "@/lib/utils";
+import { TxLink } from "@/components/onchain/TxLink";
+import { cn, shortAddr } from "@/lib/utils";
 import type { EventDetail } from "@/lib/api";
 
 /**
@@ -381,6 +382,43 @@ export function JudgePanel({ event }: JudgePanelProps) {
           })}
         </div>
       </div>
+
+      {/* W9-A: On-chain JudgePanel attestation (γ-strategy aggregate). */}
+      {event.judgesAttestation && event.judgesAttestation.txHash && (
+        <div
+          data-testid="judge-panel-attestation"
+          className="rounded-md border border-cyan-500/30 bg-cyan-500/[0.04] p-3 text-xs"
+        >
+          <p className="font-mono text-[10px] uppercase tracking-wider text-cyan-300">
+            on-chain attestation · JudgePanel.recordAttestation
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <TxLink
+              txHash={event.judgesAttestation.txHash}
+              mode="live"
+              label="attestation tx"
+            />
+            {event.judgesAttestation.attestationHash && (
+              <span
+                className="font-mono text-[10px] text-muted-foreground"
+                title={event.judgesAttestation.attestationHash}
+              >
+                hash · {shortAddr(event.judgesAttestation.attestationHash, 10, 6)}
+              </span>
+            )}
+            {typeof event.judgesAttestation.scoreScaled === "number" && (
+              <span className="font-mono text-[10px] text-muted-foreground">
+                score · {event.judgesAttestation.scoreScaled} / 1000
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-foreground/80">
+            keccak256 of the 11-judge dossier JSON is anchored on Arc; the
+            full dossier above can be re-hashed to verify nothing has been
+            tampered with off-chain.
+          </p>
+        </div>
+      )}
 
       {/* Decision summary */}
       <div
