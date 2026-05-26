@@ -1,0 +1,687 @@
+[
+  {
+    "page": "home",
+    "viewport": "1280x800",
+    "url": "http://localhost:3001/",
+    "errors": [],
+    "warnings": [],
+    "metrics": {
+      "viewportW": 1280,
+      "viewportH": 800,
+      "docScrollW": 1280,
+      "docClientW": 1280,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 1280,
+      "mainLeft": 0,
+      "mainRight": 1280,
+      "sideWhitespacePx": 0,
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 1800,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": [
+        {
+          "tag": "DIV",
+          "left": 142,
+          "right": 1494,
+          "width": 1352,
+          "text": "STEP 01Event IngestpendingSTEP 02Preprocess + NERp"
+        },
+        {
+          "tag": "DIV",
+          "left": 142,
+          "right": 1494,
+          "width": 1352,
+          "text": "STEP 01Event IngestpendingSTEP 02Preprocess + NERp"
+        }
+      ]
+    },
+    "status": 200,
+    "consoleMsgs": [
+      "CONSOLE:Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+    ],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/home_1280x800.png"
+  },
+  {
+    "page": "events",
+    "viewport": "1280x800",
+    "url": "http://localhost:3001/events",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 1280,
+      "viewportH": 800,
+      "docScrollW": 1280,
+      "docClientW": 1280,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 1280,
+      "mainLeft": 0,
+      "mainRight": 1280,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 1280,
+        "cls": "container space-y-6 py-8",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 3336,
+      "footerVisible": false,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": []
+    },
+    "consoleMsgs": [],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/events_1280x800.png"
+  },
+  {
+    "page": "event-detail",
+    "viewport": "1280x800",
+    "url": "http://localhost:3001/events/112",
+    "errors": [],
+    "warnings": [],
+    "metrics": {
+      "viewportW": 1280,
+      "viewportH": 800,
+      "docScrollW": 1280,
+      "docClientW": 1280,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 1280,
+      "mainLeft": 0,
+      "mainRight": 1280,
+      "sideWhitespacePx": 0,
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 865,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": []
+    },
+    "status": 200,
+    "consoleMsgs": [],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/event-detail_1280x800.png"
+  },
+  {
+    "page": "leaderboard",
+    "viewport": "1280x800",
+    "url": "http://localhost:3001/leaderboard",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 1280,
+      "viewportH": 800,
+      "docScrollW": 1280,
+      "docClientW": 1280,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 1280,
+      "mainLeft": 0,
+      "mainRight": 1280,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 1280,
+        "cls": "container space-y-6 py-8",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 1213,
+      "footerVisible": false,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": []
+    },
+    "consoleMsgs": [],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/leaderboard_1280x800.png"
+  },
+  {
+    "page": "operators",
+    "viewport": "1280x800",
+    "url": "http://localhost:3001/operators",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 1280,
+      "viewportH": 800,
+      "docScrollW": 1280,
+      "docClientW": 1280,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 1280,
+      "mainLeft": 0,
+      "mainRight": 1280,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 1280,
+        "cls": "container space-y-8 py-10",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 2105,
+      "footerVisible": false,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": []
+    },
+    "consoleMsgs": [],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/operators_1280x800.png"
+  },
+  {
+    "page": "about",
+    "viewport": "1280x800",
+    "url": "http://localhost:3001/about",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 1280,
+      "viewportH": 800,
+      "docScrollW": 1280,
+      "docClientW": 1280,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 1280,
+      "mainLeft": 0,
+      "mainRight": 1280,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 768,
+        "cls": "container max-w-3xl space-y-6 py-10",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 2187,
+      "footerVisible": false,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": []
+    },
+    "consoleMsgs": [],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/about_1280x800.png"
+  },
+  {
+    "page": "home",
+    "viewport": "1920x1080",
+    "url": "http://localhost:3001/",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 1920,
+      "viewportH": 1080,
+      "docScrollW": 1920,
+      "docClientW": 1920,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 1920,
+      "mainLeft": 0,
+      "mainRight": 1920,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 2119.2001953125,
+        "cls": "react-flow__viewport xyflow__viewport react-flow__container",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 1778,
+      "footerVisible": false,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": [
+        {
+          "tag": "DIV",
+          "left": 408,
+          "right": 2527,
+          "width": 2119,
+          "text": "STEP 01Event IngestpendingSTEP 02Preprocess + NERp"
+        },
+        {
+          "tag": "DIV",
+          "left": 408,
+          "right": 2527,
+          "width": 2119,
+          "text": "STEP 01Event IngestpendingSTEP 02Preprocess + NERp"
+        }
+      ]
+    },
+    "consoleMsgs": [
+      "CONSOLE:Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+    ],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/home_1920x1080.png"
+  },
+  {
+    "page": "events",
+    "viewport": "1920x1080",
+    "url": "http://localhost:3001/events",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 1920,
+      "viewportH": 1080,
+      "docScrollW": 1920,
+      "docClientW": 1920,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 1920,
+      "mainLeft": 0,
+      "mainRight": 1920,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 1800,
+        "cls": "container space-y-6 py-8",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 3028,
+      "footerVisible": false,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": []
+    },
+    "consoleMsgs": [],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/events_1920x1080.png"
+  },
+  {
+    "page": "event-detail",
+    "viewport": "1920x1080",
+    "url": "http://localhost:3001/events/112",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 1920,
+      "viewportH": 1080,
+      "docScrollW": 1920,
+      "docClientW": 1920,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 1920,
+      "mainLeft": 0,
+      "mainRight": 1920,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 2119.2001953125,
+        "cls": "react-flow__viewport xyflow__viewport react-flow__container",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 4660,
+      "footerVisible": false,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": [
+        {
+          "tag": "DIV",
+          "left": 408,
+          "right": 2527,
+          "width": 2119,
+          "text": "STEP 01Event IngestcompletedSTEP 02Preprocess + NE"
+        },
+        {
+          "tag": "DIV",
+          "left": 408,
+          "right": 2527,
+          "width": 2119,
+          "text": "STEP 01Event IngestcompletedSTEP 02Preprocess + NE"
+        }
+      ]
+    },
+    "consoleMsgs": [
+      "CONSOLE:Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+    ],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/event-detail_1920x1080.png"
+  },
+  {
+    "page": "leaderboard",
+    "viewport": "1920x1080",
+    "url": "http://localhost:3001/leaderboard",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 1920,
+      "viewportH": 1080,
+      "docScrollW": 1920,
+      "docClientW": 1920,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 1920,
+      "mainLeft": 0,
+      "mainRight": 1920,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 1800,
+        "cls": "container space-y-6 py-8",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 1213,
+      "footerVisible": true,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": []
+    },
+    "consoleMsgs": [],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/leaderboard_1920x1080.png"
+  },
+  {
+    "page": "operators",
+    "viewport": "1920x1080",
+    "url": "http://localhost:3001/operators",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 1920,
+      "viewportH": 1080,
+      "docScrollW": 1920,
+      "docClientW": 1920,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 1920,
+      "mainLeft": 0,
+      "mainRight": 1920,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 1800,
+        "cls": "container space-y-8 py-10",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 2002,
+      "footerVisible": false,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": []
+    },
+    "consoleMsgs": [],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/operators_1920x1080.png"
+  },
+  {
+    "page": "about",
+    "viewport": "1920x1080",
+    "url": "http://localhost:3001/about",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 1920,
+      "viewportH": 1080,
+      "docScrollW": 1920,
+      "docClientW": 1920,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 1920,
+      "mainLeft": 0,
+      "mainRight": 1920,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 768,
+        "cls": "container max-w-3xl space-y-6 py-10",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 2187,
+      "footerVisible": false,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": []
+    },
+    "consoleMsgs": [],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/about_1920x1080.png"
+  },
+  {
+    "page": "home",
+    "viewport": "3840x2160",
+    "url": "http://localhost:3001/",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 3840,
+      "viewportH": 2160,
+      "docScrollW": 3840,
+      "docClientW": 3840,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 3840,
+      "mainLeft": 0,
+      "mainRight": 3840,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 2839.2001953125,
+        "cls": "react-flow__viewport xyflow__viewport react-flow__container",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 2095,
+      "footerVisible": true,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": [
+        {
+          "tag": "DIV",
+          "left": 1368,
+          "right": 4207,
+          "width": 2839,
+          "text": "STEP 01Event IngestpendingSTEP 02Preprocess + NERp"
+        },
+        {
+          "tag": "DIV",
+          "left": 1368,
+          "right": 4207,
+          "width": 2839,
+          "text": "STEP 01Event IngestpendingSTEP 02Preprocess + NERp"
+        }
+      ]
+    },
+    "consoleMsgs": [
+      "CONSOLE:Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+    ],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/home_3840x2160.png"
+  },
+  {
+    "page": "events",
+    "viewport": "3840x2160",
+    "url": "http://localhost:3001/events",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 3840,
+      "viewportH": 2160,
+      "docScrollW": 3840,
+      "docClientW": 3840,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 3840,
+      "mainLeft": 0,
+      "mainRight": 3840,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 2400,
+        "cls": "container space-y-6 py-8",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 2918,
+      "footerVisible": false,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": []
+    },
+    "consoleMsgs": [],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/events_3840x2160.png"
+  },
+  {
+    "page": "event-detail",
+    "viewport": "3840x2160",
+    "url": "http://localhost:3001/events/112",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 3840,
+      "viewportH": 2160,
+      "docScrollW": 3840,
+      "docClientW": 3840,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 3840,
+      "mainLeft": 0,
+      "mainRight": 3840,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 2839.2001953125,
+        "cls": "react-flow__viewport xyflow__viewport react-flow__container",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 4660,
+      "footerVisible": false,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": [
+        {
+          "tag": "DIV",
+          "left": 1368,
+          "right": 4207,
+          "width": 2839,
+          "text": "STEP 01Event IngestcompletedSTEP 02Preprocess + NE"
+        },
+        {
+          "tag": "DIV",
+          "left": 1368,
+          "right": 4207,
+          "width": 2839,
+          "text": "STEP 01Event IngestcompletedSTEP 02Preprocess + NE"
+        }
+      ]
+    },
+    "consoleMsgs": [
+      "CONSOLE:Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+    ],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/event-detail_3840x2160.png"
+  },
+  {
+    "page": "leaderboard",
+    "viewport": "3840x2160",
+    "url": "http://localhost:3001/leaderboard",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 3840,
+      "viewportH": 2160,
+      "docScrollW": 3840,
+      "docClientW": 3840,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 3840,
+      "mainLeft": 0,
+      "mainRight": 3840,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 2400,
+        "cls": "container space-y-6 py-8",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 2095,
+      "footerVisible": true,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": []
+    },
+    "consoleMsgs": [],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/leaderboard_3840x2160.png"
+  },
+  {
+    "page": "operators",
+    "viewport": "3840x2160",
+    "url": "http://localhost:3001/operators",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 3840,
+      "viewportH": 2160,
+      "docScrollW": 3840,
+      "docClientW": 3840,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 3840,
+      "mainLeft": 0,
+      "mainRight": 3840,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 2400,
+        "cls": "container space-y-8 py-10",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 2095,
+      "footerVisible": true,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": []
+    },
+    "consoleMsgs": [],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/operators_3840x2160.png"
+  },
+  {
+    "page": "about",
+    "viewport": "3840x2160",
+    "url": "http://localhost:3001/about",
+    "errors": [],
+    "warnings": [],
+    "status": 200,
+    "metrics": {
+      "viewportW": 3840,
+      "viewportH": 2160,
+      "docScrollW": 3840,
+      "docClientW": 3840,
+      "hasHScroll": false,
+      "scrollDelta": 0,
+      "mainW": 3840,
+      "mainLeft": 0,
+      "mainRight": 3840,
+      "sideWhitespacePx": 0,
+      "maxContent": {
+        "w": 768,
+        "cls": "container max-w-3xl space-y-6 py-10",
+        "selector": "DIV"
+      },
+      "headerH": 57,
+      "headerSticky": "sticky",
+      "footerTop": 2187,
+      "footerVisible": true,
+      "bg": "rgb(7, 10, 19)",
+      "color": "rgb(241, 245, 249)",
+      "overflowing": []
+    },
+    "consoleMsgs": [],
+    "screenshot": "/Users/messili/codebase/polyglot-alpha/screenshots/wave1-p3/about_3840x2160.png"
+  }
+]

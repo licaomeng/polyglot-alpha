@@ -60,3 +60,5 @@
 {"timestamp": "2026-05-25T20:49:35.093608+00:00", "reason": "demo_mode_read", "caller": "tests.test_judges_panel:test_weights_sum_to_exactly_one:403", "env_demo_mode": true, "in_process_toggle": false}
 {"timestamp": "2026-05-26T03:11:29.032282+00:00", "reason": "demo_mode_read", "caller": "tests.test_judges_panel:test_weights_visible_in_demo_mode:382", "env_demo_mode": true, "in_process_toggle": false}
 {"timestamp": "2026-05-26T03:11:29.034454+00:00", "reason": "demo_mode_read", "caller": "tests.test_judges_panel:test_weights_sum_to_exactly_one:403", "env_demo_mode": true, "in_process_toggle": false}
+{"timestamp": "2026-05-26T09:51:51.247762+00:00", "reason": "demo_mode_read", "caller": "tests.test_judges_panel:test_weights_visible_in_demo_mode:382", "env_demo_mode": true, "in_process_toggle": false}
+{"timestamp": "2026-05-26T09:51:51.251419+00:00", "reason": "demo_mode_read", "caller": "tests.test_judges_panel:test_weights_sum_to_exactly_one:403", "env_demo_mode": true, "in_process_toggle": false}
