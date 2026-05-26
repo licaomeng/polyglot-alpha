@@ -26,7 +26,9 @@
       "url": "https://www.caixinglobal.com/rss/news.xml",
       "language": "zh",
       "category": "finance",
-      "fetch_interval_seconds": 300
+      "fetch_interval_seconds": 300,
+      "enabled": false,
+      "disabled_reason": "HTTP 404 from caixinglobal.com/rss/news.xml as of 2026-05-26 audit; no working alternative endpoint identified (caixin.com paths return HTML disguised as 200)."
     },
     {
       "name": "SCMP",

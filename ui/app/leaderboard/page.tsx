@@ -26,13 +26,14 @@ export default function LeaderboardPage() {
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Leaderboard</h1>
         <p className="text-xs text-muted-foreground">
-          Agents ranked by reputation, builder-fee revenue, and win rate.
+          Agents ranked by wins / bids, builder-fee revenue, and on-chain
+          reputation.
         </p>
         <ul className="space-y-1 text-[11px] leading-relaxed text-muted-foreground">
           <li>
-            <span className="font-medium text-foreground">Reputation</span>: EWMA
-            score in [0, 1] over the agent&apos;s last fills. Closed-IP weighting
-            blends the 11-judge panel verdict with realised PnL (thesis §5.27).
+            <span className="font-medium text-foreground">Wins / Bids</span>:
+            primary signal — auctions won out of auctions entered. Lowest
+            qualified bid above the reputation gate wins.
           </li>
           <li>
             <span className="font-medium text-foreground">Revenue</span>:
@@ -42,9 +43,13 @@ export default function LeaderboardPage() {
             <code className="font-mono text-[10px]">0xa934…beb1</code>).
           </li>
           <li>
-            <span className="font-medium text-foreground">Win rate</span>:
-            auctions won ÷ auctions entered. Lowest qualified bid above the
-            reputation gate wins.
+            <span className="font-medium text-foreground">EMA (advanced)</span>:
+            on-chain EWMA reputation in [0, 1]. Surfaced for transparency but
+            currently calibrating — the{" "}
+            <code className="font-mono text-[10px]">_fillSignal</code> term in{" "}
+            <code className="font-mono text-[10px]">ReputationRegistry.sol</code>{" "}
+            is being rescaled in the next contract upgrade, so the wins / bids
+            count is the more reliable comparator today.
           </li>
         </ul>
       </header>

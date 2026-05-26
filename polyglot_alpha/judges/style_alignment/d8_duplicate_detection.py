@@ -2,12 +2,17 @@
 
 Embeds the candidate title with ``sentence-transformers/all-MiniLM-L6-v2``
 and queries the FAISS index shipped by T5 at ``corpus/polymarket_index.faiss``
-(5K live Polymarket markets, IP-normalized so inner product == cosine).
+(75,897 live Polymarket markets, IP-normalized so inner product == cosine).
 Metadata for the neighbor records is in ``corpus/index_meta.json``.
 
-If the index is not on disk, the judge returns ``passed=True`` with a
-note so the panel can still run end-to-end. With the T5-shipped index
-this fallback should never fire during the demo.
+If the embedding model or FAISS index is unavailable, the judge does
+**not** silently report PASS. Instead it returns ``passed=True`` (so the
+hard gate at the panel aggregator doesn't blanket-reject every event
+when D8 is down) but stamps ``panel_budget_exceeded=True`` and
+``soft_skip=True`` on its ``evidence`` so the panel/UI surface an
+INSUFFICIENT_DATA partial banner — matching the W9-A / FIX-C
+soft-skip-with-visibility contract. The W8 audit explicitly flagged
+silent-PASS-on-model-failure as fake-success; this judge is now loud.
 
 This is a *hard* gate: a confirmed duplicate (cosine >= 0.92 per
 README §5.22) fails the panel.
@@ -17,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 from typing import Any, Optional
 
@@ -26,12 +32,20 @@ from polyglot_alpha.judges.types import (
     PanelQuestion,
 )
 
+logger = logging.getLogger(__name__)
+
 JUDGE_NAME = "d8_duplicate_detection"
 DEFAULT_INDEX_PATH = Path("corpus/polymarket_index.faiss")
 DEFAULT_METADATA_PATH = Path("corpus/index_meta.json")
 DEFAULT_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 
+# Sentinel reason codes surfaced via JudgeResult.reason / evidence so the
+# operator can tell "D8 model crashed" apart from "D8 saw no duplicate".
+REASON_MODEL_UNAVAILABLE = "MODEL_UNAVAILABLE"
+REASON_INDEX_UNAVAILABLE = "INDEX_UNAVAILABLE"
+
 _model_cache: dict[str, Any] = {}
+_model_load_error: dict[str, str] = {}
 _index_cache: dict[str, Any] = {}
 _metadata_cache: dict[str, list[dict[str, Any]]] = {}
 
@@ -62,6 +76,15 @@ def _load_metadata(metadata_path: Path) -> Optional[list[dict[str, Any]]]:
 
 
 def _load_embedding_model() -> Optional[Any]:
+    """Load (and memo-cache) the SBert encoder used for D8.
+
+    Returns the loaded ``SentenceTransformer`` or ``None`` if the model
+    cannot be loaded (network down, HF unreachable, tokenizer missing).
+    The last failure reason is stashed in ``_model_load_error`` so the
+    health check and the judge call site can surface it instead of
+    silently passing.
+    """
+
     if DEFAULT_MODEL_ID in _model_cache:
         return _model_cache[DEFAULT_MODEL_ID]
     try:
@@ -69,10 +92,27 @@ def _load_embedding_model() -> Optional[Any]:
 
         model = SentenceTransformer(DEFAULT_MODEL_ID)
         _model_cache[DEFAULT_MODEL_ID] = model
+        _model_load_error.pop(DEFAULT_MODEL_ID, None)
         return model
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - we want broad coverage
         _model_cache[DEFAULT_MODEL_ID] = None
+        _model_load_error[DEFAULT_MODEL_ID] = f"{type(exc).__name__}: {exc}"
+        logger.warning(
+            "d8.model_load: FAILED model=%s reason=%s",
+            DEFAULT_MODEL_ID,
+            _model_load_error[DEFAULT_MODEL_ID],
+        )
         return None
+
+
+def get_last_model_load_error() -> Optional[str]:
+    """Return the most recent SBert load failure (or ``None`` if healthy).
+
+    Exposed for ``scripts/check_d8_health.py`` and the startup pre-warm
+    logger so they can report *why* the model wasn't loaded.
+    """
+
+    return _model_load_error.get(DEFAULT_MODEL_ID)
 
 
 def _load_index(index_path: Path) -> Optional[Any]:
@@ -137,20 +177,47 @@ async def judge_d8_duplicate_detection(
         index = index_override
 
     if model is None or index is None:
+        # W13-D: do NOT silently report PASS. The verdict is still
+        # ``passed=True`` (otherwise every event would hard-fail on the
+        # D8 hard gate when SBert / FAISS are unreachable), but the
+        # ``soft_skip`` / ``panel_budget_exceeded`` evidence flags make
+        # the unavailability visible to the panel aggregator and to the
+        # UI's INSUFFICIENT_DATA partial banner. See W8 audit + FIX-C.
+        if model is None:
+            reason_code = REASON_MODEL_UNAVAILABLE
+            human_reason = (
+                f"{REASON_MODEL_UNAVAILABLE}: embedding model "
+                f"'{DEFAULT_MODEL_ID}' unavailable"
+            )
+            load_err = _model_load_error.get(DEFAULT_MODEL_ID)
+            if load_err:
+                human_reason += f" ({load_err})"
+        else:
+            reason_code = REASON_INDEX_UNAVAILABLE
+            human_reason = (
+                f"{REASON_INDEX_UNAVAILABLE}: FAISS index not loaded "
+                f"({path})"
+            )
         return JudgeResult(
             name=JUDGE_NAME,
             passed=True,
             score=1.0,
-            reason=(
-                "corpus not loaded"
-                if index is None
-                else "embedding model unavailable; skipping duplicate check"
-            ),
+            reason=human_reason,
             evidence={
                 "max_similarity": None,
                 "index_path": str(path),
                 "index_exists": path.exists() if index_override is None else True,
                 "model_loaded": model is not None,
+                # These two flags are read by judges.panel._aggregate
+                # (line ~682) to populate the per-judge dossier with
+                # panelBudgetExceeded + softSkip — the same shape the
+                # W2-1 UI uses to render "INSUFFICIENT_DATA · partial".
+                "panel_budget_exceeded": True,
+                "soft_skip": True,
+                "partial": True,
+                "insufficient_data": True,
+                "reason_code": reason_code,
+                "model_load_error": _model_load_error.get(DEFAULT_MODEL_ID),
             },
         )
 

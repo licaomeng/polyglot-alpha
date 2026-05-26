@@ -81,6 +81,8 @@ function mergeWithLiveStats(
     kind,
     reputation: live ? live.reputation : undefined,
     wins: typeof live?.total_wins === "number" ? live.total_wins : undefined,
+    totalBids:
+      typeof live?.total_bids === "number" ? live.total_bids : undefined,
     totalFees:
       typeof live?.cumulative_fees === "number"
         ? live.cumulative_fees

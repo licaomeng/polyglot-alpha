@@ -18,6 +18,25 @@ contract ReputationRegistry {
     /// @notice Fixed-point ONE; score units are 1e18 == 1.0.
     uint256 public constant ONE = 1e18;
 
+    /// @notice Fixed-point HALF (0.5e18). Used as the **initial reputation** for
+    ///         a fresh agent so the first `_recompute` does not subtract from a
+    ///         maxed-out prior. Rationale (W14-C, α correction): the formula
+    ///         caps the per-event signal at `winRate * qualityRate * fillSignal`
+    ///         which is bounded above by ~`1.0 * 1.0 * 2.0 = 2.0` but in the
+    ///         realistic mid-range sits around 0.5 — so seeding the prior at 1.0
+    ///         meant every first update strictly decreased the score. Seeding
+    ///         at 0.5 matches the achievable steady-state mid-range.
+    uint256 public constant HALF = 5e17;
+
+    /// @notice USDC has 6 decimals; the registry's fixed-point math uses 1e18.
+    ///         `_fillSignal` is called from `BuilderFeeRouter.updateOnFee` which
+    ///         passes `fillAmount` in 6-decimal USDC base units. We rescale by
+    ///         1e12 (1e18 / 1e6) so the ln() input is in the right magnitude
+    ///         (W14-C β-fix). Without this rescale the ln() argument was off by
+    ///         12 orders of magnitude and `fillSignal` was permanently clamped
+    ///         to `FILL_SIGNAL_MIN` for any realistic fee.
+    uint256 public constant USDC_TO_1E18 = 1e12;
+
     /// @notice EMA decay applied to the previous score on each update
     ///         (85% old + 15% new). Stored scaled by 1e18: 0.85e18.
     ///         Per README §5.6 final mechanism design (α = 0.85): slow decay
@@ -114,7 +133,7 @@ contract ReputationRegistry {
     function updateOnAuction(address agent, bool won) external onlyAuthorized {
         Reputation storage r = reps[agent];
         if (r.lastUpdated == 0) {
-            r.score = ONE; // initialize unknown agent to 1.0
+            r.score = HALF; // W14-C α-fix: initialize unknown agent to 0.5
         }
         r.totalBids += 1;
         if (won) {
@@ -132,7 +151,7 @@ contract ReputationRegistry {
     function updateOnQuality(address agent, bool passed) external onlyAuthorized {
         Reputation storage r = reps[agent];
         if (r.lastUpdated == 0) {
-            r.score = ONE;
+            r.score = HALF; // W14-C α-fix: initialize unknown agent to 0.5
         }
         if (passed) {
             r.totalQualityPasses += 1;
@@ -149,7 +168,7 @@ contract ReputationRegistry {
     function updateOnFee(address agent, uint256 amount) external onlyAuthorized {
         Reputation storage r = reps[agent];
         if (r.lastUpdated == 0) {
-            r.score = ONE;
+            r.score = HALF; // W14-C α-fix: initialize unknown agent to 0.5
         }
         r.cumulativeFeesEarned += amount;
         r.score = _recompute(r);
@@ -178,7 +197,7 @@ contract ReputationRegistry {
         require(amount > 0, "zero slash");
         Reputation storage r = reps[agent];
         if (r.lastUpdated == 0) {
-            r.score = ONE;
+            r.score = HALF; // W14-C α-fix: initialize unknown agent to 0.5
         }
         if (amount >= r.score) {
             r.score = 0;
@@ -234,7 +253,9 @@ contract ReputationRegistry {
     ///      where:
     ///        win_rate     = totalWins / max(totalBids, 1)
     ///        quality_rate = totalQualityPasses / max(totalWins, 1)
-    ///        fill_signal  = clamp(ln(1 + cumulativeFees / 100), 0.5, 2.0)
+    ///        fill_signal  = clamp(ln(1 + (cumulativeFees * 1e12 / 1e6) / 100), 0.5, 2.0)
+    ///                       — i.e. USDC 6-decimal base units rescaled to 1e18
+    ///                       fixed-point before the ln() input.
     ///      All math is fixed-point with 1e18 scale.
     function _recompute(Reputation storage r) internal view returns (uint256) {
         uint256 winRate = r.totalBids == 0
@@ -259,15 +280,25 @@ contract ReputationRegistry {
     /// @dev Integer-only natural-log approximation, clamped to [0.5, 2.0].
     ///      We use a 4-term Mercator series for ln(1+x) when x is small, and
     ///      saturate to FILL_SIGNAL_MAX once cumulative fees exceed the band.
+    /// @dev W14-C β-fix: `cumulativeFees` arrives in **6-decimal USDC base units**
+    ///      (passed verbatim from `BuilderFeeRouter.recordFill`). The original
+    ///      contract divided by `FEE_SCALE=100` and then treated the result as
+    ///      a 1e18 fixed-point number — that left the ln() argument 12 orders
+    ///      of magnitude too small, so `fillSignal` was permanently clamped to
+    ///      `FILL_SIGNAL_MIN` for any realistic fee. We now rescale by 1e12
+    ///      (1e18 / 1e6) **first**, then divide by `FEE_SCALE`, so the input is
+    ///      in the same fixed-point units as the rest of the math.
     function _fillSignal(uint256 cumulativeFees) internal pure returns (uint256) {
-        // x = cumulativeFees / 100 (in 1e18 units, since fees are already 1e18-scaled)
+        // x = (cumulativeFees * 1e12) / 100   — fees in 6-decimal USDC → 1e18 fp.
         // For Solidity-friendliness we compute a piecewise approximation.
         if (cumulativeFees == 0) {
             return FILL_SIGNAL_MIN;
         }
 
-        // x_1e18 in fixed-point (cumulativeFees already 1e18 USDC; divide by FEE_SCALE=100)
-        uint256 x = cumulativeFees / FEE_SCALE;
+        // x in 1e18 fixed-point: convert 6-decimal USDC to 1e18 then divide by FEE_SCALE.
+        // (cumulativeFees * 1e12) cannot overflow at any plausible total fee level:
+        // 2^256 / 1e12 ≈ 1.16e65, well above any realistic cumulative USDC value.
+        uint256 x = Math.mulDiv(cumulativeFees, USDC_TO_1E18, FEE_SCALE);
 
         // Saturate above e^2 - 1 (~6.389 in 1e18 units => 6.389e18)
         if (x >= 6_389_056_098_930_650_407) {

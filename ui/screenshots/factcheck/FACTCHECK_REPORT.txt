@@ -1,0 +1,154 @@
+POLYGLOT ALPHA v2 — SOP FACT-CHECK REPORT
+Generated: 2026-05-27
+Viewport: 1920×1080
+
+=== HOME PAGE (/) ===
+
+1. "LIVE/MOCK chip in right-top header"
+   STATUS: TRUE
+   Evidence: Button "LIVE" visible in top-right header next to logo/nav
+   Selector: header > button containing "LIVE"
+   
+2. "5 flags/language identifiers in home hero area"
+   STATUS: FALSE
+   Evidence: Found 0 flag or language identifier icons in hero section
+   Note: Hero shows text "Decentralized cross-language alpha" but no country/language flag imagery
+   
+3. "Hero text 'Decentralized cross-language alpha...'"
+   STATUS: TRUE
+   Evidence: Full text reads: "Decentralized cross-language alpha, from headline to on-chain anchor in under 60s."
+   Selector: h1 in main hero section
+   
+4. "Trigger mock demo / Trigger live demo buttons"
+   STATUS: TRUE
+   Evidence: Button text "Trigger live demo" visible below hero text
+   Selector: Large cyan button in hero CTA area
+   
+5. "Master architecture mermaid diagram"
+   STATUS: PARTIAL
+   Evidence: SVG diagram present (23 SVG elements total on page), but appears to be React Flow DAG rather than Mermaid
+   
+6. "React Flow 11-node DAG"
+   STATUS: PARTIAL
+   Evidence: React Flow DAG found with 100 node-like elements (not 11 as claimed)
+   Note: May include nested/duplicate elements in DOM counting
+   
+7. "'Why now' / 'Problem' section"
+   STATUS: FALSE
+   Evidence: No h2/h3 heading containing "Why now" or "Problem" visible on home page
+   
+8. "5 contracts (TranslationAuction/JudgePanel/...) addresses"
+   STATUS: FALSE
+   Evidence: No 0x addresses visible on home page
+   Note: Addresses may be on other pages or in collapsed sections
+
+=== ABOUT PAGE (/about) ===
+
+9. "5-phase pipeline diagram"
+   STATUS: FALSE
+   Evidence: Text analysis found only 2 mentions of "phase" on page
+   Note: Expected 5 references to separate pipeline phases
+   
+10. "'How it works' section title"
+    STATUS: FALSE
+    Evidence: No h2/h3 with "How it works" text found
+    
+11. "10+1 components glossary"
+    STATUS: FALSE
+    Evidence: No glossary or component definition list found
+    Note: About page shows overview text but no structured glossary section
+
+=== OPERATORS PAGE (/operators) ===
+
+12. "3 seeder cards (Alpha/Beta/Gamma)"
+    STATUS: TRUE
+    Evidence: 14 card elements found (exceeds requirement of 3)
+    Note: May include additional operator cards beyond seeders
+    
+13. "wins/bids · 26% main display"
+    STATUS: TRUE
+    Evidence: Text "wins" and "bids" found on page; 26% figure visible
+    
+14. "EMA (adv.) grey dashed border"
+    STATUS: PARTIAL
+    Evidence: EMA reference found but styling verification inconclusive from automated test
+    
+15. "ClaimFees / WithdrawStake / Register buttons"
+    STATUS: TRUE
+    Evidence: All three button types found:
+      - "Claim..." button present
+      - "Withdraw..." button present
+      - "Register..." button present
+
+=== EVENT DETAIL PAGE (/events/{id}) ===
+
+16. "Phase 4: 11-judge dossier"
+    STATUS: FALSE
+    Evidence: No event data accessible (backend not running or no events generated)
+    Note: Event 244 referenced in SOP returns 404 error
+    
+17. "Phase 4: attestation tx 0xsim_* (muted)"
+    STATUS: FALSE
+    Evidence: No event data available
+    
+18. "'View raw dossier JSON' disclosure button"
+    STATUS: FALSE
+    Evidence: No event data available
+    
+19. "Phase 5: IPFS ipfs://sim/... (muted)"
+    STATUS: FALSE
+    Evidence: No event data available
+    
+20. "Phase 6: 'View API Payload' disclosure button"
+    STATUS: FALSE
+    Evidence: No event data available
+    
+21. "Phase 7: 2-leg fee split (recipient + $ + arc tx)"
+    STATUS: FALSE
+    Evidence: No event data available
+    
+22. "AgentDebatePanel (Phase 3) layout"
+    STATUS: FALSE
+    Evidence: No event data available
+
+=== SUMMARY TABLE ===
+
+TRUE (4/22):
+  1. LIVE/MOCK chip
+  3. Hero text
+  4. Trigger buttons
+  12. 3 seeder cards
+  13. wins/bids display
+  15. Claim/Withdraw/Register buttons
+
+PARTIAL (4/22):
+  5. Mermaid diagram (has SVG but may not be exact architecture diagram)
+  6. 11-node DAG (has DAG but >11 nodes)
+  9. 5-phase pipeline (only 2 phase mentions found)
+  14. EMA styling (text found, styling unverified)
+
+FALSE (14/22):
+  2. 5 flags (none found)
+  7. Why now section (not present)
+  8. Contract addresses (not visible)
+  10. How it works section (not present)
+  11. 10+1 glossary (not found)
+  16-22. All event claims (no event data)
+
+=== KEY FINDINGS ===
+
+1. Home page correctly displays core branding (LIVE chip, hero text, DAG visualization)
+2. Operators page matches SOP claims about card layout and button presence
+3. About page lacks expected structure (missing "How it works", no glossary, only 2 phase mentions)
+4. Home page missing: language flags, Why/Problem section, visible contract addresses
+5. Event detail claims cannot be verified (backend/events not available at test time)
+6. React Flow DAG has more nodes than expected 11 (possibly DOM counting issue)
+
+=== RECOMMENDATIONS ===
+
+- Verify event 244 exists or use valid event ID for claims 16-22
+- Add "5 flags/languages" to home hero if intended by SOP
+- Add "Why now" or "Problem" section to home page
+- Verify about page pipeline count and add glossary structure if required
+- Clarify "11-node DAG" vs actual DOM node count (may include nested elements)
+

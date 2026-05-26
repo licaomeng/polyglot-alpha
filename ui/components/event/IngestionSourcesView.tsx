@@ -106,7 +106,60 @@ interface IngestionSourcesViewProps {
   event: EventDetail;
 }
 
+// ─── W13-C live RSS health snapshot (Phase 1 details) ──────────────────────
+//
+// Backend stashes the per-source RSS fetch outcome on
+// ``phase[0].details.rss_health`` (see
+// ``polyglot_alpha.ingestion.rss_aggregator.RSSHealthReport``). When that
+// payload is present we overlay the *real* status onto the static FEEDS
+// grid so the UI no longer lies about reachability.
+interface RssHealthResult {
+  name: string;
+  url: string;
+  language: string;
+  status_code: number | null;
+  latency_ms: number;
+  entries: number;
+  verdict: string;
+  error?: string | null;
+}
+
+interface RssHealthSnapshot {
+  total_sources: number;
+  healthy: number;
+  broken: number;
+  disabled: number;
+  entries_collected: number;
+  min_required: number;
+  degraded: boolean;
+  results: RssHealthResult[];
+}
+
+function isRssHealthSnapshot(x: unknown): x is RssHealthSnapshot {
+  if (typeof x !== "object" || x === null) return false;
+  const v = x as Record<string, unknown>;
+  return (
+    typeof v.total_sources === "number" &&
+    typeof v.healthy === "number" &&
+    Array.isArray(v.results)
+  );
+}
+
+function verdictToStatus(verdict: string, entries: number): FeedStatus {
+  if (verdict === "OK" && entries > 0) return "live";
+  if (verdict === "DISABLED" || verdict === "PARSE_ERR") return "stale";
+  return "dead";
+}
+
 export function IngestionSourcesView({ event }: IngestionSourcesViewProps) {
+  // W13-C: try to read the live rss_health payload off phase 1 details.
+  const rssHealth = useMemo<RssHealthSnapshot | null>(() => {
+    const phases = event.phases ?? [];
+    const phase0 = phases.find((p) => p.name === "Event Ingestion") ?? phases[0];
+    const candidate = phase0?.details?.rss_health;
+    return isRssHealthSnapshot(candidate) ? candidate : null;
+  }, [event.phases]);
+
   // Best-effort surface of the actual cluster the ingestor produced for
   // this event. Backend currently exposes a single `source` string + the
   // headline, so when richer cluster metadata isn't present we fall back to
@@ -145,51 +198,91 @@ export function IngestionSourcesView({ event }: IngestionSourcesViewProps) {
             id="ingestion-rss-heading"
             className="font-mono text-[11px] font-semibold uppercase tracking-wider text-foreground"
           >
-            8 RSS sources · polled every 5 min
+            {rssHealth
+              ? `${rssHealth.results.length} RSS sources · ${rssHealth.healthy}/${rssHealth.results.length} healthy this run`
+              : "8 RSS sources · polled every 5 min"}
           </h4>
         </div>
+        {rssHealth && rssHealth.degraded && (
+          <div
+            role="alert"
+            data-testid="rss-degraded-banner"
+            className="rounded-md border border-amber-500/40 bg-amber-500/[0.06] p-2 font-mono text-[10px] text-amber-200/90"
+          >
+            live mode degraded · only {rssHealth.healthy}/{rssHealth.results.length}{" "}
+            sources reachable (min required ={" "}
+            {rssHealth.min_required})
+          </div>
+        )}
         <ul
           className="grid grid-cols-1 gap-2 sm:grid-cols-2"
           aria-label="RSS feed sources"
         >
-          {FEEDS.map((feed) => (
-            <li key={feed.name}>
-              <Card className="border-border/60">
-                <CardContent className="flex items-center gap-2 p-2.5">
-                  <span
-                    aria-hidden
-                    className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/30 font-mono text-[9px] uppercase text-muted-foreground"
-                  >
-                    {feed.flag}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-xs font-medium text-foreground/90">
-                        {feed.name}
-                      </span>
-                      <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                        {LANG_LABEL[feed.lang]}
-                      </span>
-                    </div>
-                    <p
-                      className="truncate font-mono text-[10px] text-muted-foreground"
-                      title={feed.url}
+          {(rssHealth?.results ?? FEEDS).map((feedOrResult) => {
+            const isResult = (x: unknown): x is RssHealthResult =>
+              typeof x === "object" && x !== null && "verdict" in (x as object);
+            const result = isResult(feedOrResult)
+              ? (feedOrResult as RssHealthResult)
+              : null;
+            const fallback = result
+              ? null
+              : (feedOrResult as FeedSource);
+            const name = result?.name ?? fallback?.name ?? "unknown";
+            const url = result?.url ?? fallback?.url ?? "";
+            const lang = (result?.language ??
+              fallback?.lang ??
+              "en") as FeedSource["lang"];
+            const status: FeedStatus = result
+              ? verdictToStatus(result.verdict, result.entries)
+              : (fallback?.status ?? "live");
+            const flag = fallback?.flag ?? "—";
+            const sub = result
+              ? `${result.verdict} · ${result.entries} entries · ${result.latency_ms}ms`
+              : null;
+            return (
+              <li key={`${name}-${url}`}>
+                <Card className="border-border/60">
+                  <CardContent className="flex items-center gap-2 p-2.5">
+                    <span
+                      aria-hidden
+                      className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/30 font-mono text-[9px] uppercase text-muted-foreground"
                     >
-                      {feed.url}
-                    </p>
-                  </div>
-                  <Badge
-                    className={cn(
-                      "flex-shrink-0 font-mono text-[9px] uppercase tracking-wider",
-                      STATUS_TONE[feed.status],
-                    )}
-                  >
-                    {feed.status}
-                  </Badge>
-                </CardContent>
-              </Card>
-            </li>
-          ))}
+                      {flag}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-xs font-medium text-foreground/90">
+                          {name}
+                        </span>
+                        <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                          {LANG_LABEL[lang] ?? lang}
+                        </span>
+                      </div>
+                      <p
+                        className="truncate font-mono text-[10px] text-muted-foreground"
+                        title={url}
+                      >
+                        {url}
+                      </p>
+                      {sub && (
+                        <p className="truncate font-mono text-[9px] text-muted-foreground/80">
+                          {sub}
+                        </p>
+                      )}
+                    </div>
+                    <Badge
+                      className={cn(
+                        "flex-shrink-0 font-mono text-[9px] uppercase tracking-wider",
+                        STATUS_TONE[status],
+                      )}
+                    >
+                      {status}
+                    </Badge>
+                  </CardContent>
+                </Card>
+              </li>
+            );
+          })}
         </ul>
       </section>
 

@@ -3,6 +3,7 @@ import {
   shortAddr,
   formatUsd,
   formatNumber,
+  formatWinsBids,
   isSimTxHash,
   isSimPolymarketId,
   arcscanTxUrl,
@@ -29,6 +30,28 @@ describe("utils", () => {
 
   it("formatNumber handles null gracefully", () => {
     expect(formatNumber(null)).toBe("—");
+  });
+
+  describe("formatWinsBids (W14-D)", () => {
+    it("renders wins/total · pct for valid inputs", () => {
+      expect(formatWinsBids(12, 47)).toBe("12/47 · 26%");
+    });
+
+    it("rounds the percent to the nearest integer", () => {
+      // 7/9 = 77.77…% → "78%"
+      expect(formatWinsBids(7, 9)).toBe("7/9 · 78%");
+    });
+
+    it("omits the percent when no bids have been entered", () => {
+      expect(formatWinsBids(0, 0)).toBe("0/0");
+    });
+
+    it("returns an em-dash when either side is missing", () => {
+      expect(formatWinsBids(null, 10)).toBe("—");
+      expect(formatWinsBids(3, undefined)).toBe("—");
+      expect(formatWinsBids(undefined, undefined)).toBe("—");
+      expect(formatWinsBids(Number.NaN, 5)).toBe("—");
+    });
   });
 
   describe("sim-prefix gating (W7-B)", () => {

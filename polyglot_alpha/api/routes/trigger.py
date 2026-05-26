@@ -387,15 +387,30 @@ async def _fetch_rss_demo_event(window_minutes: int) -> dict[str, Any] | None:
         return None
 
     # ---- 1. Poll RSS ----
+    rss_health: dict[str, Any] | None = None
     try:
         sources = rss_aggregator.load_sources()
-        raw_events = await rss_aggregator.poll_sources_once(sources)
+        raw_events, report = await rss_aggregator.poll_sources_once_with_report(
+            sources
+        )
+        rss_health = report.to_dict()
+    except rss_aggregator.RSSAggregatorError as exc:
+        # Fail-loud path: no fixture fallback. Re-raise so the trigger
+        # handler can mark the event FAILED with reason=rss_all_unreachable.
+        logger.error(
+            "trigger: rss_all_unreachable — %s",
+            exc,
+        )
+        raise
     except Exception as exc:  # broad — outbound HTTP / parse / FS
         logger.warning("trigger: RSS poll failed (%s)", exc)
         return None
 
     if not raw_events:
-        logger.info("trigger: RSS poll returned no events")
+        logger.info(
+            "trigger: RSS poll returned no events (rss_health=%s)",
+            rss_health,
+        )
         return None
 
     # ---- 2. Recency filter ----
@@ -458,6 +473,10 @@ async def _fetch_rss_demo_event(window_minutes: int) -> dict[str, Any] | None:
         "category": scoring.primary_category or "geopolitics",
         "summary": scoring.raw_summary or top["summary"],
         "scoring": scoring.as_dict(),
+        # W13-C: per-source health snapshot for the UI Phase 1 panel and
+        # for downstream logging / diagnostics. Always present when the
+        # live RSS path executes (None for mock / hardcoded / payload).
+        "rss_health": rss_health,
     }
 
 
@@ -640,7 +659,74 @@ async def trigger_event(
         precreated_event_id_rss: int = int(prep["event_id"])
 
         async def _rss_then_lifecycle() -> None:
-            rss_event = await _fetch_rss_demo_event(payload.rss_window_minutes)
+            # Import lazily so the failure path can introspect the exception
+            # type without forcing import at trigger handler entry.
+            from polyglot_alpha.ingestion import rss_aggregator as _rss
+
+            try:
+                rss_event = await _fetch_rss_demo_event(payload.rss_window_minutes)
+            except _rss.RSSAggregatorError as exc:
+                # Fail-loud: mark the placeholder event as FAILED with a
+                # descriptive reason + the full rss_health payload so the
+                # UI can render "live mode unreachable" instead of falling
+                # through to a misleading hardcoded headline.
+                logger.error(
+                    "trigger: rss_all_unreachable for event_id=%s — %s",
+                    precreated_event_id_rss,
+                    exc,
+                )
+                try:
+                    with session_scope() as session:
+                        row = session.get(Event, precreated_event_id_rss)
+                        if row is not None:
+                            row.status = "FAILED"
+                            row.title = (
+                                "RSS unreachable — live mode degraded"
+                            )
+                            # Persist the health snapshot via the
+                            # reserved meta marker (see
+                            # ``_extract_rss_health_meta`` in events.py).
+                            existing_sources = list(row.sources or [])
+                            existing_sources = [
+                                s for s in existing_sources
+                                if not (
+                                    isinstance(s, dict)
+                                    and s.get("name") == "_meta:rss_health"
+                                )
+                            ]
+                            existing_sources.append(
+                                {
+                                    "name": "_meta:rss_health",
+                                    "url": "",
+                                    "language": "_meta",
+                                    "health": exc.report.to_dict(),
+                                    "reason": "rss_all_unreachable",
+                                }
+                            )
+                            row.sources = existing_sources
+                            session.add(row)
+                except Exception as inner_exc:  # pragma: no cover - defensive
+                    logger.warning(
+                        "trigger: failed to mark event FAILED after rss "
+                        "unreachable (%s)", inner_exc,
+                    )
+                # Publish an event.updated so SSE listeners refresh.
+                try:
+                    hub = get_pubsub()
+                    await hub.publish(
+                        "event.updated",
+                        {
+                            "event_id": precreated_event_id_rss,
+                            "title": "RSS unreachable — live mode degraded",
+                            "status": "FAILED",
+                            "rss_health": exc.report.to_dict(),
+                            "reason": "rss_all_unreachable",
+                        },
+                    )
+                except Exception:  # pragma: no cover - defensive
+                    pass
+                return
+
             if rss_event is None:
                 rss_event = _load_hardcoded_sample() or _fallback_demo_event()
                 logger.info(
@@ -654,6 +740,25 @@ async def trigger_event(
             real_category = str(rss_event.get("category") or "geopolitics")
             real_summary = rss_event.get("summary")
             real_scoring = rss_event.get("scoring")
+            # W13-C: stash the per-source health snapshot on the event so
+            # the UI Phase 1 panel can show "live: 7/8 sources reachable".
+            rss_health_meta = rss_event.get("rss_health")
+            if isinstance(rss_health_meta, dict):
+                real_sources = [
+                    s for s in real_sources
+                    if not (
+                        isinstance(s, dict)
+                        and s.get("name") == "_meta:rss_health"
+                    )
+                ]
+                real_sources.append(
+                    {
+                        "name": "_meta:rss_health",
+                        "url": "",
+                        "language": "_meta",
+                        "health": rss_health_meta,
+                    }
+                )
 
             # UPDATE the pre-created event row in-place so subsequent
             # ``GET /events/{id}`` calls return the real headline.

@@ -20,6 +20,13 @@ export function shortAddr(addr?: string | null, head = 6, tail = 4): string {
  * convention. Pass ``rawDecimal=true`` only when the surrounding text is a
  * formula (e.g. ``max(reputation, 1.0)`` in the auction explainer) where the
  * 0–1 scale is mathematically required.
+ *
+ * NOTE (W14-D): The on-chain `ReputationRegistry.sol` EMA has a known unit-
+ * scale bug — `_fillSignal` stays pinned at the 0.5 floor for any realistic
+ * fee, so this value is currently *not* informative as a primary UX metric.
+ * Operator/leaderboard surfaces have switched to `formatWinsBids()` as the
+ * primary display; this helper still drives the auction-explainer formula
+ * and any "advanced / on-chain raw" detail panels.
  */
 export function formatReputation(
   value: number | null | undefined,
@@ -28,6 +35,38 @@ export function formatReputation(
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   if (options?.rawDecimal) return value.toFixed(2);
   return `${Math.round(value * 100)}%`;
+}
+
+/**
+ * Format a wins-over-bids ratio for display (W14-D primary UX metric).
+ *
+ * Returns a string like ``"12/47 · 26%"`` for `wins=12, totalBids=47`.
+ * Falls back to ``"—"`` when either input is missing/NaN. When totalBids
+ * is 0 we render ``"0/0"`` without a percent (no auctions entered).
+ *
+ * This is the demo-safe replacement for the on-chain EMA reputation badge:
+ * the EMA suffers from a known `_fillSignal` unit-scale bug in
+ * `ReputationRegistry.sol` (stuck at the 0.5 floor), so we lead with the
+ * unambiguous, off-chain wins/bids count and relegate the raw EMA to an
+ * "advanced" detail row with an explainer tooltip.
+ */
+export function formatWinsBids(
+  wins: number | null | undefined,
+  totalBids: number | null | undefined,
+): string {
+  if (
+    wins === null ||
+    wins === undefined ||
+    Number.isNaN(wins) ||
+    totalBids === null ||
+    totalBids === undefined ||
+    Number.isNaN(totalBids)
+  ) {
+    return "—";
+  }
+  if (totalBids === 0) return "0/0";
+  const pct = Math.round((wins / totalBids) * 100);
+  return `${wins}/${totalBids} · ${pct}%`;
 }
 
 export function formatUsd(value: number | null | undefined, fractionDigits = 2): string {

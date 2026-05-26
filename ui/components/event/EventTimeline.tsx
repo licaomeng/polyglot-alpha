@@ -520,13 +520,16 @@ function renderPhaseBody(
       // Mock-mode hint: the reputation registry is intentionally skipped for
       // mock events (W5-A1), so the phase completes with zero rep deltas.
       // Surface that explicitly so the empty Reputation Update section
-      // doesn't look like a regression.
+      // doesn't look like a regression. The W14-D wording leads with the
+      // off-chain wins/bids count (the primary UX signal) and flags the
+      // on-chain EMA as advanced/calibrating — same framing the leaderboard
+      // and operator cards use.
       const mockRepHint = event.mode === "mock" ? (
         <p
           className="font-mono text-[10px] text-muted-foreground"
           data-testid="revenue-mock-rep-hint"
         >
-          (mock — not recorded to reputation)
+          (mock — wins/bids unchanged, on-chain EMA not recorded)
         </p>
       ) : null;
       const streamingSkipped =

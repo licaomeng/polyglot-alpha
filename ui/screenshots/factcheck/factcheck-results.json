@@ -1,0 +1,113 @@
+[
+  {
+    "claim": 1,
+    "status": "TRUE",
+    "evidence": "LIVE"
+  },
+  {
+    "claim": 2,
+    "title": "5 flags in hero",
+    "status": "FALSE",
+    "evidence": "0"
+  },
+  {
+    "claim": 3,
+    "status": "TRUE",
+    "evidence": "Decentralized cross-language alpha, from headline "
+  },
+  {
+    "claim": 4,
+    "status": "TRUE",
+    "evidence": "Trigger live demo"
+  },
+  {
+    "claim": 5,
+    "status": "PARTIAL",
+    "evidence": "23 SVGs"
+  },
+  {
+    "claim": 6,
+    "status": "PARTIAL",
+    "evidence": "100/11"
+  },
+  {
+    "claim": 7,
+    "status": "FALSE",
+    "evidence": "No"
+  },
+  {
+    "claim": 8,
+    "status": "FALSE",
+    "evidence": "0"
+  },
+  {
+    "claim": 9,
+    "status": "FALSE",
+    "evidence": "2 mentions"
+  },
+  {
+    "claim": 10,
+    "status": "FALSE",
+    "evidence": "No"
+  },
+  {
+    "claim": 11,
+    "status": "FALSE",
+    "evidence": "0"
+  },
+  {
+    "claim": 12,
+    "status": "TRUE",
+    "evidence": "14"
+  },
+  {
+    "claim": 13,
+    "status": "TRUE",
+    "evidence": "wins: true, 26%: true"
+  },
+  {
+    "claim": 14,
+    "status": "PARTIAL",
+    "evidence": "EMA found: true"
+  },
+  {
+    "claim": 15,
+    "status": "TRUE",
+    "evidence": "Claim: true, Withdraw: true, Register: true"
+  },
+  {
+    "claim": 16,
+    "status": "FALSE",
+    "evidence": "0"
+  },
+  {
+    "claim": 17,
+    "status": "FALSE",
+    "evidence": "Not found"
+  },
+  {
+    "claim": 18,
+    "status": "FALSE",
+    "evidence": "No"
+  },
+  {
+    "claim": 19,
+    "status": "FALSE",
+    "evidence": "Not found"
+  },
+  {
+    "claim": 20,
+    "status": "FALSE",
+    "evidence": "No"
+  },
+  {
+    "claim": 21,
+    "status": "FALSE",
+    "evidence": "Not found"
+  },
+  {
+    "claim": 22,
+    "status": "FALSE",
+    "evidence": "Not found"
+  }
+]

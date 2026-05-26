@@ -5,9 +5,16 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { LeaderboardEntry } from "@/lib/api";
-import { cn, formatReputation, formatUsd, shortAddr } from "@/lib/utils";
+import {
+  cn,
+  formatReputation,
+  formatUsd,
+  formatWinsBids,
+  shortAddr,
+} from "@/lib/utils";
+import { WinsBidsInfo } from "@/components/reputation/WinsBidsInfo";
 
-type SortKey = "rank" | "reputation" | "revenueUsd" | "winRate";
+type SortKey = "rank" | "winsBids" | "revenueUsd" | "winRate" | "reputation";
 
 function ariaSortFor(active: boolean, dir: "asc" | "desc"): "ascending" | "descending" | "none" {
   if (!active) return "none";
@@ -43,9 +50,13 @@ export function LeaderboardTable({ entries }: { entries: LeaderboardEntry[] }) {
 
   const sorted = useMemo(() => {
     const copy = [...entries];
+    const projector = (e: LeaderboardEntry): number | string => {
+      if (sortKey === "winsBids") return e.total_wins ?? 0;
+      return e[sortKey];
+    };
     copy.sort((a, b) => {
-      const av = a[sortKey];
-      const bv = b[sortKey];
+      const av = projector(a);
+      const bv = projector(b);
       const cmp = av < bv ? -1 : av > bv ? 1 : 0;
       return sortDir === "asc" ? cmp : -cmp;
     });
@@ -80,16 +91,19 @@ export function LeaderboardTable({ entries }: { entries: LeaderboardEntry[] }) {
           <TH>Agent</TH>
           <TH
             className="text-right"
-            aria-sort={ariaSortFor(sortKey === "reputation", sortDir)}
-            title="Reputation score in [0, 1]. EWMA over recent fills with closed-IP weighting (thesis §5.27)."
+            aria-sort={ariaSortFor(sortKey === "winsBids", sortDir)}
+            title="Auctions won divided by auctions entered. Primary signal (W14-D)."
           >
-            <SortButton
-              label="Rep."
-              align="right"
-              active={sortKey === "reputation"}
-              dir={sortDir}
-              onClick={() => toggleSort("reputation")}
-            />
+            <span className="inline-flex items-center justify-end gap-1">
+              <SortButton
+                label="Wins / Bids"
+                align="right"
+                active={sortKey === "winsBids"}
+                dir={sortDir}
+                onClick={() => toggleSort("winsBids")}
+              />
+              <WinsBidsInfo />
+            </span>
           </TH>
           <TH
             className="text-right"
@@ -105,16 +119,16 @@ export function LeaderboardTable({ entries }: { entries: LeaderboardEntry[] }) {
             />
           </TH>
           <TH
-            className="text-right"
-            aria-sort={ariaSortFor(sortKey === "winRate", sortDir)}
-            title="Auctions won divided by auctions entered. Lowest qualified bid wins."
+            className="hidden text-right md:table-cell"
+            aria-sort={ariaSortFor(sortKey === "reputation", sortDir)}
+            title="On-chain EMA reputation (advanced). Currently calibrating — see ReputationRegistry.sol."
           >
             <SortButton
-              label="Win rate"
+              label="EMA (adv.)"
               align="right"
-              active={sortKey === "winRate"}
+              active={sortKey === "reputation"}
               dir={sortDir}
-              onClick={() => toggleSort("winRate")}
+              onClick={() => toggleSort("reputation")}
             />
           </TH>
         </TR>
@@ -140,7 +154,17 @@ export function LeaderboardTable({ entries }: { entries: LeaderboardEntry[] }) {
                   </span>
                 </Link>
               </TD>
-              <TD className="text-right font-mono text-xs">{formatReputation(row.reputation)}</TD>
+              <TD
+                className="text-right font-mono text-xs"
+                title={
+                  typeof row.total_wins === "number" &&
+                  typeof row.total_bids === "number"
+                    ? `${row.total_wins} wins out of ${row.total_bids} bids entered`
+                    : undefined
+                }
+              >
+                {formatWinsBids(row.total_wins, row.total_bids)}
+              </TD>
               <TD className="text-right font-mono text-xs">
                 <div className="flex items-center justify-end gap-2">
                   <div
@@ -155,8 +179,11 @@ export function LeaderboardTable({ entries }: { entries: LeaderboardEntry[] }) {
                   <span>{formatUsd(row.revenueUsd)}</span>
                 </div>
               </TD>
-              <TD className="text-right font-mono text-xs">
-                {(row.winRate * 100).toFixed(0)}%
+              <TD
+                className="hidden text-right font-mono text-xs text-muted-foreground md:table-cell"
+                title="On-chain EMA reputation — calibrating (see ReputationRegistry.sol)"
+              >
+                {formatReputation(row.reputation, { rawDecimal: true })}
               </TD>
             </TR>
           );

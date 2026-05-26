@@ -40,6 +40,7 @@ import httpx  # noqa: F401 — legacy test-fixture attribute, see comment above
 from .llm import AnthropicLLM, LLMError
 from .models import MODEL_SYNTHESIZER
 from .schemas import NewsEvent, Question, TranslationCandidate
+from .stub_detector import is_stub as _is_stub_text
 
 logger = logging.getLogger(__name__)
 
@@ -78,24 +79,44 @@ def synthesize(
     if not candidates:
         raise ValueError("synthesize() requires at least one candidate")
 
-    # Single-candidate short-circuit: nothing to merge.
+    # Single-candidate short-circuit: nothing to merge, but we still
+    # apply the same stub-validation gate as the multi-candidate path so
+    # an LLM-glitch fallback can't bypass downstream checks just because
+    # there was only one translator.
     if len(candidates) == 1:
         only = candidates[0]
-        return Question(
-            event_id=event.event_id,
-            question_en=only.question_en,
-            resolution_criteria=only.resolution_criteria,
-            end_date_iso=only.end_date_iso,
-        )
+        if _candidate_is_stub(only):
+            logger.warning(
+                "synthesizer: single candidate flagged as stub "
+                "(translator_id=%s, event_id=%s); propagating is_stub to Question",
+                only.translator_id,
+                event.event_id,
+            )
+        return _question_from_candidate(event, only, mark_stub=_candidate_is_stub(only))
 
     merged = _llm_merge(event, candidates)
     if merged is not None:
-        return Question(
+        question_en = str(merged["question_en"]).strip()
+        resolution_criteria = str(merged["resolution_criteria"]).strip()
+        end_date_iso = str(merged["end_date_iso"]).strip()
+        # An LLM merge can still produce stub text if it parroted back a
+        # placeholder from a stub candidate; flag that too.
+        merged_is_stub = _is_stub_text(question_en) or _is_stub_text(resolution_criteria)
+        if merged_is_stub:
+            logger.warning(
+                "synthesizer: LLM merge produced stub-shaped output "
+                "(event_id=%s); propagating is_stub to Question",
+                event.event_id,
+            )
+        question = Question(
             event_id=event.event_id,
-            question_en=str(merged["question_en"]).strip(),
-            resolution_criteria=str(merged["resolution_criteria"]).strip(),
-            end_date_iso=str(merged["end_date_iso"]).strip(),
+            question_en=question_en,
+            resolution_criteria=resolution_criteria,
+            end_date_iso=end_date_iso,
         )
+        if merged_is_stub:
+            object.__setattr__(question, "is_stub", True)
+        return question
 
     # ---- Fallback: legacy heuristic. ALWAYS logged. ------------------- #
     logger.warning(
@@ -105,12 +126,51 @@ def synthesize(
         len(candidates),
     )
     best = max(candidates, key=lambda c: len(c.resolution_criteria))
-    return Question(
-        event_id=event.event_id,
-        question_en=best.question_en,
-        resolution_criteria=best.resolution_criteria,
-        end_date_iso=best.end_date_iso,
+    best_is_stub = _candidate_is_stub(best)
+    if best_is_stub:
+        logger.warning(
+            "synthesizer: heuristic-picked candidate is a stub "
+            "(translator_id=%s, event_id=%s); propagating is_stub to Question",
+            best.translator_id,
+            event.event_id,
+        )
+    return _question_from_candidate(event, best, mark_stub=best_is_stub)
+
+
+def _candidate_is_stub(candidate: TranslationCandidate) -> bool:
+    """Return ``True`` if this candidate is an LLM-glitch fallback.
+
+    Honors both the explicit ``is_stub`` attribute set by
+    :mod:`polyglot_alpha.translators` AND a text-level match against
+    :data:`polyglot_alpha.stub_detector.KNOWN_STUB_PHRASES` so an
+    upstream caller that constructed the candidate manually still gets
+    caught.
+    """
+
+    if getattr(candidate, "is_stub", False):
+        return True
+    meta = getattr(candidate, "meta", None) or {}
+    if isinstance(meta, dict) and meta.get("is_stub"):
+        return True
+    return _is_stub_text(candidate.question_en) or _is_stub_text(
+        candidate.resolution_criteria
     )
+
+
+def _question_from_candidate(
+    event: NewsEvent, candidate: TranslationCandidate, *, mark_stub: bool
+) -> Question:
+    """Construct a :class:`Question` and propagate ``is_stub`` if requested."""
+
+    question = Question(
+        event_id=event.event_id,
+        question_en=candidate.question_en,
+        resolution_criteria=candidate.resolution_criteria,
+        end_date_iso=candidate.end_date_iso,
+    )
+    if mark_stub:
+        object.__setattr__(question, "is_stub", True)
+    return question
 
 
 # --------------------------------------------------------------------------- #

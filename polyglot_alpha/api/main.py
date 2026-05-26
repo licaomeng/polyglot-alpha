@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import AsyncIterator
@@ -13,12 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi import _rate_limit_exceeded_handler
-from sqlmodel import select
+from sqlmodel import func, select
 
 from ..llm import shutdown_anthropic
 from ..logging_ctx import install_event_id_filter
-from ..persistence import init_db, session_scope
-from ..persistence.models import Event, EventStatus
+from ..persistence import engine as _persistence_engine, init_db, session_scope
+from ..persistence.models import Event, EventStatus, FewShotExemplar
 from ..pubsub import get_pubsub
 from .rate_limit import limiter
 from .routes import (
@@ -95,6 +97,132 @@ def _sweep_stuck_events() -> int:
         return 0
 
 
+def _init_ingestion_tables() -> None:
+    """Create the watcher-only ingestion tables on the persistence engine.
+
+    ``polyglot_alpha.ingestion.models.RawEntry`` lives on a private SQLModel
+    registry so it is **not** part of ``SQLModel.metadata`` and therefore
+    not created by ``init_db()``. Without this hook the first RSS poll
+    crashes with ``no such table: raw_entries``. Idempotent — running
+    ``create_all`` against an already-present table is a no-op.
+    """
+
+    try:
+        from ..ingestion.models import _INGESTION_METADATA
+
+        _INGESTION_METADATA.create_all(_persistence_engine)
+        logger.info("startup_recovery: ingestion metadata create_all completed")
+    except Exception:  # noqa: BLE001 — best-effort, must not block startup
+        logger.exception(
+            "startup_recovery: ingestion metadata create_all failed; continuing"
+        )
+
+
+# When ``few_shot_exemplars`` is empty (fresh DB), auto-ingest the bundled
+# ``EXTENDED_EXEMPLARS`` so the LLM judges have ICL examples available out of
+# the box. Operators can disable this via ``SKIP_AUTO_INGEST_FEW_SHOTS=true``
+# (useful for tests or for clusters that pre-seed via the one-shot script).
+_AUTO_INGEST_FEW_SHOTS_ENV: str = "SKIP_AUTO_INGEST_FEW_SHOTS"
+
+
+def _maybe_auto_ingest_few_shots() -> None:
+    """Seed ``few_shot_exemplars`` from ``EXTENDED_EXEMPLARS`` if empty.
+
+    Idempotent: only runs when the table count is zero. Any error is
+    logged and swallowed so seeding cannot block startup.
+    """
+
+    if os.environ.get(_AUTO_INGEST_FEW_SHOTS_ENV, "").lower() in {"1", "true", "yes"}:
+        logger.info(
+            "startup_recovery: %s=true; skipping few-shot auto-ingest",
+            _AUTO_INGEST_FEW_SHOTS_ENV,
+        )
+        return
+    try:
+        with session_scope() as session:
+            existing = session.exec(
+                select(func.count()).select_from(FewShotExemplar)
+            ).one()
+            # `existing` may be a tuple-like row depending on dialect.
+            count = existing[0] if isinstance(existing, (tuple, list)) else int(existing)
+        if count > 0:
+            logger.info(
+                "startup_recovery: few_shot_exemplars has %d row(s); skipping seed",
+                count,
+            )
+            return
+    except Exception:  # noqa: BLE001 — best-effort
+        logger.exception(
+            "startup_recovery: failed to count few_shot_exemplars; skipping seed"
+        )
+        return
+
+    try:
+        from ..corpus.few_shots_extended import EXTENDED_EXEMPLARS
+        from .._fewshots_seed import seed_few_shots_from_extended
+
+        inserted = seed_few_shots_from_extended(EXTENDED_EXEMPLARS)
+        logger.info(
+            "startup_recovery: seeded few_shot_exemplars with %d row(s)", inserted
+        )
+    except Exception:  # noqa: BLE001 — best-effort
+        logger.exception(
+            "startup_recovery: few-shot auto-ingest failed; continuing startup"
+        )
+
+
+def _truthy(value: str | None) -> bool:
+    """Permissive truthy parser for env knobs (1/true/yes/on)."""
+
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on", "y", "t"}
+
+
+async def _prewarm_d8_embedding_model() -> None:
+    """Pre-load the SBert encoder used by D8 so the first event doesn't
+    pay the cold-start tax (W3 measured ~60s on first FAISS+SBert hit).
+
+    Runs once on startup as a non-blocking ``asyncio.create_task``: a
+    failure here MUST NOT crash startup — D8 will just report
+    INSUFFICIENT_DATA (W13-D) on the first event instead of silently
+    passing. Disabled when ``D8_PREWARM`` is falsy (defaults to true) so
+    test harnesses can skip the download.
+    """
+
+    if not _truthy(os.environ.get("D8_PREWARM", "true")):
+        logger.info("d8.model_load: skipped (D8_PREWARM disabled)")
+        return
+    try:
+        # Lazy import — keeps the SBert / FAISS deps out of test envs that
+        # never start the FastAPI app.
+        from polyglot_alpha.judges.style_alignment import d8_duplicate_detection
+
+        t0 = time.perf_counter()
+        model = await asyncio.to_thread(
+            d8_duplicate_detection._load_embedding_model
+        )
+        elapsed = time.perf_counter() - t0
+        if model is None:
+            err = d8_duplicate_detection.get_last_model_load_error() or "unknown"
+            logger.error(
+                "d8.model_load: FAILED model=%s reason=%s "
+                "(D8 will report INSUFFICIENT_DATA per W13-D)",
+                d8_duplicate_detection.DEFAULT_MODEL_ID,
+                err,
+            )
+            return
+        logger.info(
+            "d8.model_load: success model=%s elapsed=%.2fs",
+            d8_duplicate_detection.DEFAULT_MODEL_ID,
+            elapsed,
+        )
+    except Exception:  # noqa: BLE001 - must not block startup
+        logger.exception(
+            "d8.model_load: pre-warm crashed; D8 will lazy-load on first use"
+        )
+
+
 # Safe default origins for local development. Production deployments must
 # override via the ``CORS_ORIGINS`` env var (comma-separated list).
 DEFAULT_CORS_ORIGINS: tuple[str, ...] = (
@@ -124,13 +252,35 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # polyglot_alpha.logging_ctx). No-op if already installed.
     install_event_id_filter()
     init_db()
+    # Create watcher-only ingestion tables (raw_entries) on the same DB
+    # so the RSS aggregator can write dedup rows without crashing on first
+    # poll. ``init_db()`` does not cover these because they live on a
+    # private SQLModel registry — see ingestion/models.py for the
+    # rationale.
+    _init_ingestion_tables()
     # Recover any events left in non-terminal states by a previously
     # crashed/restarted backend process before warming pub/sub.
     _sweep_stuck_events()
+    # Auto-seed FewShotExemplar from the bundled EXTENDED_EXEMPLARS when
+    # the table is empty (fresh checkouts). Opt-out via
+    # SKIP_AUTO_INGEST_FEW_SHOTS=true.
+    _maybe_auto_ingest_few_shots()
     get_pubsub()
+    # W13-D: pre-warm the SBert encoder used by D8 so the first event
+    # doesn't pay the cold-load tax. Fire-and-forget via
+    # ``asyncio.create_task`` so it never blocks lifespan startup; the
+    # task logs its own outcome under ``d8.model_load:``.
+    prewarm_task = asyncio.create_task(
+        _prewarm_d8_embedding_model(), name="d8_prewarm"
+    )
     try:
         yield
     finally:
+        # Don't await the pre-warm task during shutdown — it's
+        # fire-and-forget. Cancel only if still running so we don't
+        # leak the worker thread holding the partial model load.
+        if not prewarm_task.done():
+            prewarm_task.cancel()
         logger.info("polyglot_alpha: shutting down")
         await shutdown_anthropic()
 

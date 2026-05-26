@@ -48,18 +48,24 @@ def _serialize_event_summary(event: Event) -> dict[str, Any]:
 
     source_name = ""
     if event.sources:
-        first = event.sources[0] if isinstance(event.sources, list) else None
-        if isinstance(first, dict):
-            source_name = str(first.get("name") or first.get("url") or "")
+        # Skip the reserved ``_meta:rss_health`` marker so the legacy
+        # ``source`` field continues to surface the first real headline
+        # source even after W13-C started stashing the rss_health snapshot
+        # inside ``Event.sources``.
+        for first in event.sources if isinstance(event.sources, list) else []:
+            if isinstance(first, dict) and first.get("name") != "_meta:rss_health":
+                source_name = str(first.get("name") or first.get("url") or "")
+                break
     # ``mode`` is the W5 lifecycle mode (``"live"`` | ``"mock"``). Older
     # rows pre-W5-A1 have NULL — the DB migration backfills them with
     # ``'live'`` but we also guard here defensively for any path that
     # bypassed the migration.
     event_mode = getattr(event, "mode", None) or "live"
+    visible_sources, _ = _extract_rss_health_meta(event.sources)
     return {
         "id": str(event.id) if event.id is not None else None,
         "content_hash": event.content_hash,
-        "sources": event.sources,
+        "sources": visible_sources,
         "source": source_name,
         "language": event.language,
         "title": event.title,
@@ -101,6 +107,35 @@ def _phase_status_from_event_status(
     return "pending"
 
 
+def _extract_rss_health_meta(
+    sources: list[dict[str, Any]] | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """Split the ``_meta:rss_health`` marker out of an ``event.sources`` list.
+
+    W13-C persists the per-source RSS health snapshot via a reserved
+    entry inside ``Event.sources`` (a free-form JSON list). Return the
+    user-visible sources (with the marker removed) plus the health dict,
+    so the API layer can surface it cleanly into ``phase.details.rss_health``
+    without leaking the marker into the rendered source list.
+    """
+
+    if not isinstance(sources, list):
+        return [], None
+    visible: list[dict[str, Any]] = []
+    health: dict[str, Any] | None = None
+    for entry in sources:
+        if not isinstance(entry, dict):
+            visible.append(entry)
+            continue
+        if entry.get("name") == "_meta:rss_health":
+            candidate = entry.get("health")
+            if isinstance(candidate, dict):
+                health = candidate
+            continue
+        visible.append(entry)
+    return visible, health
+
+
 def _build_phases(
     event: Event,
     auction: Optional[Auction],
@@ -128,12 +163,16 @@ def _build_phases(
         submission is not None,
         has_fee_event,
     ]
+    visible_sources, rss_health = _extract_rss_health_meta(event.sources)
+    phase_0_details: dict[str, Any] = {
+        "content_hash": event.content_hash,
+        "title": event.title,
+        "sources": visible_sources,
+    }
+    if rss_health is not None:
+        phase_0_details["rss_health"] = rss_health
     details: list[dict[str, Any]] = [
-        {
-            "content_hash": event.content_hash,
-            "title": event.title,
-            "sources": event.sources,
-        },
+        phase_0_details,
         {
             "winner_address": getattr(auction, "winner_address", None),
             "winning_bid": getattr(auction, "winning_bid", None),

@@ -14,10 +14,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import List, Tuple
 
 from .llm import LLMCallable
 from .schemas import AnalystReport, NewsEvent
+
+logger = logging.getLogger(__name__)
 
 
 _ANALYSTS: Tuple[Tuple[str, str], ...] = (
@@ -37,6 +40,15 @@ _PROMPT_TMPL = (
 
 
 def _parse_response(text: str) -> Tuple[str, List[str], List[str]]:
+    """Parse a structured analyst response.
+
+    Fail mode: when the LLM returns no ``JSON:`` marker or a tail that
+    fails to parse, we return ``entities=[], risks=[]`` and a summary
+    equal to the raw text. This is treated downstream as a low-signal
+    result (LLM glitch). The warning below makes the degradation
+    observable in logs instead of being silently absorbed.
+    """
+
     summary = text
     entities: List[str] = []
     risks: List[str] = []
@@ -48,7 +60,19 @@ def _parse_response(text: str) -> Tuple[str, List[str], List[str]]:
             entities = list(payload.get("entities") or [])
             risks = list(payload.get("risks") or [])
         except json.JSONDecodeError:
-            pass
+            logger.warning(
+                "analysts: JSON parse failed for response (first 200 chars): %s",
+                (text or "")[:200],
+            )
+    else:
+        # Missing ``JSON:`` marker entirely — either empty LLM output or
+        # a free-form response that ignored the protocol. Either way the
+        # entities/risks list will be empty, so downstream should treat
+        # this as low-signal.
+        logger.warning(
+            "analysts: response missing 'JSON:' marker (first 200 chars): %s",
+            (text or "")[:200],
+        )
     return summary, entities, risks
 
 

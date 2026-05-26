@@ -35,6 +35,7 @@ from polyglot_alpha.polymarket.types import (
     Question,
     SubmissionResult,
 )
+from polyglot_alpha.stub_detector import is_stub as _is_stub_text, stub_reason
 
 log = logging.getLogger(__name__)
 
@@ -80,7 +81,26 @@ def _build_gamma_payload(
     ``category``, ``resolution_source``, ``end_date_iso``,
     ``initial_liquidity_usdc``, ``builder_code``, ``builder_name`` and
     a stable ``external_id`` so duplicate submissions resolve idempotently.
+
+    Refuses to construct a payload when ``question.text`` matches a known
+    LLM-glitch stub placeholder. This is the last line of defence in the
+    W14-FIX-STUB chain: even if upstream stages (translators, synthesizer,
+    quality_eval) failed to reject the stub, we will NOT serialize it
+    into a Polymarket submission. The orchestrator catches the
+    :class:`ValueError` and marks the event FAILED with
+    ``reason="stub_question_blocked"``.
     """
+
+    if _is_stub_text(question.text):
+        leaked = stub_reason([question.text]) or question.text
+        log.error(
+            "polymarket: refusing to submit stub question (question_id=%s, leaked=%r)",
+            question.question_id,
+            leaked,
+        )
+        raise ValueError(
+            f"Refusing to submit stub question to Polymarket: {leaked!r}"
+        )
 
     return {
         "question": question.text,

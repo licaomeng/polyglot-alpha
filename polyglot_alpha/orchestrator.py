@@ -2371,12 +2371,58 @@ async def _run_lifecycle_inner(
             "registerTx": judges_attestation.get("register_tx"),
             "strategy": judges_attestation.get("strategy"),
         }
+
+    # W13-B: write canonical per-judge keys back to the QualityScore JSON
+    # fields so the DB row is self-describing (no need to parse the
+    # ``_judges`` smuggle to recover the per-judge breakdown). The W9-A
+    # smuggle (``_judges`` / ``_panelPartial`` / ``_pendingJudgeNames`` /
+    # ``_judgesAttestation``) is preserved verbatim alongside.
+    #
+    # Canonical translation_scores keys: ``bleu``, ``comet``, ``mqm_llm``
+    # (normalized 0-1 from the dossier). The existing raw ``bleu`` (0-100),
+    # ``comet`` (0-1), ``mqm`` (dict) keys emitted by the panel are NOT
+    # overwritten so the events serializer's backfill paths (which read
+    # raw BLEU on the 0-100 scale and ``mqm`` as a dict) stay correct.
+    #
+    # Canonical style_alignment_passes keys: ``d1_structural`` ..
+    # ``d8_duplicate_detection``. The existing short ``d1``..``d8`` keys
+    # the panel emits stay alongside.
+    style_alignment_passes_for_db = dict(judges.style_alignment_passes or {})
+    _judges_dossier = translation_scores_for_db.get("_judges")
+    if isinstance(_judges_dossier, list):
+        _translation_canonical: tuple[str, ...] = ("bleu", "comet", "mqm_llm")
+        for j in _judges_dossier:
+            if not isinstance(j, dict):
+                continue
+            name = j.get("name")
+            if not isinstance(name, str):
+                continue
+            if name in _translation_canonical:
+                # Only add when key is missing (don't overwrite raw bleu
+                # 0-100 / mqm dict). ``mqm_llm`` is new and lands here.
+                raw_score = j.get("score")
+                if name not in translation_scores_for_db and isinstance(
+                    raw_score, (int, float)
+                ):
+                    translation_scores_for_db[name] = float(raw_score)
+                # Special case: ``mqm_llm`` is the canonical key for the
+                # MQM judge. The panel writes a raw ``mqm`` dict; surface
+                # the normalized 0-1 score under ``mqm_llm`` so it sits
+                # next to ``bleu``/``comet`` for trivial DB consumers.
+                if name == "mqm_llm" and "mqm_llm" not in translation_scores_for_db:
+                    if isinstance(raw_score, (int, float)):
+                        translation_scores_for_db["mqm_llm"] = float(raw_score)
+            elif name.startswith("d") and name not in style_alignment_passes_for_db:
+                # Canonical style judge name (e.g. ``d1_structural``).
+                # Coexists with the short ``d1`` key the panel emits.
+                style_alignment_passes_for_db[name] = bool(j.get("passed"))
+
     with session_scope() as session:
         session.add(
             QualityScore(
                 event_id=event_id,
                 translation_scores=translation_scores_for_db,
-                style_alignment_passes=judges.style_alignment_passes,
+                style_alignment_passes=style_alignment_passes_for_db,
                 overall_score=judges.overall_score,
                 verdict=judges.verdict,
             )

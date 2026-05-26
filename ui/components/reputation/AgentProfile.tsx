@@ -1,8 +1,10 @@
+import type { ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { AgentProfile as AgentProfileType } from "@/lib/api";
 import { ContractAddressDisplay } from "@/components/onchain/ContractAddressDisplay";
-import { formatReputation, formatUsd } from "@/lib/utils";
+import { formatReputation, formatUsd, formatWinsBids } from "@/lib/utils";
+import { WinsBidsInfo } from "@/components/reputation/WinsBidsInfo";
 
 /**
  * Per-persona metadata shown as a badge strip next to the alias. The three
@@ -42,7 +44,6 @@ function lookupMeta(address: string): (typeof AGENT_META)[string] | undefined {
 
 export function AgentProfile({ agent }: { agent: AgentProfileType }) {
   const total = agent.wins + agent.losses;
-  const winRate = total > 0 ? (agent.wins / total) * 100 : 0;
   const meta = lookupMeta(agent.address);
   return (
     <Card>
@@ -70,27 +71,41 @@ export function AgentProfile({ agent }: { agent: AgentProfileType }) {
             {meta.strategy}
           </div>
         )}
-        <div className="grid grid-cols-2 gap-2 text-center lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 text-center">
           <Stat
-            label="Reputation"
-            value={formatReputation(agent.reputation)}
+            label={
+              <span className="inline-flex items-center justify-center gap-1">
+                Wins / Bids
+                <WinsBidsInfo ariaLabel={`Why wins / bids for ${agent.alias ?? "agent"}?`} />
+              </span>
+            }
+            value={formatWinsBids(agent.wins, total)}
             accent="primary"
-            title="Reputation in [0, 1] · EWMA over recent fills, closed-IP weighting"
+            title={`${agent.wins} wins out of ${total} bids entered`}
           />
           <Stat
             label="Revenue"
             value={formatUsd(agent.totalRevenue)}
             title="Cumulative builder-fee receipts (USDC, 0.4% per fill)"
           />
-          <Stat
-            label="Win rate"
-            value={`${winRate.toFixed(0)}%`}
-            title={`Auctions won (${agent.wins}) ÷ entered (${total})`}
-          />
+        </div>
+        <div
+          className="flex items-center justify-between gap-2 rounded-md border border-dashed border-border/30 bg-muted/[0.04] px-2 py-1.5"
+          title="On-chain EMA reputation — calibrating in next contract upgrade (see ReputationRegistry.sol)"
+        >
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
+            On-chain EMA <span className="text-muted-foreground/60">(advanced)</span>
+          </p>
+          <p className="font-mono text-[11px] text-muted-foreground">
+            {formatReputation(agent.reputation, { rawDecimal: true })}
+          </p>
         </div>
         <p className="text-[10px] leading-relaxed text-muted-foreground">
-          Reputation decays at EWMA α=0.85 — a single rejected submission still
-          drops the score noticeably, so agents have skin in the game.{" "}
+          Wins / bids is the primary signal. The on-chain EMA (α=0.85) is
+          tracked alongside but is calibrating — the `_fillSignal` term in
+          <span className="font-mono"> ReputationRegistry.sol</span> is being
+          rescaled in the next contract upgrade, so the raw chain value is
+          surfaced under &ldquo;advanced&rdquo; rather than the headline metric.{" "}
           <span className="text-muted-foreground/60">
             Slashing on chain: 0 events (testnet)
           </span>
@@ -106,7 +121,7 @@ function Stat({
   accent,
   title,
 }: {
-  label: string;
+  label: ReactNode;
   value: string;
   accent?: "primary";
   title?: string;
