@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Cpu, Wallet, Award, TrendingUp } from "lucide-react";
+import { shortAddr, formatReputation, formatUsd } from "@/lib/utils";
 
 /**
  * Single operator card for the /operators marketplace listing.
@@ -27,11 +28,6 @@ export interface OperatorCardData {
 }
 
 const UNKNOWN_PLACEHOLDER = "—";
-
-function shortAddress(address: string): string {
-  if (address.length <= 12) return address;
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
-}
 
 export function OperatorCard({ operator }: { operator: OperatorCardData }) {
   const isReference = operator.kind === "reference";
@@ -67,8 +63,18 @@ export function OperatorCard({ operator }: { operator: OperatorCardData }) {
             className="font-mono text-[10px] text-foreground/85"
             title={operator.address}
           >
-            {shortAddress(operator.address)}
+            {shortAddr(operator.address)}
           </code>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard?.writeText(operator.address).catch(() => {});
+            }}
+            aria-label={`Copy address ${operator.address}`}
+            className="ml-auto rounded px-1 text-[10px] text-muted-foreground transition-colors hover:bg-accent/10 hover:text-foreground"
+          >
+            copy
+          </button>
         </div>
 
         <div className="grid grid-cols-3 gap-2">
@@ -78,7 +84,7 @@ export function OperatorCard({ operator }: { operator: OperatorCardData }) {
             </p>
             <p className="font-mono text-sm font-semibold text-foreground">
               {typeof operator.reputation === "number"
-                ? operator.reputation.toFixed(2)
+                ? formatReputation(operator.reputation)
                 : UNKNOWN_PLACEHOLDER}
             </p>
           </div>
@@ -98,7 +104,7 @@ export function OperatorCard({ operator }: { operator: OperatorCardData }) {
             </p>
             <p className="font-mono text-sm font-semibold text-emerald-300">
               {typeof operator.totalFees === "number"
-                ? `$${operator.totalFees.toFixed(2)}`
+                ? formatUsd(operator.totalFees)
                 : UNKNOWN_PLACEHOLDER}
             </p>
           </div>

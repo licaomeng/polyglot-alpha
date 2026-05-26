@@ -6,18 +6,13 @@ categories (Accuracy, Fluency, Style, Terminology), then we collapse to
 a 0-100 score using the standard MQM weighting (Major=5, Minor=1).
 
 **Provider mapping.** The translation judges are kept at three (BLEU,
-COMET, MQM-LLM); MQM is now routed through Anthropic Claude Haiku 4.5
-direct (matching the seeders' backing model so the panel infra is a
-single provider after the OpenRouter swap). BLEU + COMET remain
-non-LLM offline judges. Anti-collusion still holds because BLEU/COMET
-share no upstream with the Claude judge.
+COMET, MQM-LLM); MQM is routed through Anthropic Claude Haiku 4.5 — the
+single LLM provider after the 2026-05 single-provider consolidation.
+BLEU + COMET remain non-LLM offline judges. Anti-collusion still holds
+because BLEU/COMET share no upstream with the Claude judge.
 
 Backends:
-    * Anthropic Haiku 4.5 (default) when ``ANTHROPIC_API_KEY`` is set.
-    * OpenRouter Llama 3.3 70B (legacy fallback) when only
-      ``OPENROUTER_API_KEY`` is set.
-    * Gemini fallback when ``GEMINI_API_KEY`` is set and neither
-      Anthropic nor OpenRouter are reachable.
+    * Anthropic Haiku 4.5 when ``ANTHROPIC_API_KEY`` is set.
     * Any user-supplied async callable passed as ``llm_call``.
     * Offline graceful degradation when no backend is reachable.
 
@@ -163,74 +158,28 @@ def _score_from_errors(errors: list[dict[str, Any]]) -> tuple[int, int, int]:
 async def _call_anthropic_haiku(prompt: str) -> str:
     """Default MQM backend: Claude Haiku 4.5 direct via the Anthropic SDK.
 
-    Falls back to OpenRouter Llama (legacy) when only
-    ``OPENROUTER_API_KEY`` is set, then to Gemini if neither is
-    available.
+    Raises :class:`RuntimeError` if ``ANTHROPIC_API_KEY`` is not set;
+    callers catch this and degrade to an offline neutral pass.
     """
 
-    import asyncio
-
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-    if anthropic_key:
-        from polyglot_alpha.llm import AnthropicLLM, CLAUDE_HAIKU
+    if not anthropic_key:
+        raise RuntimeError("ANTHROPIC_API_KEY is not set")
 
-        llm = AnthropicLLM(model=CLAUDE_HAIKU, api_key=anthropic_key)
-        return await llm.complete(
-            system=(
-                "You are an MQM annotator. Return ONLY a JSON object —"
-                " no prose, no markdown fences."
-            ),
-            user=prompt,
-            max_tokens=1024,
-            temperature=0.0,
-        )
+    from polyglot_alpha.llm import AnthropicLLM, CLAUDE_HAIKU
 
-    openrouter_key = os.getenv("OPENROUTER_API_KEY")
-    if openrouter_key:
-        try:
-            import httpx
-        except ImportError:
-            httpx = None  # type: ignore[assignment]
-
-        if httpx is not None:
-            url = "https://openrouter.ai/api/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {openrouter_key}",
-                "Content-Type": "application/json",
-            }
-            body = {
-                "model": "meta-llama/llama-3.3-70b-instruct",
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.0,
-            }
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(url, headers=headers, json=body)
-                resp.raise_for_status()
-                data = resp.json()
-                return data["choices"][0]["message"]["content"] or ""
-
-    # Fall back to Gemini if neither Anthropic nor OpenRouter is configured.
-    import google.generativeai as genai
-
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "None of ANTHROPIC_API_KEY, OPENROUTER_API_KEY, or"
-            " GEMINI_API_KEY is set"
-        )
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash-exp")
-
-    def _sync() -> str:
-        resp = model.generate_content(prompt)
-        return resp.text or ""
-
-    return await asyncio.to_thread(_sync)
+    llm = AnthropicLLM(model=CLAUDE_HAIKU, api_key=anthropic_key)
+    return await llm.complete(
+        system=(
+            "You are an MQM annotator. Return ONLY a JSON object —"
+            " no prose, no markdown fences."
+        ),
+        user=prompt,
+        max_tokens=1024,
+        temperature=0.0,
+    )
 
 
-# Backwards-compatible aliases — older callers / tests may import either name.
-_call_openrouter_llama = _call_anthropic_haiku
-_call_gemini = _call_anthropic_haiku
 
 
 async def judge_mqm_llm(

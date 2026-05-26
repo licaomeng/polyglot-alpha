@@ -192,23 +192,20 @@ async def _run_llm_fallback(
 
     backend = llm_call
     if backend is None:
-        if not (
-            os.getenv("ANTHROPIC_API_KEY")
-            or os.getenv("DEEPSEEK_API_KEY")
-            or os.getenv("OPENROUTER_API_KEY")
-            or os.getenv("GEMINI_API_KEY")
-            or os.getenv("GOOGLE_API_KEY")
-        ):
+        # After the single-provider consolidation the only live backend is
+        # Anthropic. If its key isn't set the LLM fallback is a no-op.
+        if not os.getenv("ANTHROPIC_API_KEY"):
             return None
 
     prompt = _build_llm_fallback_prompt(title)
-    provider = "injected" if backend is not None else "fallback:default"
+    provider = "injected" if backend is not None else "anthropic:claude-haiku-4-5-20251001"
     try:
         if backend is not None:
             raw = await backend(prompt)
         else:
-            # Reuse the D2 default route (DeepSeek) — D1 has no dedicated
-            # provider mapping but DeepSeek is the cheapest tier.
+            # Single-provider path: Anthropic Claude Haiku via the shared
+            # default-backend helper. ``dimension`` argument is accepted
+            # only for legacy signature parity.
             raw = await _call_default_backend(prompt, "d2")
         _log_llm_call(
             JUDGE_NAME, provider, len(prompt), len(raw or ""), success=True

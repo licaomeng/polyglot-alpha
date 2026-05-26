@@ -2,7 +2,7 @@
 
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { BidEntry } from "@/lib/api";
-import { formatUsd, shortAddr } from "@/lib/utils";
+import { formatReputation, formatUsd, shortAddr } from "@/lib/utils";
 import { WinnerHighlight } from "./WinnerHighlight";
 import { motion } from "framer-motion";
 
@@ -31,9 +31,11 @@ export function BidTable({ bids }: { bids: BidEntry[] }) {
                 : "border-b border-border/40"
             }
           >
-            <TD className="font-mono text-xs">{shortAddr(bid.agent)}</TD>
+            <TD className="font-mono text-xs" title={bid.agent}>
+              {shortAddr(bid.agent)}
+            </TD>
             <TD className="text-right font-mono text-xs">{formatUsd(bid.bid, 2)}</TD>
-            <TD className="text-right font-mono text-xs">{bid.reputation.toFixed(2)}</TD>
+            <TD className="text-right font-mono text-xs">{formatReputation(bid.reputation)}</TD>
             <TD className="w-20">{bid.winner && <WinnerHighlight />}</TD>
           </motion.tr>
         ))}

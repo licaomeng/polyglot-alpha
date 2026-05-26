@@ -11,6 +11,25 @@ export function shortAddr(addr?: string | null, head = 6, tail = 4): string {
   return `${addr.slice(0, head)}…${addr.slice(-tail)}`;
 }
 
+/**
+ * Format a reputation score for display.
+ *
+ * Backend stores reputation as a raw decimal in [0, 1]. The UI surfaces it
+ * uniformly as a whole-number percent (e.g. ``0.85`` → ``"85%"``) so the
+ * leaderboard win-rate column and the bid/operator rep columns share one
+ * convention. Pass ``rawDecimal=true`` only when the surrounding text is a
+ * formula (e.g. ``max(reputation, 1.0)`` in the auction explainer) where the
+ * 0–1 scale is mathematically required.
+ */
+export function formatReputation(
+  value: number | null | undefined,
+  options?: { rawDecimal?: boolean },
+): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  if (options?.rawDecimal) return value.toFixed(2);
+  return `${Math.round(value * 100)}%`;
+}
+
 export function formatUsd(value: number | null | undefined, fractionDigits = 2): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   return new Intl.NumberFormat("en-US", {

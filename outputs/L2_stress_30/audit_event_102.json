@@ -1,0 +1,475 @@
+{
+  "audit_index": 21,
+  "variation": "V5_long_unicode_titles",
+  "event_id": 102,
+  "title": "\u5b8f\u89c2\u7ecf\u6d4e\u89c2\u5bdf\uff1a\u7f8e\u8054\u50a8\u4e8c\u96f6\u4e8c\u516d\u5e74\u516d\u6708\u5341\u4e03\u81f3\u5341\u516b\u65e5\u4f1a\u8bae\u52a0\u606f\u4e8c\u5341\u4e94\u4e2a\u57fa\u70b9\u7684\u6982\u7387\u662f\u5426\u8d85\u8fc7\u4e94\u6210\uff1f\u5e02\u573a\u9884\u671f\u56de\u987e\u3001\u70b9\u9635\u56fe\u5206\u6790\u3001\u8fd1\u671f\u901a\u80c0\u6570\u636e\u4e0e\u5c31\u4e1a\u62a5\u544a\u7efc\u5408\u8bc4\u4f30\uff0c\u53e0\u52a0\u8054\u90a6\u57fa\u91d1\u671f\u8d27\u9690\u542b\u8def\u5f84\u4e0e\u5b98\u5458\u8bb2\u8bdd\u504f\u9e70\u504f\u9e3d\u5bf9\u6bd4\u7814\u7a76\u8ba8\u8bba\u3002FOMC-2026-06 [L2-V5_long_unicode_titles-21-1a38def2]",
+  "wallclock_s": 0.018838833086192608,
+  "summary": {
+    "event_id": 102,
+    "status": "SUBMITTED",
+    "verdict": "PASS",
+    "winner_address": "0xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+    "winning_bid": 0.4,
+    "question_id": "0xaf4a285e90d1879b2c65e246f8b1ff75c17b0dc3",
+    "market_id": "dryrun-8c96fb1ca363",
+    "market_mode": "dry_run",
+    "market_payload": {
+      "question": "Will \u5b8f\u89c2\u7ecf\u6d4e\u89c2\u5bdf\uff1a\u7f8e\u8054\u50a8\u4e8c\u96f6\u4e8c\u516d\u5e74\u516d\u6708\u5341\u4e03\u81f3\u5341\u516b\u65e5\u4f1a\u8bae\u52a0\u606f\u4e8c\u5341\u4e94\u4e2a\u57fa\u70b9\u7684\u6982\u7387\u662f\u5426\u8d85\u8fc7\u4e94\u6210\uff1f\u5e02\u573a\u9884\u671f\u56de\u987e\u3001\u70b9\u9635\u56fe\u5206\u6790\u3001\u8fd1\u671f\u901a\u80c0\u6570\u636e\u4e0e\u5c31\u4e1a\u62a5\u544a\u7efc\u5408\u8bc4\u4f30\uff0c\u53e0\u52a0\u8054\u90a6\u57fa\u91d1\u671f\u8d27\u9690\u542b\u8def\u5f84\u4e0e\u5b98\u5458\u8bb2\u8bdd\u504f\u9e70\u504f\u9e3d\u5bf9\u6bd4\u7814\u7a76\u8ba8\u8bba\u3002FOMC-2026-06 [L2-V5_long_unicode_titles-21-1a38def2] by December 31, 2026?",
+      "category": "macro",
+      "resolution_source": "operator",
+      "end_date_iso": "2026-12-31T07:58:51+00:00",
+      "initial_liquidity_usdc": 100.0,
+      "builder_code": "0xa93402f8ae6ac4a7b1d863d80145daa74f89cb4834fc0d86b36c1e4e1d6fbeb1",
+      "builder_name": "polyglot-alpha",
+      "external_id": "da73d421e1824f5bbe6c6467765d2aba",
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "client_id": "polyglot-alpha"
+    },
+    "overall_score": 0.92,
+    "is_simulated": true,
+    "auction_mode": "mock",
+    "bids": [
+      {
+        "agent_address": "0x928a7f8b37898e51E368D26869dc860DD7BF9390",
+        "bid_amount": 0.5,
+        "tx_hash": "0x07c06358c5d8428a694543094b33b4c7bc8ec28c4663c3f0a671610838e151a0"
+      },
+      {
+        "agent_address": "0xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+        "bid_amount": 0.4,
+        "tx_hash": "0xd65b8af693fec8ae874de30429c3ac39dcddd645c2ebadd3105ebd072f8659db"
+      },
+      {
+        "agent_address": "0xjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj",
+        "bid_amount": 0.6,
+        "tx_hash": "0x5fc2d394901a09b821def463c80f7fcdd35da48c76e3b3fadceed082e67a601e"
+      }
+    ],
+    "open_tx_hash": "0x625f0a4db28923a7fcfba60c6eb5c99ef581f971774785afc4855d9e3de507fa",
+    "settle_tx_hash": "0x655a2b2159891489580b42b8f39b8cea8a4ccaf86c452830a03de2b30bdc22b3",
+    "commit_tx_hash": "0x8f73150dab7e093fca0c49d253c9643689fb15ce60c59df168c1222b90884b77"
+  },
+  "phase_timestamps": {
+    "event.created": "2026-05-26T07:58:51.524641+00:00",
+    "auction.opened": "2026-05-26T07:58:51.525080+00:00",
+    "bid.submitted": "2026-05-26T07:58:51.527709+00:00",
+    "auction.settled": "2026-05-26T07:58:51.528469+00:00",
+    "translation.completed": "2026-05-26T07:58:51.529422+00:00",
+    "quality.verdict": "2026-05-26T07:58:51.535441+00:00",
+    "onchain.committed": "2026-05-26T07:58:51.537266+00:00",
+    "polymarket.submitted": "2026-05-26T07:58:51.538424+00:00",
+    "builder_fee.accrued": "2026-05-26T07:58:51.542751+00:00",
+    "event.finalized": "2026-05-26T07:58:51.542768+00:00"
+  },
+  "phase_deltas_s": {
+    "event.created": 0.0,
+    "auction.opened": 0.000439,
+    "bid.submitted": 0.003068,
+    "auction.settled": 0.003828,
+    "translation.completed": 0.004781,
+    "quality.verdict": 0.0108,
+    "onchain.committed": 0.012625,
+    "polymarket.submitted": 0.013783,
+    "builder_fee.accrued": 0.01811,
+    "event.finalized": 0.018127
+  },
+  "sse_topic_order": [
+    "event.created",
+    "auction.opened",
+    "bid.submitted",
+    "bid.submitted",
+    "bid.submitted",
+    "auction.settled",
+    "translation.completed",
+    "quality.verdict",
+    "onchain.committed",
+    "polymarket.submitted",
+    "builder_fee.accrued",
+    "event.finalized"
+  ],
+  "sse_event_count": 12,
+  "subsystem_status": {
+    "rss_bypassed": true,
+    "db_event_written": true,
+    "auction_opened": true,
+    "submit_bid_count": 3,
+    "auction_settled": true,
+    "translation_persisted": true,
+    "judges_pass_verdict": true,
+    "commit_question_persisted": true,
+    "commit_tx_hash_nonnull": true,
+    "polymarket_submitted": true,
+    "builder_fee_split_present": true,
+    "builder_fee_90_leg": true,
+    "builder_fee_10_leg": true,
+    "builder_fee_total_1usdc": true,
+    "reputation_updated": false
+  },
+  "bid_audit": {
+    "expected_winner_addr": "0xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+    "expected_winner_idx": 1,
+    "actual_winner_addr": "0xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+    "actual_winner_bid_id": null,
+    "match_with_computed_rule": true,
+    "bids": [
+      {
+        "agent_address": "0x928a7f8b37898e51E368D26869dc860DD7BF9390",
+        "bid_amount": 0.5,
+        "reputation": 0.85,
+        "qualified": true,
+        "score": 0.5
+      },
+      {
+        "agent_address": "0xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+        "bid_amount": 0.4,
+        "reputation": 0.9,
+        "qualified": true,
+        "score": 0.4
+      },
+      {
+        "agent_address": "0xjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj",
+        "bid_amount": 0.6,
+        "reputation": 0.8,
+        "qualified": true,
+        "score": 0.6
+      }
+    ]
+  },
+  "tx_hashes": {
+    "open_auction": "0x625f0a4db28923a7fcfba60c6eb5c99ef581f971774785afc4855d9e3de507fa",
+    "settle_auction": "0x655a2b2159891489580b42b8f39b8cea8a4ccaf86c452830a03de2b30bdc22b3",
+    "submit_bids": [
+      "0x07c06358c5d8428a694543094b33b4c7bc8ec28c4663c3f0a671610838e151a0",
+      "0xd65b8af693fec8ae874de30429c3ac39dcddd645c2ebadd3105ebd072f8659db",
+      "0x5fc2d394901a09b821def463c80f7fcdd35da48c76e3b3fadceed082e67a601e"
+    ],
+    "commit_question": "0x8f73150dab7e093fca0c49d253c9643689fb15ce60c59df168c1222b90884b77",
+    "builder_fee_arc": [
+      null,
+      null
+    ]
+  },
+  "title_metrics": {
+    "title_db": "\u5b8f\u89c2\u7ecf\u6d4e\u89c2\u5bdf\uff1a\u7f8e\u8054\u50a8\u4e8c\u96f6\u4e8c\u516d\u5e74\u516d\u6708\u5341\u4e03\u81f3\u5341\u516b\u65e5\u4f1a\u8bae\u52a0\u606f\u4e8c\u5341\u4e94\u4e2a\u57fa\u70b9\u7684\u6982\u7387\u662f\u5426\u8d85\u8fc7\u4e94\u6210\uff1f\u5e02\u573a\u9884\u671f\u56de\u987e\u3001\u70b9\u9635\u56fe\u5206\u6790\u3001\u8fd1\u671f\u901a\u80c0\u6570\u636e\u4e0e\u5c31\u4e1a\u62a5\u544a\u7efc\u5408\u8bc4\u4f30\uff0c\u53e0\u52a0\u8054\u90a6\u57fa\u91d1\u671f\u8d27\u9690\u542b\u8def\u5f84\u4e0e\u5b98\u5458\u8bb2\u8bdd\u504f\u9e70\u504f\u9e3d\u5bf9\u6bd4\u7814\u7a76\u8ba8\u8bba\u3002FOMC-2026-06 [L2-V5_long_unicode_titles-21-1a38def2]",
+    "title_len_chars": 152,
+    "title_db_len_chars": 152,
+    "title_round_trip_ok": true
+  },
+  "db_rows": {
+    "events": [
+      {
+        "id": 102,
+        "content_hash": "7233a3968e03df439c7623cba0b1cb7b8c3135b2c054fcd8eace6c37c84c1725",
+        "sources": [
+          {
+            "name": "audit-source",
+            "url": "https://audit.example/L2/1a38def2",
+            "language": "en"
+          }
+        ],
+        "language": "en",
+        "triggered_at": "2026-05-26 07:58:51.524324",
+        "status": "SUBMITTED",
+        "title": "\u5b8f\u89c2\u7ecf\u6d4e\u89c2\u5bdf\uff1a\u7f8e\u8054\u50a8\u4e8c\u96f6\u4e8c\u516d\u5e74\u516d\u6708\u5341\u4e03\u81f3\u5341\u516b\u65e5\u4f1a\u8bae\u52a0\u606f\u4e8c\u5341\u4e94\u4e2a\u57fa\u70b9\u7684\u6982\u7387\u662f\u5426\u8d85\u8fc7\u4e94\u6210\uff1f\u5e02\u573a\u9884\u671f\u56de\u987e\u3001\u70b9\u9635\u56fe\u5206\u6790\u3001\u8fd1\u671f\u901a\u80c0\u6570\u636e\u4e0e\u5c31\u4e1a\u62a5\u544a\u7efc\u5408\u8bc4\u4f30\uff0c\u53e0\u52a0\u8054\u90a6\u57fa\u91d1\u671f\u8d27\u9690\u542b\u8def\u5f84\u4e0e\u5b98\u5458\u8bb2\u8bdd\u504f\u9e70\u504f\u9e3d\u5bf9\u6bd4\u7814\u7a76\u8ba8\u8bba\u3002FOMC-2026-06 [L2-V5_long_unicode_titles-21-1a38def2]",
+        "tx_hash": null
+      }
+    ],
+    "bids": [
+      {
+        "id": 262,
+        "event_id": 102,
+        "agent_address": "0x928a7f8b37898e51E368D26869dc860DD7BF9390",
+        "bid_amount": 0.5,
+        "stake_amount": 5.0,
+        "candidate_hash": null,
+        "tx_hash": "0x07c06358c5d8428a694543094b33b4c7bc8ec28c4663c3f0a671610838e151a0",
+        "submitted_at": "2026-05-26 07:58:51.525133",
+        "reputation": 1.0
+      },
+      {
+        "id": 263,
+        "event_id": 102,
+        "agent_address": "0xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+        "bid_amount": 0.4,
+        "stake_amount": 5.0,
+        "candidate_hash": null,
+        "tx_hash": "0xd65b8af693fec8ae874de30429c3ac39dcddd645c2ebadd3105ebd072f8659db",
+        "submitted_at": "2026-05-26 07:58:51.525808",
+        "reputation": 1.0
+      },
+      {
+        "id": 264,
+        "event_id": 102,
+        "agent_address": "0xjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj",
+        "bid_amount": 0.6,
+        "stake_amount": 5.0,
+        "candidate_hash": null,
+        "tx_hash": "0x5fc2d394901a09b821def463c80f7fcdd35da48c76e3b3fadceed082e67a601e",
+        "submitted_at": "2026-05-26 07:58:51.526719",
+        "reputation": 1.0
+      }
+    ],
+    "auctions": [
+      {
+        "event_id": 102,
+        "winner_address": "0xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+        "winning_bid": 0.4,
+        "settlement_tx_hash": "0x655a2b2159891489580b42b8f39b8cea8a4ccaf86c452830a03de2b30bdc22b3",
+        "settled_at": "2026-05-26 07:58:51.527739"
+      }
+    ],
+    "translations": [
+      {
+        "event_id": 102,
+        "translator_address": "0xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+        "pipeline_trace_ipfs": "ipfs://mock/933b31ac2ccd",
+        "final_question_json": {
+          "title": "Will \u5b8f\u89c2\u7ecf\u6d4e\u89c2\u5bdf\uff1a\u7f8e\u8054\u50a8\u4e8c\u96f6\u4e8c\u516d\u5e74\u516d\u6708\u5341\u4e03\u81f3\u5341\u516b\u65e5\u4f1a\u8bae\u52a0\u606f\u4e8c\u5341\u4e94\u4e2a\u57fa\u70b9\u7684\u6982\u7387\u662f\u5426\u8d85\u8fc7\u4e94\u6210\uff1f\u5e02\u573a\u9884\u671f\u56de\u987e\u3001\u70b9\u9635\u56fe\u5206\u6790\u3001\u8fd1\u671f\u901a\u80c0\u6570\u636e\u4e0e\u5c31\u4e1a\u62a5\u544a\u7efc\u5408\u8bc4\u4f30\uff0c\u53e0\u52a0\u8054\u90a6\u57fa\u91d1\u671f\u8d27\u9690\u542b\u8def\u5f84\u4e0e\u5b98\u5458\u8bb2\u8bdd\u504f\u9e70\u504f\u9e3d\u5bf9\u6bd4\u7814\u7a76\u8ba8\u8bba\u3002FOMC-2026-06 [L2-V5_long_unicode_titles-21-1a38def2] by December 31, 2026?",
+          "description": "L2 stress audit synthetic source for variation V5_long_unicode_titles.",
+          "resolution_criteria": "Resolves YES if the underlying event described in the source news is confirmed by an authoritative report on or before the cutoff timestamp (December 31, 2026); otherwise resolves NO.",
+          "resolution_source": "operator",
+          "cutoff_ts": "2026-12-31T07:58:51+00:00",
+          "category": "macro",
+          "source_news": "\u5b8f\u89c2\u7ecf\u6d4e\u89c2\u5bdf\uff1a\u7f8e\u8054\u50a8\u4e8c\u96f6\u4e8c\u516d\u5e74\u516d\u6708\u5341\u4e03\u81f3\u5341\u516b\u65e5\u4f1a\u8bae\u52a0\u606f\u4e8c\u5341\u4e94\u4e2a\u57fa\u70b9\u7684\u6982\u7387\u662f\u5426\u8d85\u8fc7\u4e94\u6210\uff1f\u5e02\u573a\u9884\u671f\u56de\u987e\u3001\u70b9\u9635\u56fe\u5206\u6790\u3001\u8fd1\u671f\u901a\u80c0\u6570\u636e\u4e0e\u5c31\u4e1a\u62a5\u544a\u7efc\u5408\u8bc4\u4f30\uff0c\u53e0\u52a0\u8054\u90a6\u57fa\u91d1\u671f\u8d27\u9690\u542b\u8def\u5f84\u4e0e\u5b98\u5458\u8bb2\u8bdd\u504f\u9e70\u504f\u9e3d\u5bf9\u6bd4\u7814\u7a76\u8ba8\u8bba\u3002FOMC-2026-06 [L2-V5_long_unicode_titles-21-1a38def2]",
+          "source_language": "en",
+          "target_language": "en",
+          "outcomes": [
+            "Yes",
+            "No"
+          ]
+        },
+        "completed_at": "2026-05-26 07:58:51.529052"
+      }
+    ],
+    "quality_scores": [
+      {
+        "event_id": 102,
+        "translation_scores": {
+          "bleu": 42.0,
+          "comet": 0.78,
+          "mqm": {
+            "score": 95,
+            "major_count": 0,
+            "minor_count": 0,
+            "errors": []
+          }
+        },
+        "style_alignment_passes": {
+          "d1": true,
+          "d2": true,
+          "d3": true,
+          "d4": true,
+          "d5": true,
+          "d6": true,
+          "d7": true,
+          "d8": true
+        },
+        "overall_score": 0.92,
+        "verdict": "PASS",
+        "evaluated_at": "2026-05-26 07:58:51.534845"
+      }
+    ],
+    "questions": [
+      {
+        "id": 63,
+        "event_id": 102,
+        "question_id_onchain": "0xaf4a285e90d1879b2c65e246f8b1ff75c17b0dc3",
+        "title_hash": "933b31ac2ccd1888b9ff3fae80813ba9ca470a1573d221bc5af549c45ddbfcb5",
+        "builder_code": "0xa93402f8ae6ac4a7b1d863d80145daa74f89cb4834fc0d86b36c1e4e1d6fbeb1",
+        "reasoning_ipfs": "ipfs://mock/933b31ac2ccd",
+        "committed_at": "2026-05-26 07:58:51.535504",
+        "tx_hash": "0x8f73150dab7e093fca0c49d253c9643689fb15ce60c59df168c1222b90884b77"
+      }
+    ],
+    "polymarket_submissions": [
+      {
+        "id": 63,
+        "event_id": 102,
+        "market_id": "dryrun-8c96fb1ca363",
+        "submitted_at": "2026-05-26 07:58:51.537411",
+        "market_url": "https://polymarket.com/dryrun/dryrun-8c96fb1ca363",
+        "status": "SIMULATED",
+        "is_simulated": 1
+      }
+    ],
+    "builder_fee_events": [
+      {
+        "id": 123,
+        "market_id": "dryrun-8c96fb1ca363",
+        "fill_amount": 90.0,
+        "fee_amount": 0.9,
+        "translator_address": "0xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+        "arc_tx_hash": null,
+        "timestamp": "2026-05-26 07:58:51.538527",
+        "is_simulated": 1
+      },
+      {
+        "id": 124,
+        "market_id": "dryrun-8c96fb1ca363",
+        "fill_amount": 9.999999999999998,
+        "fee_amount": 0.09999999999999998,
+        "translator_address": "0x928a7f8b37898e51E368D26869dc860DD7BF9390",
+        "arc_tx_hash": null,
+        "timestamp": "2026-05-26 07:58:51.538595",
+        "is_simulated": 1
+      }
+    ],
+    "agent_reputation": [
+      {
+        "agent_address": "0x928a7f8b37898e51E368D26869dc860DD7BF9390",
+        "total_bids": 57,
+        "total_wins": 25,
+        "avg_quality": 0.9200000000000006,
+        "cumulative_fees": 22.499999999999993,
+        "last_updated": "2026-05-26 07:58:51.525480"
+      },
+      {
+        "agent_address": "0xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+        "total_bids": 1,
+        "total_wins": 1,
+        "avg_quality": 0.92,
+        "cumulative_fees": 0.9,
+        "last_updated": "2026-05-26 07:58:51.538716"
+      },
+      {
+        "agent_address": "0xjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj",
+        "total_bids": 1,
+        "total_wins": 0,
+        "avg_quality": 0.0,
+        "cumulative_fees": 0.0,
+        "last_updated": "2026-05-26 07:58:51.527258"
+      }
+    ]
+  },
+  "pub_events": [
+    {
+      "timestamp": "2026-05-26T07:58:51.524641+00:00",
+      "topic": "event.created",
+      "payload": {
+        "event_id": 102,
+        "content_hash": "7233a3968e03df439c7623cba0b1cb7b8c3135b2c054fcd8eace6c37c84c1725"
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:51.525080+00:00",
+      "topic": "auction.opened",
+      "payload": {
+        "event_id": 102,
+        "tx_hash": "0x625f0a4db28923a7fcfba60c6eb5c99ef581f971774785afc4855d9e3de507fa",
+        "window_s": 0.0
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:51.527709+00:00",
+      "topic": "bid.submitted",
+      "payload": {
+        "event_id": 102,
+        "agent_address": "0x928a7f8b37898e51E368D26869dc860DD7BF9390",
+        "bid_amount": 0.5
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:51.527717+00:00",
+      "topic": "bid.submitted",
+      "payload": {
+        "event_id": 102,
+        "agent_address": "0xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+        "bid_amount": 0.4
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:51.527720+00:00",
+      "topic": "bid.submitted",
+      "payload": {
+        "event_id": 102,
+        "agent_address": "0xjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj",
+        "bid_amount": 0.6
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:51.528469+00:00",
+      "topic": "auction.settled",
+      "payload": {
+        "event_id": 102,
+        "winner_address": "0xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+        "winning_bid": 0.4,
+        "tx_hash": "0x655a2b2159891489580b42b8f39b8cea8a4ccaf86c452830a03de2b30bdc22b3"
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:51.529422+00:00",
+      "topic": "translation.completed",
+      "payload": {
+        "event_id": 102,
+        "translator_address": "0xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+        "candidate_hash": "933b31ac2ccd1888b9ff3fae80813ba9ca470a1573d221bc5af549c45ddbfcb5"
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:51.535441+00:00",
+      "topic": "quality.verdict",
+      "payload": {
+        "event_id": 102,
+        "verdict": "PASS",
+        "overall_score": 0.92
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:51.537266+00:00",
+      "topic": "onchain.committed",
+      "payload": {
+        "event_id": 102,
+        "question_id": "0xaf4a285e90d1879b2c65e246f8b1ff75c17b0dc3",
+        "tx_hash": "0x8f73150dab7e093fca0c49d253c9643689fb15ce60c59df168c1222b90884b77"
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:51.538424+00:00",
+      "topic": "polymarket.submitted",
+      "payload": {
+        "event_id": 102,
+        "market_id": "dryrun-8c96fb1ca363",
+        "market_url": "https://polymarket.com/dryrun/dryrun-8c96fb1ca363",
+        "is_simulated": true,
+        "mode": "dry_run"
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:51.542751+00:00",
+      "topic": "builder_fee.accrued",
+      "payload": {
+        "event_id": 102,
+        "market_id": "dryrun-8c96fb1ca363",
+        "fee_amount": 1.0,
+        "winner_share": 0.9,
+        "treasury_share": 0.09999999999999998,
+        "legs": [
+          {
+            "recipient": "0xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+            "amount": 0.9,
+            "arc_tx_hash": null
+          },
+          {
+            "recipient": "0x928a7f8b37898e51E368D26869dc860DD7BF9390",
+            "amount": 0.09999999999999998,
+            "arc_tx_hash": null
+          }
+        ],
+        "is_simulated": true
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:51.542768+00:00",
+      "topic": "event.finalized",
+      "payload": {
+        "event_id": 102,
+        "terminal_status": "SUBMITTED",
+        "total_phases_completed": 7
+      }
+    }
+  ],
+  "correlation_id": "L2-21-1a38def2"
+}

@@ -152,7 +152,8 @@ export function WorkflowOverview({ phases }: { phases?: PhaseState[] }) {
         maxZoom={1.5}
         panOnDrag
         zoomOnScroll={false}
-        zoomOnPinch={true}
+        zoomOnPinch={false}
+        zoomOnDoubleClick={false}
         panOnScroll={false}
         preventScrolling={false}
         edgesFocusable={false}
@@ -165,7 +166,7 @@ export function WorkflowOverview({ phases }: { phases?: PhaseState[] }) {
         />
       </ReactFlow>
       <div className="absolute top-2 right-2 z-10 text-[9px] uppercase tracking-wider text-muted-foreground/60 pointer-events-none">
-        scroll page · drag to pan · ⌘+wheel to zoom
+        drag to pan · use +/− buttons to zoom
       </div>
       <div className="absolute top-2 left-2 z-10 text-[9px] uppercase tracking-wider text-muted-foreground/60 pointer-events-none">
         11 graph nodes across 7 lifecycle phases

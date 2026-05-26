@@ -207,20 +207,15 @@ async def judge_d5_resolution_clarity(
 
     backend = llm_call
     provider = "injected" if backend is not None else PROVIDER_FOR_DIMENSION.get(
-        "d5", "fallback:gemini"
+        "d5", "anthropic:claude-haiku-4-5-20251001"
     )
 
     if backend is None:
-        # No injected stub — only attempt the real backend if a key is set.
+        # No injected stub — only attempt the real backend if the
+        # Anthropic key is set. Single-provider consolidation 2026-05.
         import os
 
-        if not (
-            os.getenv("ANTHROPIC_API_KEY")
-            or os.getenv("DEEPSEEK_API_KEY")
-            or os.getenv("OPENROUTER_API_KEY")
-            or os.getenv("GEMINI_API_KEY")
-            or os.getenv("GOOGLE_API_KEY")
-        ):
+        if not os.getenv("ANTHROPIC_API_KEY"):
             # Offline: keep the rule-based PASS.
             return JudgeResult(
                 name=JUDGE_NAME,

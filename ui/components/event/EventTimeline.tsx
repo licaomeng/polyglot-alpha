@@ -250,10 +250,12 @@ function renderPhaseBody(
       return wrap(
         <div className="space-y-2 text-xs text-muted-foreground">
           <p>
-            <span className="text-foreground/80">Source:</span> {event.source}
+            <span className="text-foreground/80">Source:</span>{" "}
+            <span dir="auto">{event.source}</span>
           </p>
           <p>
-            <span className="text-foreground/80">Headline:</span> {event.headline}
+            <span className="text-foreground/80">Headline:</span>{" "}
+            <span dir="auto">{event.headline}</span>
           </p>
         </div>,
       );

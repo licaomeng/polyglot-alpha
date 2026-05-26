@@ -101,6 +101,7 @@ export default function AgentPage() {
                 >
                   <Link
                     href={`/events/${e.id}`}
+                    dir="auto"
                     className="truncate text-left hover:text-primary"
                     title={e.headline}
                   >

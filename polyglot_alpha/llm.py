@@ -1,31 +1,38 @@
-"""Minimal async LLM wrapper.
+"""Minimal async LLM wrapper — single-provider (Anthropic) consolidation.
 
-Default backend is **Anthropic direct** (``ANTHROPIC_API_KEY``), using
-Claude Haiku 4.5 as the cheap workhorse and Claude Sonnet 4.5 as the
-moderator-tier upgrade. Legacy OpenRouter / Gemini backends are kept
-behind explicit opt-in (``POLYGLOT_LLM_BACKEND=openrouter`` or a missing
-Anthropic key) so we can roll back if Anthropic is unreachable.
+Polyglot-Alpha used to ship three live provider paths (Anthropic direct,
+OpenRouter HTTP, Gemini direct). After the OpenRouter swap of 2026-05
+every production call already routed to Anthropic Claude Haiku 4.5; the
+other paths only added dead code and surface area to maintain. This
+module is now the single source of truth for LLM access:
 
-Two surfaces are exposed:
+* :class:`LLMCallable` — Protocol every consumer talks to.
+* :class:`AnthropicLLM` — the only live implementation (Claude Haiku 4.5
+  by default; Sonnet 4.5 for the moderator tier).
+* :class:`MockLLM` — deterministic offline stand-in for tests and for
+  environments without an ``ANTHROPIC_API_KEY``.
+* :func:`make_llm` — factory that returns ``AnthropicLLM`` when the key
+  is configured, ``MockLLM`` otherwise.
 
-* ``complete`` / ``complete_json`` — high-level helpers that auto-pick a
-  backend based on what API key is set. Used by the legacy pipeline.
-* ``make_llm(model_id)`` — returns an async callable bound to a specific
-  model. Used by the new per-agent code so each translator agent can pin
-  itself to its assigned model. Under the Anthropic-default path, the
-  model_id is ignored on the wire (every call routes to Haiku 4.5) while
-  the seeders still differ via system-prompt + temperature.
+Future provider swap: to add OpenAI / a new provider:
+
+  1. Write a new class implementing the ``LLMCallable`` protocol
+     (an async ``__call__(prompt: str) -> str``).
+  2. Add a factory ``lambda`` returning an instance of that class.
+  3. Register it in :data:`_LLM_FACTORIES` below.
+  4. Set ``LLM_BACKEND=openai`` (or your name) in ``.env``.
+
+Default backend is ``"anthropic"`` — currently the only registered
+implementation. The factory falls back to :class:`MockLLM` whenever the
+configured backend's API key is missing so unit tests stay offline.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
-
-import httpx
+from typing import TYPE_CHECKING, Awaitable, Callable
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from anthropic import AsyncAnthropic as _AsyncAnthropicType
@@ -105,6 +112,7 @@ async def shutdown_anthropic() -> None:
     except Exception as exc:  # pragma: no cover - shutdown best-effort
         LOGGER.warning("AsyncAnthropic.aclose() raised during shutdown: %s", exc)
 
+
 # ---------------------------------------------------------------------------
 # Model constants
 # ---------------------------------------------------------------------------
@@ -114,17 +122,6 @@ async def shutdown_anthropic() -> None:
 CLAUDE_HAIKU = "claude-haiku-4-5-20251001"
 CLAUDE_SONNET = "claude-sonnet-4-5-20250929"
 
-# Legacy OpenRouter slugs — kept as importable aliases so older fixtures /
-# scripts that imported them keep working. New code should reference the
-# Claude constants above instead.
-GEMINI_FLASH = "gemini-2.0-flash"
-DEEPSEEK_V3 = "deepseek/deepseek-chat"
-QWEN_25 = "qwen/qwen-2.5-72b-instruct"
-LLAMA_33 = "meta-llama/llama-3.3-70b-instruct"
-MISTRAL_LARGE = "mistralai/mistral-large"
-
-DEFAULT_GEMINI_MODEL = "gemini-2.0-flash"
-DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o-mini"
 DEFAULT_TIMEOUT = 30.0
 
 # Per-call defaults — keep ``max_tokens`` conservative so the cheap Haiku
@@ -137,7 +134,7 @@ LLMCallable = Callable[[str], Awaitable[str]]
 
 
 class LLMError(RuntimeError):
-    """Raised when no backend is configured or all backends fail."""
+    """Raised when no backend is configured or the live backend fails."""
 
 
 # ---------------------------------------------------------------------------
@@ -268,35 +265,7 @@ def _extract_retry_after_seconds(exc: Exception) -> float | None:
 
 
 # ---------------------------------------------------------------------------
-# Backend selection
-# ---------------------------------------------------------------------------
-
-
-def _backend_preference() -> str:
-    """Return ``"anthropic"`` (default), ``"openrouter"`` or ``"gemini"``.
-
-    Order:
-
-    1. ``POLYGLOT_LLM_BACKEND`` env var — explicit override.
-    2. ``ANTHROPIC_API_KEY`` set -> ``anthropic`` (NEW DEFAULT).
-    3. ``OPENROUTER_API_KEY`` set -> ``openrouter``.
-    4. ``GEMINI_API_KEY`` / ``GOOGLE_API_KEY`` set -> ``gemini``.
-    """
-
-    explicit = (os.getenv("POLYGLOT_LLM_BACKEND") or "").strip().lower()
-    if explicit in {"anthropic", "openrouter", "gemini"}:
-        return explicit
-    if os.getenv("ANTHROPIC_API_KEY"):
-        return "anthropic"
-    if os.getenv("OPENROUTER_API_KEY"):
-        return "openrouter"
-    if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
-        return "gemini"
-    return "anthropic"  # caller will get a clear error below
-
-
-# ---------------------------------------------------------------------------
-# AnthropicLLM (new default)
+# AnthropicLLM — the sole live backend.
 # ---------------------------------------------------------------------------
 
 
@@ -402,153 +371,8 @@ class AnthropicLLM:
 
 
 # ---------------------------------------------------------------------------
-# Legacy helpers (complete/complete_json) — now Anthropic-first.
+# MockLLM — offline default for tests + missing-key environments.
 # ---------------------------------------------------------------------------
-
-
-async def complete(
-    prompt: str,
-    *,
-    system: str | None = None,
-    temperature: float = 0.2,
-    response_mime_type: str | None = None,
-    timeout: float = DEFAULT_TIMEOUT,
-) -> str:
-    """Run a single completion against the preferred backend."""
-
-    backend = _backend_preference()
-
-    if backend == "anthropic":
-        try:
-            llm = AnthropicLLM(
-                model=CLAUDE_HAIKU,
-                system=system,
-                temperature=temperature,
-            )
-            return await asyncio.wait_for(
-                llm.complete(
-                    system or "You are a helpful assistant.",
-                    prompt,
-                    temperature=temperature,
-                ),
-                timeout=timeout * _anthropic_timeout_multiplier(),
-            )
-        except LLMError:
-            # Fall through to the next backend so callers don't crash on
-            # a missing key when an alternative provider is configured.
-            pass
-
-    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if backend == "gemini" and gemini_key:
-        try:
-            return await _gemini_complete(
-                gemini_key,
-                prompt,
-                system=system,
-                temperature=temperature,
-                response_mime_type=response_mime_type,
-                timeout=timeout,
-            )
-        except Exception as exc:  # pragma: no cover - network failures
-            LOGGER.warning("Gemini call failed, falling back: %s", exc)
-
-    openrouter_key = os.getenv("OPENROUTER_API_KEY")
-    if openrouter_key:
-        return await _openrouter_complete(
-            openrouter_key,
-            prompt,
-            system=system,
-            temperature=temperature,
-            timeout=timeout,
-        )
-
-    raise LLMError(
-        "No LLM backend configured. Set ANTHROPIC_API_KEY"
-        " (preferred) or OPENROUTER_API_KEY / GEMINI_API_KEY."
-    )
-
-
-async def complete_json(prompt: str, **kwargs: Any) -> Any:
-    """Run a completion that is expected to return JSON, and parse it."""
-
-    text = await complete(prompt, response_mime_type="application/json", **kwargs)
-    text = text.strip()
-    if text.startswith("```"):
-        # Strip markdown fences if the model wrapped them.
-        text = text.strip("`")
-        if text.lower().startswith("json"):
-            text = text[4:]
-        text = text.strip()
-    return json.loads(text)
-
-
-# --------------------------------------------------------------------------- #
-# Legacy backends (Gemini / OpenRouter) — kept for opt-in only.               #
-# --------------------------------------------------------------------------- #
-
-
-async def _gemini_complete(
-    api_key: str,
-    prompt: str,
-    *,
-    system: str | None,
-    temperature: float,
-    response_mime_type: str | None,
-    timeout: float,
-) -> str:
-    model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
-    url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:"
-        f"generateContent?key={api_key}"
-    )
-    contents: list[dict[str, Any]] = []
-    if system:
-        contents.append({"role": "user", "parts": [{"text": f"[SYSTEM]\n{system}"}]})
-    contents.append({"role": "user", "parts": [{"text": prompt}]})
-
-    generation_config: dict[str, Any] = {"temperature": temperature}
-    if response_mime_type:
-        generation_config["responseMimeType"] = response_mime_type
-
-    payload = {"contents": contents, "generationConfig": generation_config}
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.post(url, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-    return data["candidates"][0]["content"]["parts"][0]["text"]
-
-
-async def _openrouter_complete(
-    api_key: str,
-    prompt: str,
-    *,
-    system: str | None,
-    temperature: float,
-    timeout: float,
-) -> str:
-    model = os.getenv("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL)
-    messages = []
-    if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": prompt})
-
-    payload = {"model": model, "messages": messages, "temperature": temperature}
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "HTTP-Referer": "https://polyglot-alpha.local",
-        "X-Title": "polyglot-alpha-event-watcher",
-    }
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.post(url, json=payload, headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
-    return data["choices"][0]["message"]["content"]
-
-
-# --------------------------------------------------------------------------- #
-# Per-agent LLM factory.                                                      #
-# --------------------------------------------------------------------------- #
 
 
 class MockLLM:
@@ -572,49 +396,156 @@ class MockLLM:
         return self.canned_response
 
 
-def _gemini_callable(model_id: str, api_key: str) -> LLMCallable:
-    async def _call(prompt: str) -> str:
-        previous = os.environ.get("GEMINI_MODEL")
-        os.environ["GEMINI_MODEL"] = model_id
+# ---------------------------------------------------------------------------
+# Provider registry + factory.
+# ---------------------------------------------------------------------------
+#
+# Future provider swap: to add OpenAI / a new provider:
+#   1. Write a new class implementing the LLMCallable protocol
+#   2. Add a factory function returning an instance
+#   3. Register in _LLM_FACTORIES below
+#   4. Set LLM_BACKEND=openai in .env
+# Default backend is "anthropic"; current single implementation.
+
+LLM_BACKEND = os.environ.get("LLM_BACKEND", "anthropic").lower()
+
+
+def _anthropic_factory() -> "AnthropicLLM":
+    """Build a default ``AnthropicLLM`` instance bound to Claude Haiku 4.5."""
+
+    return AnthropicLLM()
+
+
+_LLM_FACTORIES: dict[str, Callable[[], "LLMCallable"]] = {
+    "anthropic": _anthropic_factory,
+    # "openai": lambda: OpenAILLM(),  # future — write the class + register here.
+}
+
+
+def make_llm(
+    model_id: str = CLAUDE_HAIKU,
+    *,
+    mock: bool = False,
+    system: str | None = None,
+    temperature: float = 0.2,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+) -> LLMCallable:
+    """Return an async callable bound to the configured backend.
+
+    Routing:
+
+    * ``mock=True`` -> :class:`MockLLM` (test override).
+    * ``LLM_BACKEND`` (default ``"anthropic"``) is looked up in
+      :data:`_LLM_FACTORIES`. If the matching provider's key is set the
+      live class is instantiated; otherwise we fall back to
+      :class:`MockLLM` so unit tests stay offline.
+
+    For Anthropic, ``model_id`` is honoured directly when it already
+    looks like a Claude snapshot; otherwise the call routes to
+    :data:`CLAUDE_HAIKU` (or :data:`CLAUDE_SONNET` when the slug
+    mentions ``sonnet``). This preserves the per-agent
+    differentiation contract: seeders pass their model_id but the
+    real distinction lives in ``system`` prompt + ``temperature``.
+    """
+
+    if mock:
+        return MockLLM(model_id=model_id)
+
+    backend = LLM_BACKEND
+
+    if backend == "anthropic":
+        if not os.getenv("ANTHROPIC_API_KEY"):
+            return MockLLM(model_id=model_id)
         try:
-            return await _gemini_complete(
-                api_key,
-                prompt,
-                system=None,
-                temperature=0.2,
-                response_mime_type=None,
-                timeout=DEFAULT_TIMEOUT,
+            return AnthropicLLM(
+                model=_resolve_anthropic_model(model_id),
+                system=system,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
-        finally:
-            if previous is None:
-                os.environ.pop("GEMINI_MODEL", None)
-            else:
-                os.environ["GEMINI_MODEL"] = previous
+        except LLMError:
+            return MockLLM(model_id=model_id)
 
-    return _call
+    factory = _LLM_FACTORIES.get(backend)
+    if factory is None:
+        LOGGER.warning(
+            "LLM_BACKEND=%r is not registered in _LLM_FACTORIES; falling back to MockLLM",
+            backend,
+        )
+        return MockLLM(model_id=model_id)
+    try:
+        return factory()
+    except LLMError:
+        return MockLLM(model_id=model_id)
 
 
-def _openrouter_callable(model_id: str, api_key: str) -> LLMCallable:
-    async def _call(prompt: str) -> str:
-        # Temporarily pin the model via env override so the shared helper
-        # routes to the agent-specific model without changing its signature.
-        previous = os.environ.get("OPENROUTER_MODEL")
-        os.environ["OPENROUTER_MODEL"] = model_id
-        try:
-            return await _openrouter_complete(
-                api_key,
-                prompt,
-                system=None,
-                temperature=0.2,
-                timeout=DEFAULT_TIMEOUT,
-            )
-        finally:
-            if previous is None:
-                os.environ.pop("OPENROUTER_MODEL", None)
-            else:
-                os.environ["OPENROUTER_MODEL"] = previous
+# ---------------------------------------------------------------------------
+# Module-level complete() / complete_json() — thin Anthropic-only wrappers
+# preserved so existing call sites (corpus/style_guide.py, ingestion/
+# cross_reference.py) keep working unchanged. Both honour the same
+# ``LLM_BACKEND`` / ``ANTHROPIC_API_KEY`` resolution as :func:`make_llm`,
+# with a soft-fail to :class:`MockLLM` when no key is configured.
+# ---------------------------------------------------------------------------
 
-    return _call
+
+async def complete(
+    prompt: str,
+    *,
+    system: str | None = None,
+    temperature: float = 0.2,
+    response_mime_type: str | None = None,  # accepted for API parity; ignored
+    timeout: float = DEFAULT_TIMEOUT,
+) -> str:
+    """Run a single completion against the configured backend.
+
+    ``response_mime_type`` is accepted for backward-compatibility with the
+    legacy Gemini path and is silently ignored — Anthropic Claude is
+    instructed via the ``system`` prompt to emit JSON when callers want
+    JSON, not via a wire-level MIME hint.
+    """
+
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        # Offline / no key — return the deterministic mock stub so callers
+        # (corpus distillation, cross-reference ingestion) still get a
+        # well-shaped string rather than crashing during local dev.
+        return await MockLLM(model_id="mock")(prompt)
+
+    try:
+        llm = AnthropicLLM(
+            model=CLAUDE_HAIKU,
+            system=system,
+            temperature=temperature,
+        )
+    except LLMError:
+        return await MockLLM(model_id="mock")(prompt)
+
+    return await asyncio.wait_for(
+        llm.complete(
+            system or "You are a helpful assistant.",
+            prompt,
+            temperature=temperature,
+        ),
+        timeout=timeout * _anthropic_timeout_multiplier(),
+    )
+
+
+async def complete_json(prompt: str, **kwargs):
+    """Run a completion that is expected to return JSON, and parse it.
+
+    Tolerates ```` ```json ```` fences a model might add despite
+    instructions.
+    """
+
+    import json as _json
+
+    text = await complete(prompt, response_mime_type="application/json", **kwargs)
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:]
+        text = text.strip()
+    return _json.loads(text)
 
 
 def _is_anthropic_model(model_id: str) -> bool:
@@ -627,7 +558,7 @@ def _is_anthropic_model(model_id: str) -> bool:
 
 
 def _resolve_anthropic_model(model_id: str) -> str:
-    """Map an OpenRouter-style slug (or empty string) onto an Anthropic snapshot."""
+    """Map a model slug onto an Anthropic snapshot (Haiku by default)."""
 
     if not model_id or not _is_anthropic_model(model_id):
         return CLAUDE_HAIKU
@@ -637,74 +568,17 @@ def _resolve_anthropic_model(model_id: str) -> str:
     return CLAUDE_HAIKU
 
 
-def make_llm(
-    model_id: str,
-    *,
-    mock: bool = False,
-    system: str | None = None,
-    temperature: float = 0.2,
-    max_tokens: int = DEFAULT_MAX_TOKENS,
-) -> LLMCallable:
-    """Return an async callable bound to ``model_id``.
-
-    Default routing (since the OpenRouter swap):
-
-    * ``ANTHROPIC_API_KEY`` set -> :class:`AnthropicLLM`. The
-      ``model_id`` is mapped onto :data:`CLAUDE_HAIKU` (or
-      :data:`CLAUDE_SONNET` when the slug mentions ``sonnet``); the
-      per-agent differentiation lives in the ``system`` prompt /
-      ``temperature`` overrides instead of model selection.
-    * ``POLYGLOT_LLM_BACKEND=openrouter`` (or no Anthropic key) ->
-      legacy OpenRouter path keyed by ``model_id``.
-    * ``model_id.startswith("gemini")`` and ``GEMINI_API_KEY`` set ->
-      Google AI Studio.
-    * Otherwise -> :class:`MockLLM` so unit tests stay offline.
-    """
-
-    if mock:
-        return MockLLM(model_id=model_id)
-
-    backend = _backend_preference()
-
-    if backend == "anthropic" and os.getenv("ANTHROPIC_API_KEY"):
-        try:
-            return AnthropicLLM(
-                model=_resolve_anthropic_model(model_id),
-                system=system,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-        except LLMError:
-            # Fall through to other providers if SDK / key are unusable.
-            pass
-
-    if model_id.startswith("gemini"):
-        key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        if not key:
-            return MockLLM(model_id=model_id)
-        return _gemini_callable(model_id, key)
-
-    key = os.getenv("OPENROUTER_API_KEY")
-    if not key:
-        return MockLLM(model_id=model_id)
-    return _openrouter_callable(model_id, key)
-
-
 __all__ = [
     "AnthropicLLM",
     "CLAUDE_HAIKU",
     "CLAUDE_SONNET",
-    "DEEPSEEK_V3",
     "DEFAULT_MAX_TOKENS",
     "DEFAULT_TIMEOUT",
-    "GEMINI_FLASH",
-    "LLAMA_33",
+    "LLM_BACKEND",
     "LLMCallable",
     "LLMError",
-    "MISTRAL_LARGE",
     "MODERATOR_MAX_TOKENS",
     "MockLLM",
-    "QWEN_25",
     "complete",
     "complete_json",
     "get_anthropic_client",

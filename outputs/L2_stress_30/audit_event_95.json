@@ -1,0 +1,433 @@
+{
+  "audit_index": 14,
+  "variation": "V3_two_bid_edge",
+  "event_id": 95,
+  "title": "Will the FOMC raise rates by 25bp at the June 2026 meeting? [L2-V3_two_bid_edge-14-03b65b6d]",
+  "wallclock_s": 2.1923772499430925,
+  "summary": {
+    "event_id": 95,
+    "status": "SUBMITTED",
+    "verdict": "PASS",
+    "winner_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "winning_bid": 0.4,
+    "question_id": "0x22e316bd6997353aaba1d55f2194269154f316dc",
+    "market_id": "dryrun-89fdc258ce45",
+    "market_mode": "dry_run",
+    "market_payload": {
+      "question": "Will the FOMC raise rates by 25bp at the June 2026 meeting? [L2-V3_two_bid_edge-14-03b65b6d]?",
+      "category": "macro",
+      "resolution_source": "operator",
+      "end_date_iso": "2026-12-31T07:58:46+00:00",
+      "initial_liquidity_usdc": 100.0,
+      "builder_code": "0xa93402f8ae6ac4a7b1d863d80145daa74f89cb4834fc0d86b36c1e4e1d6fbeb1",
+      "builder_name": "polyglot-alpha",
+      "external_id": "ff7fc714ab7c48f8b78226fc6fbaad36",
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "client_id": "polyglot-alpha"
+    },
+    "overall_score": 0.92,
+    "is_simulated": true,
+    "auction_mode": "mock",
+    "bids": [
+      {
+        "agent_address": "0x928a7f8b37898e51E368D26869dc860DD7BF9390",
+        "bid_amount": 0.5,
+        "tx_hash": "0x9ffdd36375b693ee905c6af529641c74b02657315235c7d547ec21d6a91b6db0"
+      },
+      {
+        "agent_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "bid_amount": 0.4,
+        "tx_hash": "0x6f72de8e846e6303d140785c3a9c8209bcf761f5afd740c0aff60dd34795a996"
+      }
+    ],
+    "open_tx_hash": "0x94e2d3eb95904f4507cda934e5002257dd4fcad3130d5535788ffc5d3a8e287f",
+    "settle_tx_hash": "0x96bb3a294960f26781e389d5f35cd4e2010b104080e81f606a3bee2a6f42afdd",
+    "commit_tx_hash": "0xe201a02bfd651c8c048e6addf90cf0cfe720c13961b037621f36972fa411416c"
+  },
+  "phase_timestamps": {
+    "event.created": "2026-05-26T07:58:46.939559+00:00",
+    "auction.opened": "2026-05-26T07:58:46.940258+00:00",
+    "bid.submitted": "2026-05-26T07:58:46.941856+00:00",
+    "auction.settled": "2026-05-26T07:58:46.942480+00:00",
+    "translation.completed": "2026-05-26T07:58:46.943250+00:00",
+    "quality.verdict": "2026-05-26T07:58:46.944121+00:00",
+    "onchain.committed": "2026-05-26T07:58:46.945640+00:00",
+    "polymarket.submitted": "2026-05-26T07:58:46.946588+00:00",
+    "builder_fee.accrued": "2026-05-26T07:58:49.130948+00:00",
+    "event.finalized": "2026-05-26T07:58:49.130966+00:00"
+  },
+  "phase_deltas_s": {
+    "event.created": 0.0,
+    "auction.opened": 0.000699,
+    "bid.submitted": 0.002297,
+    "auction.settled": 0.002921,
+    "translation.completed": 0.003691,
+    "quality.verdict": 0.004562,
+    "onchain.committed": 0.006081,
+    "polymarket.submitted": 0.007029,
+    "builder_fee.accrued": 2.191389,
+    "event.finalized": 2.191407
+  },
+  "sse_topic_order": [
+    "event.created",
+    "auction.opened",
+    "bid.submitted",
+    "bid.submitted",
+    "auction.settled",
+    "translation.completed",
+    "quality.verdict",
+    "onchain.committed",
+    "polymarket.submitted",
+    "builder_fee.accrued",
+    "event.finalized"
+  ],
+  "sse_event_count": 11,
+  "subsystem_status": {
+    "rss_bypassed": true,
+    "db_event_written": true,
+    "auction_opened": true,
+    "submit_bid_count": 2,
+    "auction_settled": true,
+    "translation_persisted": true,
+    "judges_pass_verdict": true,
+    "commit_question_persisted": true,
+    "commit_tx_hash_nonnull": true,
+    "polymarket_submitted": true,
+    "builder_fee_split_present": true,
+    "builder_fee_90_leg": true,
+    "builder_fee_10_leg": true,
+    "builder_fee_total_1usdc": true,
+    "reputation_updated": false
+  },
+  "bid_audit": {
+    "expected_winner_addr": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "expected_winner_idx": 1,
+    "actual_winner_addr": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "actual_winner_bid_id": null,
+    "match_with_computed_rule": true,
+    "bids": [
+      {
+        "agent_address": "0x928a7f8b37898e51E368D26869dc860DD7BF9390",
+        "bid_amount": 0.5,
+        "reputation": 0.9,
+        "qualified": true,
+        "score": 0.5
+      },
+      {
+        "agent_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "bid_amount": 0.4,
+        "reputation": 0.85,
+        "qualified": true,
+        "score": 0.4
+      }
+    ]
+  },
+  "tx_hashes": {
+    "open_auction": "0x94e2d3eb95904f4507cda934e5002257dd4fcad3130d5535788ffc5d3a8e287f",
+    "settle_auction": "0x96bb3a294960f26781e389d5f35cd4e2010b104080e81f606a3bee2a6f42afdd",
+    "submit_bids": [
+      "0x9ffdd36375b693ee905c6af529641c74b02657315235c7d547ec21d6a91b6db0",
+      "0x6f72de8e846e6303d140785c3a9c8209bcf761f5afd740c0aff60dd34795a996"
+    ],
+    "commit_question": "0xe201a02bfd651c8c048e6addf90cf0cfe720c13961b037621f36972fa411416c",
+    "builder_fee_arc": [
+      "0x7696e04f83d5c7d974fb69f2136fdddad9067ede0d1d19a67930038216064af1",
+      "0x4b03bcab53babae1a8bd42f6f2266bea015f3bf498e978e539c02845b0bf4811"
+    ]
+  },
+  "title_metrics": {
+    "title_db": "Will the FOMC raise rates by 25bp at the June 2026 meeting? [L2-V3_two_bid_edge-14-03b65b6d]",
+    "title_len_chars": 92,
+    "title_db_len_chars": 92,
+    "title_round_trip_ok": true
+  },
+  "db_rows": {
+    "events": [
+      {
+        "id": 95,
+        "content_hash": "5be476bb37d107aeecd0c9be9fe179c63bfcb3f3c99a45669d501c58fc4516fc",
+        "sources": [
+          {
+            "name": "audit-source",
+            "url": "https://audit.example/L2/03b65b6d",
+            "language": "en"
+          }
+        ],
+        "language": "en",
+        "triggered_at": "2026-05-26 07:58:46.939099",
+        "status": "SUBMITTED",
+        "title": "Will the FOMC raise rates by 25bp at the June 2026 meeting? [L2-V3_two_bid_edge-14-03b65b6d]",
+        "tx_hash": null
+      }
+    ],
+    "bids": [
+      {
+        "id": 238,
+        "event_id": 95,
+        "agent_address": "0x928a7f8b37898e51E368D26869dc860DD7BF9390",
+        "bid_amount": 0.5,
+        "stake_amount": 5.0,
+        "candidate_hash": null,
+        "tx_hash": "0x9ffdd36375b693ee905c6af529641c74b02657315235c7d547ec21d6a91b6db0",
+        "submitted_at": "2026-05-26 07:58:46.940343",
+        "reputation": 1.0
+      },
+      {
+        "id": 239,
+        "event_id": 95,
+        "agent_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "bid_amount": 0.4,
+        "stake_amount": 5.0,
+        "candidate_hash": null,
+        "tx_hash": "0x6f72de8e846e6303d140785c3a9c8209bcf761f5afd740c0aff60dd34795a996",
+        "submitted_at": "2026-05-26 07:58:46.941140",
+        "reputation": 1.0
+      }
+    ],
+    "auctions": [
+      {
+        "event_id": 95,
+        "winner_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "winning_bid": 0.4,
+        "settlement_tx_hash": "0x96bb3a294960f26781e389d5f35cd4e2010b104080e81f606a3bee2a6f42afdd",
+        "settled_at": "2026-05-26 07:58:46.941886"
+      }
+    ],
+    "translations": [
+      {
+        "event_id": 95,
+        "translator_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "pipeline_trace_ipfs": "ipfs://mock/2d507b157ccb",
+        "final_question_json": {
+          "title": "Will the FOMC raise rates by 25bp at the June 2026 meeting? [L2-V3_two_bid_edge-14-03b65b6d]?",
+          "description": "L2 stress audit synthetic source for variation V3_two_bid_edge.",
+          "resolution_criteria": "Resolves YES if the underlying event described in the source news is confirmed by an authoritative report on or before the cutoff timestamp (December 31, 2026); otherwise resolves NO.",
+          "resolution_source": "operator",
+          "cutoff_ts": "2026-12-31T07:58:46+00:00",
+          "category": "macro",
+          "source_news": "Will the FOMC raise rates by 25bp at the June 2026 meeting? [L2-V3_two_bid_edge-14-03b65b6d]",
+          "source_language": "en",
+          "target_language": "en",
+          "outcomes": [
+            "Yes",
+            "No"
+          ]
+        },
+        "completed_at": "2026-05-26 07:58:46.943029"
+      }
+    ],
+    "quality_scores": [
+      {
+        "event_id": 95,
+        "translation_scores": {
+          "bleu": 42.0,
+          "comet": 0.78,
+          "mqm": {
+            "score": 95,
+            "major_count": 0,
+            "minor_count": 0,
+            "errors": []
+          }
+        },
+        "style_alignment_passes": {
+          "d1": true,
+          "d2": true,
+          "d3": true,
+          "d4": true,
+          "d5": true,
+          "d6": true,
+          "d7": true,
+          "d8": true
+        },
+        "overall_score": 0.92,
+        "verdict": "PASS",
+        "evaluated_at": "2026-05-26 07:58:46.943897"
+      }
+    ],
+    "questions": [
+      {
+        "id": 56,
+        "event_id": 95,
+        "question_id_onchain": "0x22e316bd6997353aaba1d55f2194269154f316dc",
+        "title_hash": "2d507b157ccb2b337bcc694c5ec7d62853f474dd1e691265615bbe7234a55ff1",
+        "builder_code": "0xa93402f8ae6ac4a7b1d863d80145daa74f89cb4834fc0d86b36c1e4e1d6fbeb1",
+        "reasoning_ipfs": "ipfs://mock/2d507b157ccb",
+        "committed_at": "2026-05-26 07:58:46.944167",
+        "tx_hash": "0xe201a02bfd651c8c048e6addf90cf0cfe720c13961b037621f36972fa411416c"
+      }
+    ],
+    "polymarket_submissions": [
+      {
+        "id": 56,
+        "event_id": 95,
+        "market_id": "dryrun-89fdc258ce45",
+        "submitted_at": "2026-05-26 07:58:46.945793",
+        "market_url": "https://polymarket.com/dryrun/dryrun-89fdc258ce45",
+        "status": "SIMULATED",
+        "is_simulated": 1
+      }
+    ],
+    "builder_fee_events": [
+      {
+        "id": 109,
+        "market_id": "dryrun-89fdc258ce45",
+        "fill_amount": 90.0,
+        "fee_amount": 0.9,
+        "translator_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "arc_tx_hash": "0x7696e04f83d5c7d974fb69f2136fdddad9067ede0d1d19a67930038216064af1",
+        "timestamp": "2026-05-26 07:58:49.129568",
+        "is_simulated": 0
+      },
+      {
+        "id": 110,
+        "market_id": "dryrun-89fdc258ce45",
+        "fill_amount": 9.999999999999998,
+        "fee_amount": 0.09999999999999998,
+        "translator_address": "0x928a7f8b37898e51E368D26869dc860DD7BF9390",
+        "arc_tx_hash": "0x4b03bcab53babae1a8bd42f6f2266bea015f3bf498e978e539c02845b0bf4811",
+        "timestamp": "2026-05-26 07:58:49.129719",
+        "is_simulated": 0
+      }
+    ],
+    "agent_reputation": [
+      {
+        "agent_address": "0x928a7f8b37898e51E368D26869dc860DD7BF9390",
+        "total_bids": 50,
+        "total_wins": 25,
+        "avg_quality": 0.9200000000000006,
+        "cumulative_fees": 22.499999999999993,
+        "last_updated": "2026-05-26 07:58:46.940776"
+      },
+      {
+        "agent_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "total_bids": 9,
+        "total_wins": 4,
+        "avg_quality": 0.92,
+        "cumulative_fees": 3.6,
+        "last_updated": "2026-05-26 07:58:49.129917"
+      }
+    ]
+  },
+  "pub_events": [
+    {
+      "timestamp": "2026-05-26T07:58:46.939559+00:00",
+      "topic": "event.created",
+      "payload": {
+        "event_id": 95,
+        "content_hash": "5be476bb37d107aeecd0c9be9fe179c63bfcb3f3c99a45669d501c58fc4516fc"
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:46.940258+00:00",
+      "topic": "auction.opened",
+      "payload": {
+        "event_id": 95,
+        "tx_hash": "0x94e2d3eb95904f4507cda934e5002257dd4fcad3130d5535788ffc5d3a8e287f",
+        "window_s": 0.0
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:46.941856+00:00",
+      "topic": "bid.submitted",
+      "payload": {
+        "event_id": 95,
+        "agent_address": "0x928a7f8b37898e51E368D26869dc860DD7BF9390",
+        "bid_amount": 0.5
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:46.941865+00:00",
+      "topic": "bid.submitted",
+      "payload": {
+        "event_id": 95,
+        "agent_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "bid_amount": 0.4
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:46.942480+00:00",
+      "topic": "auction.settled",
+      "payload": {
+        "event_id": 95,
+        "winner_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "winning_bid": 0.4,
+        "tx_hash": "0x96bb3a294960f26781e389d5f35cd4e2010b104080e81f606a3bee2a6f42afdd"
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:46.943250+00:00",
+      "topic": "translation.completed",
+      "payload": {
+        "event_id": 95,
+        "translator_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "candidate_hash": "2d507b157ccb2b337bcc694c5ec7d62853f474dd1e691265615bbe7234a55ff1"
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:46.944121+00:00",
+      "topic": "quality.verdict",
+      "payload": {
+        "event_id": 95,
+        "verdict": "PASS",
+        "overall_score": 0.92
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:46.945640+00:00",
+      "topic": "onchain.committed",
+      "payload": {
+        "event_id": 95,
+        "question_id": "0x22e316bd6997353aaba1d55f2194269154f316dc",
+        "tx_hash": "0xe201a02bfd651c8c048e6addf90cf0cfe720c13961b037621f36972fa411416c"
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:46.946588+00:00",
+      "topic": "polymarket.submitted",
+      "payload": {
+        "event_id": 95,
+        "market_id": "dryrun-89fdc258ce45",
+        "market_url": "https://polymarket.com/dryrun/dryrun-89fdc258ce45",
+        "is_simulated": true,
+        "mode": "dry_run"
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:49.130948+00:00",
+      "topic": "builder_fee.accrued",
+      "payload": {
+        "event_id": 95,
+        "market_id": "dryrun-89fdc258ce45",
+        "fee_amount": 1.0,
+        "winner_share": 0.9,
+        "treasury_share": 0.09999999999999998,
+        "legs": [
+          {
+            "recipient": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "amount": 0.9,
+            "arc_tx_hash": "0x7696e04f83d5c7d974fb69f2136fdddad9067ede0d1d19a67930038216064af1"
+          },
+          {
+            "recipient": "0x928a7f8b37898e51E368D26869dc860DD7BF9390",
+            "amount": 0.09999999999999998,
+            "arc_tx_hash": "0x4b03bcab53babae1a8bd42f6f2266bea015f3bf498e978e539c02845b0bf4811"
+          }
+        ],
+        "is_simulated": false
+      }
+    },
+    {
+      "timestamp": "2026-05-26T07:58:49.130966+00:00",
+      "topic": "event.finalized",
+      "payload": {
+        "event_id": 95,
+        "terminal_status": "SUBMITTED",
+        "total_phases_completed": 7
+      }
+    }
+  ],
+  "correlation_id": "L2-14-03b65b6d"
+}

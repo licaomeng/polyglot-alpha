@@ -989,6 +989,139 @@ Honest accounting — what reviewers see when they pull this repo and run the de
 
 ## 14. How to Run It
 
+### Setup & Configuration
+
+#### Prerequisites
+
+- **Python 3.14** (the project pins to 3.14 in `pyproject.toml`; earlier 3.12+ usually works but is not CI-tested)
+- **Node.js 18+** with **pnpm** (or npm) for the dashboard
+- **ffmpeg** — required for the demo video pipeline (`brew install ffmpeg` on macOS)
+- **An Anthropic API key** — used by every seeder agent and every LLM-backed judge ([console.anthropic.com](https://console.anthropic.com/))
+- **An Arc testnet wallet** — funded with Arc native gas + **100 USDC** for the anti-Sybil operator stake (see `4.4 Anti-Sybil registration`)
+
+#### 1. Clone & install
+
+```bash
+git clone https://github.com/licaomeng/polyglot-alpha.git
+cd polyglot-alpha
+
+# Python backend
+python3.14 -m venv .venv
+.venv/bin/pip install -e .          # uses pyproject.toml
+# (Older alt:  .venv/bin/pip install -r requirements.txt)
+
+# UI
+cd ui && pnpm install && cd ..      # npm install also works
+```
+
+#### 2. Configure environment
+
+```bash
+cp .env.example .env
+# Edit .env — at minimum set:
+#   ANTHROPIC_API_KEY
+#   HACKATHON_WALLET_PRIVATE_KEY  (your operator wallet)
+#   HACKATHON_WALLET_ADDRESS       (the matching pubkey)
+```
+
+`.env.example` lists every variable the backend reads with REQUIRED / OPTIONAL annotations. The reference table is at the end of this section.
+
+#### 3. Fund the Arc testnet wallets
+
+```bash
+# Generate a fresh operator wallet (foundry / cast)
+cast wallet new
+
+# Fund it via the Arc testnet faucet:
+#   https://testnet.arcscan.app  (request native gas)
+#   then bridge / mint 100 test USDC for the anti-Sybil stake
+
+# Top up the 3 seeder agent wallets (Alpha / Bravo / Charlie) from the operator wallet:
+.venv/bin/python scripts/faucet_agents.py
+```
+
+The seeder wallets are persisted to `outputs/agent_wallets.json` (public addresses only); their private keys live in `<AGENT>_WALLET_PRIVATE_KEY` env vars.
+
+#### 4. Run the stack
+
+```bash
+# Terminal A — backend (FastAPI + Uvicorn)
+.venv/bin/python -m uvicorn polyglot_alpha.api.main:app --host 127.0.0.1 --port 8000
+
+# Terminal B — frontend (Next.js dashboard)
+cd ui && pnpm dev -p 3001
+
+# Terminal C — trigger one lifecycle (RSS → 3 seeders → Arc → 11-judge → Polymarket dry_run)
+curl -X POST http://localhost:8000/trigger/event \
+  -H 'content-type: application/json' \
+  -d '{"event_source":"rss"}' | python3 -m json.tool
+
+# Terminal D — watch the SSE stream
+curl -N http://localhost:8000/sse/events
+```
+
+Visit `http://localhost:3001` and click **Trigger live demo** — the event appears with bids, judge scores, and on-chain TX links to `testnet.arcscan.app`.
+
+#### 5. Swap LLM provider (future-ready)
+
+The system uses **Anthropic Claude Haiku 4.5** by default, but the LLM layer is provider-agnostic (`polyglot_alpha/llm.py`). To swap in OpenAI, Gemini, OpenRouter, etc:
+
+1. Write a class implementing the `LLMCallable` protocol in `polyglot_alpha/llm.py`
+2. Add a factory function to the `_LLM_FACTORIES` registry (lines ~410 of `llm.py`)
+3. Set `LLM_BACKEND=<your-provider>` in `.env` + the new API key env var
+4. No orchestrator / agent / judge code changes needed — the protocol absorbs the swap
+
+#### Env variable reference
+
+| Variable | REQ/OPT | Default | Purpose |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | REQUIRED | — | All LLM calls (seeders, MQM judge, D1/D5/D8 style judges, news summarizer). [Get one](https://console.anthropic.com/). |
+| `LLM_BACKEND` | OPTIONAL | `anthropic` | Provider selector. Future-extensible registry; only `anthropic` ships today. |
+| `ANTHROPIC_MAX_CONCURRENCY` | OPTIONAL | `5` | Per-process concurrent LLM calls semaphore. |
+| `ANTHROPIC_TIMEOUT_MULTIPLIER` | OPTIONAL | `1.0` | Multiplier on all LLM timeouts — bump under load. |
+| `SYNTHESIZER_MODEL` | OPTIONAL | Haiku 4.5 | Override the synthesizer model id. |
+| `ARC_TESTNET_RPC` | OPTIONAL | `https://rpc.testnet.arc.network` | Arc testnet RPC endpoint. |
+| `ARC_CHAIN_ID` | OPTIONAL | `5042002` | Arc testnet chain id. |
+| `TRANSLATION_AUCTION_ADDRESS` | OPTIONAL | deployed | 60s sealed-bid auction (the 5 contract addresses default to our deployed instances; override if forking). |
+| `QUESTION_REGISTRY_ADDRESS` | OPTIONAL | deployed | On-chain `(candidate_hash → winning_bidder)` registry. |
+| `BUILDER_FEE_ROUTER_ADDRESS` | OPTIONAL | deployed | Per-fill USDC fan-out router. |
+| `REPUTATION_REGISTRY_ADDRESS` | OPTIONAL | deployed | EWMA α=0.85 reputation. |
+| `JUDGE_PANEL_ADDRESS` | OPTIONAL | deployed | 11-judge panel registry. |
+| `ARC_TESTNET_USDC_ADDRESS` | OPTIONAL | deployed | Arc testnet USDC token. |
+| `HACKATHON_WALLET_ADDRESS` | REQUIRED | — | Operator wallet pubkey. |
+| `HACKATHON_WALLET_PRIVATE_KEY` | REQUIRED | — | Operator wallet privkey. Generate with `cast wallet new`. |
+| `OPERATOR_WALLET_PRIVATE_KEY` | OPTIONAL | falls back to HACKATHON | Distinct operator key for the event dispatcher / fill listener. |
+| `PLATFORM_TREASURY_ADDRESS` | OPTIONAL | operator addr | Recipient of the 10% platform cut. |
+| `ALPHA/BRAVO/CHARLIE_WALLET_PRIVATE_KEY` | OPTIONAL | — | Seeder agent wallets. Required only if you run seeders locally. |
+| `POLYMARKET_BUILDER_CODE` | REQ for `real` | — | 32-byte builder code. Register at [polymarket.com/settings](https://polymarket.com/settings?tab=builder). |
+| `POLYMARKET_BUILDER_NAME` | OPTIONAL | — | Display name in builder dashboard. |
+| `POLYMARKET_BUILDER_ADDRESS` | OPTIONAL | — | Builder fee recipient. |
+| `POLYMARKET_BUILDER_API_KEY/_SECRET/_PASSPHRASE` | REQ for `real` | — | Polymarket Gamma API auth triple. |
+| `POLYMARKET_MODE` | OPTIONAL | `dry_run` | `mock` / `dry_run` / `real`. See "Polymarket submission modes" below. |
+| `POLYMARKET_REAL_QUALITY_GATE` | OPTIONAL | `0.80` | Min `overall_score` for real submission. |
+| `POLYMARKET_REAL_DAILY_LIMIT` | OPTIONAL | `5` | Per-process real-submission cap. |
+| `POLYGON_RPC` | OPTIONAL | — | Polygon RPC for fill indexer (real mode). |
+| `ALCHEMY_API_KEY` / `ALCHEMY_APP_ID` | OPTIONAL | — | Alchemy creds; alternative to a raw `POLYGON_RPC`. |
+| `CTF_EXCHANGE_V2_ADDRESS` | OPTIONAL | mainnet default | Override CTF Exchange V2 address. |
+| `LIFECYCLE_MAX_CONCURRENCY` | OPTIONAL | `1` | Parallel lifecycles. **Keep at 1** unless you've sized RAM for concurrent FAISS + SBert. |
+| `AUCTION_WINDOW_SECONDS` | OPTIONAL | `60` | Auction open window. |
+| `AUCTION_MODE` | OPTIONAL | `real` | `real` / `mock`. Auto-`mock` when mock_bids supplied. |
+| `QUALITY_PASS_THRESHOLD` | OPTIONAL | `0.7` | Panel verdict pass gate. |
+| `PER_JUDGE_TIMEOUT_S` | OPTIONAL | `60` | Per-judge call timeout. |
+| `PER_JUDGE_TIMEOUT_RETRY_S` | OPTIONAL | `90` | Retry timeout for slow judges. |
+| `PANEL_TIMEOUT_SECONDS` | OPTIONAL | `120` | Full 11-judge panel timeout. |
+| `DEFAULT_STAKE_USDC` | OPTIONAL | `5.0` | Bid stake (USDC). |
+| `DATABASE_URL` | OPTIONAL | SQLite | SQLAlchemy URL. Defaults to `sqlite:///./polyglot_alpha.db`. |
+| `REDIS_URL` / `REDIS_CHANNEL` | OPTIONAL | — | Enables Redis pub/sub for multi-process SSE fan-out. |
+| `CORS_ORIGINS` | OPTIONAL | localhost | Comma-separated allowed origins. |
+| `PINATA_JWT` / `W3S_TOKEN` | OPTIONAL | — | IPFS pinning credentials. Falls back to local-file IPFS if both unset. |
+| `POLYGLOT_DEMO_MODE` | OPTIONAL | unset | Truthy to expose judge weights via API (demo only). |
+| `POLYGLOT_BUILDER_REGISTRY_PATH` | OPTIONAL | repo default | Override builder registry JSON path. |
+
+---
+
+### Quickstart (TL;DR)
+
 ```bash
 # 1. Fund seeder wallets (one-time)
 .venv/bin/python scripts/faucet_agents.py

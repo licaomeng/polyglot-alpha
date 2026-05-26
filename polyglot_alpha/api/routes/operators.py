@@ -288,12 +288,19 @@ def list_operators(
     # in tests/smoke flows. These are not real on-chain operators and
     # should never appear in the public /api/operators listing.
     def _looks_like_real_address(addr: str) -> bool:
-        return (
+        if not (
             isinstance(addr, str)
             and addr.startswith("0x")
             and "_" not in addr
             and len(addr) == 42
-        )
+        ):
+            return False
+        # Mirror the leaderboard filter — reject common test prefixes that
+        # made it onto the chain via stress-test fixtures.
+        lower = addr.lower()
+        if lower.startswith("0xdead") or lower.startswith("0xagent"):
+            return False
+        return True
 
     rows = [r for r in rows if _looks_like_real_address(r.agent_address)]
     seen_addresses = {r.agent_address.lower() for r in rows}

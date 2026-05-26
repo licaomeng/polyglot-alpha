@@ -2,7 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { AgentProfile as AgentProfileType } from "@/lib/api";
 import { ContractAddressDisplay } from "@/components/onchain/ContractAddressDisplay";
-import { formatUsd } from "@/lib/utils";
+import { formatReputation, formatUsd } from "@/lib/utils";
 
 /**
  * Per-persona metadata shown as a badge strip next to the alias. The three
@@ -73,7 +73,7 @@ export function AgentProfile({ agent }: { agent: AgentProfileType }) {
         <div className="grid grid-cols-2 gap-2 text-center lg:grid-cols-3">
           <Stat
             label="Reputation"
-            value={agent.reputation.toFixed(2)}
+            value={formatReputation(agent.reputation)}
             accent="primary"
             title="Reputation in [0, 1] · EWMA over recent fills, closed-IP weighting"
           />

@@ -13,6 +13,8 @@ __pycache__/
 # Environment
 .env
 .env.local
+.env.*.local
+!.env.example
 
 # Polyglot corpus artifacts — re-buildable, not version-controlled.
 corpus/polymarket_questions.parquet
@@ -36,6 +38,8 @@ corpus/full/scrape.log
 # Local dev DB
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 
 # Logs / scratch
 *.log

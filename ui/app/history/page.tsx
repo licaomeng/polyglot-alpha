@@ -125,11 +125,15 @@ export default function HistoryPage() {
               {rows.map((r) => (
                 <TR key={r.id}>
                   <TD>
-                    <Link href={`/events/${r.id}`} className="hover:text-primary">
+                    <Link
+                      href={`/events/${r.id}`}
+                      dir="auto"
+                      className="hover:text-primary"
+                    >
                       {r.headline}
                     </Link>
                   </TD>
-                  <TD className="text-xs text-muted-foreground">{r.source}</TD>
+                  <TD dir="auto" className="text-xs text-muted-foreground">{r.source}</TD>
                   <TD>
                     <EventStatusBadge status={r.status} />
                   </TD>

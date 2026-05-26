@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Trophy, Info } from "lucide-react";
-import { shortAddr, formatUsd, cn } from "@/lib/utils";
+import { shortAddr, formatUsd, formatReputation, cn } from "@/lib/utils";
 import type { BidEntry, EventDetail } from "@/lib/api";
 
 /**
@@ -162,8 +162,11 @@ export function AuctionExplainer({ event }: AuctionExplainerProps) {
                   <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
                     rep.
                   </p>
-                  <p className="font-mono text-xs text-foreground">
-                    {bid.reputation.toFixed(2)}
+                  <p
+                    className="font-mono text-xs text-foreground"
+                    title={`Raw decimal: ${bid.reputation.toFixed(4)}`}
+                  >
+                    {formatReputation(bid.reputation, { rawDecimal: true })}
                   </p>
                 </div>
                 <div className="text-right">
@@ -207,7 +210,7 @@ export function AuctionExplainer({ event }: AuctionExplainerProps) {
             won with the lowest reputation-adjusted score (
             <span className="font-mono">{formatUsd(winner.bid, 2)}</span> /{" "}
             <span className="font-mono">
-              max({winner.reputation.toFixed(2)}, 1.0)
+              max({formatReputation(winner.reputation, { rawDecimal: true })}, 1.0)
             </span>{" "}
             = <span className="font-mono">{winner.score.toFixed(4)}</span>
             ).

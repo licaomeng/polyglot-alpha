@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { LeaderboardEntry } from "@/lib/api";
-import { cn, formatUsd, shortAddr } from "@/lib/utils";
+import { cn, formatReputation, formatUsd, shortAddr } from "@/lib/utils";
 
 type SortKey = "rank" | "reputation" | "revenueUsd" | "winRate";
 
@@ -140,7 +140,7 @@ export function LeaderboardTable({ entries }: { entries: LeaderboardEntry[] }) {
                   </span>
                 </Link>
               </TD>
-              <TD className="text-right font-mono text-xs">{row.reputation.toFixed(2)}</TD>
+              <TD className="text-right font-mono text-xs">{formatReputation(row.reputation)}</TD>
               <TD className="text-right font-mono text-xs">
                 <div className="flex items-center justify-end gap-2">
                   <div

@@ -460,7 +460,10 @@ function RefineCard({ refine }: { refine: RefineSummary | undefined }) {
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                   before
                 </p>
-                <blockquote className="rounded-md border border-border/40 bg-muted/20 p-2 text-foreground/70 line-through decoration-amber-400/50">
+                <blockquote
+                  dir="auto"
+                  className="rounded-md border border-border/40 bg-muted/20 p-2 text-foreground/70 line-through decoration-amber-400/50"
+                >
                   {refine.originalQuestion}
                 </blockquote>
               </div>
@@ -469,7 +472,10 @@ function RefineCard({ refine }: { refine: RefineSummary | undefined }) {
               <p className="text-[10px] uppercase tracking-wider text-emerald-300/80">
                 after
               </p>
-              <blockquote className="rounded-md border border-emerald-500/30 bg-emerald-500/[0.05] p-2 text-foreground/95 leading-relaxed">
+              <blockquote
+                dir="auto"
+                className="rounded-md border border-emerald-500/30 bg-emerald-500/[0.05] p-2 text-foreground/95 leading-relaxed"
+              >
                 {refine.finalQuestion}
               </blockquote>
             </div>
