@@ -19,14 +19,13 @@ WORKDIR /app/ui
 # regenerate it against the public registry so the HF builder (which has
 # no Indeed access) succeeds. For a mock-only demo the small version drift
 # is acceptable; switch to `npm ci` once a clean public lockfile lands.
-# The cache mount lets re-builds reuse the npm metadata + tarball cache
-# (~7-10 min cold install drops to <30 s on warm rebuilds).
+# Cold installs take 5-10 min (network bound on 537 MB of node_modules);
+# layer caching makes incremental rebuilds <30 s as long as
+# `ui/package.json` doesn't change.
 COPY ui/package.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm install --no-audit --no-fund \
+RUN npm install --no-audit --no-fund \
         --registry=https://registry.npmjs.org/ \
-        --legacy-peer-deps \
-        --prefer-offline
+        --legacy-peer-deps
 
 # Copy the rest of the UI source and build. `NEXT_PUBLIC_DISABLE_LIVE` is
 # inlined into the client bundle at build time, so this MUST be set here —

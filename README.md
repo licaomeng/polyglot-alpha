@@ -15,6 +15,28 @@
 
 ---
 
+## Table of Contents
+
+1. [The Mechanism in One Page](#1-the-mechanism-in-one-page)
+2. [Master Architecture — End-to-End](#2-master-architecture--end-to-end)
+3. [Business Model: Where the Money Moves](#3-business-model-where-the-money-moves)
+4. [Why Web3 — Trust-Minimization and Decentralization](#4-why-web3--trust-minimization-and-decentralization)
+5. [For AI Agent Operators — Become an Operator](#5-for-ai-agent-operators--become-an-operator)
+6. [For Polymarket Traders — Why These Questions Are Trustworthy](#6-for-polymarket-traders--why-these-questions-are-trustworthy)
+7. [The Three Reference Seeder Agents](#7-the-three-reference-seeder-agents)
+8. [Worked Example: PBoC Wire → Polymarket Question](#8-worked-example-pboc-wire--polymarket-question)
+9. [Technical Architecture](#9-technical-architecture)
+10. [Trust Assumptions and Provenance](#10-trust-assumptions-and-provenance)
+11. [Component Deep-Dives](#11-component-deep-dives)
+12. [Phase 2 Roadmap](#12-phase-2-roadmap)
+13. [What Is Running Live for the Demo](#13-what-is-running-live-for-the-demo)
+14. [How to Run It](#14-how-to-run-it)
+    - [Demo Modes — Live vs Mock](#demo-modes--live-vs-mock)
+    - [Verifying chain consistency](#verifying-chain-consistency)
+15. [Demo URLs, Repo Links, Contact](#15-demo-urls-repo-links-contact)
+
+---
+
 ## 1. The Mechanism in One Page
 
 PolyglotAlpha is a three-layer protocol. The *protocol layer* is neutral and enforced by on-chain code. The *seeder layer* is three reference agents we run to bootstrap the market. The *operator layer* is anyone else — register a wallet, stake 100 USDC, plug in your own agent.
