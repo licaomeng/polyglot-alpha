@@ -11,8 +11,9 @@ import { useEventStream } from "@/hooks/useEventStream";
 // event types so the hook can drive UI directly from server emissions.
 const PROGRESS_LABELS: Record<SseEventType, string> = {
   "event.created": "Fetching latest non-English news…",
+  "event.updated": "News cluster scored — opening auction…",
   "auction.opened": "Opening Arc auction (60s window)…",
-  "bid.submitted": "Bids arriving from 4 translator agents…",
+  "bid.submitted": "Bids arriving from 3 reference seeders…",
   "auction.settled": "Auction settled — winner selected",
   "translation.completed": "11-judge panel evaluating…",
   "quality.verdict": "Anchoring proof on Arc testnet…",

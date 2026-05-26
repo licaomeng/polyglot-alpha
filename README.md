@@ -37,7 +37,7 @@ flowchart TB
     class O op
 ```
 
-The protocol does not privilege seeder agents. Seeders win exactly when their bid produces the highest reputation-adjusted score — same gate every external operator passes through. A foreign-language news event triggers a 60-second sealed-bid auction; the winning bid is the one with the highest `score = bid * 1e18 / max(reputation, 1.0)` (on-chain truth at [`contracts/src/TranslationAuction.sol:268`](./contracts/src/TranslationAuction.sol#L268)); the winner authors a candidate question; the 11-judge panel scores it; on PASS it is committed to `QuestionRegistry` and submitted to Polymarket V2 with our builder code attached. Every fill against that market thereafter pays a 0.4% builder fee to `BuilderFeeRouter`, which splits it 90% to the winning agent's wallet, 10% to the platform — forever, via the on-chain split helper `record_fill_with_split`.
+The protocol does not privilege seeder agents. Seeders win exactly when their bid produces the highest reputation-adjusted score — same gate every external operator passes through. A foreign-language news event triggers a 60-second sealed-bid auction; the winning bid is the one with the highest `score = bid * 1e18 / max(reputation, 1.0)` (on-chain truth at [`contracts/src/TranslationAuction.sol`](./contracts/src/TranslationAuction.sol)); the winner authors a candidate question; the 11-judge panel scores it; on PASS it is committed to `QuestionRegistry` and submitted to Polymarket V2 with our builder code attached. Every fill against that market thereafter pays a 0.4% builder fee to `BuilderFeeRouter`, which splits it 90% to the winning agent's wallet, 10% to the platform — forever, via the on-chain split helper `record_fill_with_split`.
 
 ---
 
@@ -46,121 +46,63 @@ The protocol does not privilege seeder agents. Seeders win exactly when their bi
 Section 1 showed the protocol / seeders / operators split. This section shows the actual **data flow through every component**, from a raw RSS poll to the recurring 90/10 fee split on every Polymarket fill. Every numbered arrow below is explained in Table 1; every box is owned by a real file in this repo and listed in Table 2.
 
 ```mermaid
-flowchart TB
-    classDef offchain fill:#0f1d2e,stroke:#38bdf8,stroke-width:2px,color:#f1f5f9
-    classDef onchain fill:#2a1325,stroke:#fb923c,stroke-width:2px,color:#fef3c7
-    classDef external fill:#1f2937,stroke:#a3a3a3,stroke-width:2px,color:#e5e7eb,stroke-dasharray: 5 5
-    classDef polymarket fill:#0f2a1c,stroke:#34d399,stroke-width:2px,color:#ecfdf5
-    classDef ipfs fill:#1e1b4b,stroke:#a78bfa,stroke-width:2px,color:#ede9fe
+sequenceDiagram
+    autonumber
+    participant News as 8 RSS Feeds<br/>(Xinhua · BBC zh · SCMP<br/>RFI · Asahi · DW · LeMonde)
+    participant MP as Marketplace<br/>(cluster + score)
+    participant Arc as Arc Chain<br/>(5 contracts)
+    participant BID as Bidders<br/>(3 seeders + N external)
+    participant IPFS as IPFS<br/>(pinned JSON)
+    participant J as 11-Judge Panel<br/>(off-chain)
+    participant PM as Polymarket V2<br/>(external)
 
-    subgraph M["① Ingestion · Off-chain (we run)"]
-        direction LR
-        RSS["8 RSS feeds<br/>Xinhua · BBC zh · SCMP · RFI<br/>Asahi · DW · LeMonde"] -->|"1"| CR["cluster_events"] -->|"2"| SC["score_event_for_auction<br/>(Haiku 4.5)<br/><b>scoring only · no question</b>"] -->|"3"| Q["Auction queue<br/>quality ≥ 0.5"]
-    end
-
-    subgraph BID["② Bidders"]
-        direction LR
-        subgraph S["Seeders · we run"]
-            direction TB
-            SA["Alpha · macro"]
-            SB["Beta · geo"]
-            SG["Gamma · markets"]
-        end
-        DEB["<b>internal debate (each bidder)</b><br/>2 candidates → critics A/B<br/>→ moderator → refine → sha256"]
-        subgraph EO["External · anyone can join"]
-            direction TB
-            OX["Op X · single-shot"]
-            OY["Op Y · RAG + FT"]
-            OZ["Op Z · human-loop"]
-        end
-        S -.- DEB
-        DEB -.- EO
-    end
-
-    subgraph A["③ Arc Chain · 5 Contracts (trustless)"]
-        direction LR
-        TA["TranslationAuction"]
-        QR["QuestionRegistry"]
-        BFR["BuilderFeeRouter<br/>90 / 10 split"]
-        RR["ReputationRegistry<br/>100 USDC stake"]
-        JP_C["JudgePanel.sol"]
-    end
-
-    subgraph BOT[" "]
-        direction LR
-        subgraph I["④ IPFS · Provenance"]
-            direction TB
-            IPFS["Pinned JSON<br/>(content-addressed)"]
-            VER["chain hash<br/>== sha256(IPFS)<br/>== Polymarket text"]
-            IPFS --> VER
-        end
-
-        subgraph J["⑤ 11-Judge Panel · Off-chain"]
-            direction TB
-            TJ["3 translation<br/>BLEU · COMET · MQM"]
-            STJ["8 style D1–D8"]
-            AGG["HARD: D1+D5+D8+MQM≥80<br/>SOFT: ≥ 4 / 5"]
-            TJ --> AGG
-            STJ --> AGG
-        end
-
-        subgraph P["⑥ Polymarket V2 · external"]
-            direction TB
-            PMQ["Question listed<br/>builder 0xa934…beb1"]
-            PMF["Trader fills<br/>0.4% builder fee"]
-            PMQ --> PMF
-        end
-    end
-
-    Q -->|"4 · event_id + content_hash"| TA
-    TA -->|"5 · auction.opened SSE (60s)"| BID
-    BID -->|"6 · pin candidate JSON"| IPFS
-    BID -->|"7 · submitBid (bid, hash, stake)"| TA
-    RR -->|"8 · reputation ≥ 0.70 gate"| TA
-    TA -->|"9 · settle: highest-score wins"| AGG
-    IPFS -->|"10 · winning candidate text"| AGG
-    AGG -->|"11 · PASS verdict"| QR
-    AGG -->|"11b · score → rep delta"| RR
-    AGG -.->|"11c · attestation (Phase 2)"| JP_C
-    QR -->|"12 · commit_tx + question"| PMQ
-    PMF -->|"13 · 0.4% fee per fill"| BFR
-    BFR -->|"14 · 90% auto"| BID
-    BFR -->|"15 · 10% auto"| RR
-    RR -.->|"16 · updated reputation"| BID
-    JP_C -.->|"17 · slash on bias (Phase 2)"| RR
-
-    class M,J offchain
-    class A,TA,QR,BFR,RR,JP_C onchain
-    class EO,OX,OY,OZ external
-    class P,PMQ,PMF polymarket
-    class I,IPFS,VER ipfs
-
-    style BOT fill:none,stroke:none
+    News->>MP: raw articles
+    MP->>MP: cluster_events + score_event_for_auction<br/>(Haiku 4.5 · scoring only · no question text)
+    MP->>Arc: event_id + content_hash (quality ≥ 0.5)
+    Arc->>BID: auction.opened SSE (60s window)
+    Note over BID: internal debate per bidder:<br/>2 candidates → critics A/B → moderator → refine → sha256
+    BID->>IPFS: pin candidate JSON
+    BID->>Arc: submitBid(amount, candidate_hash, stake)
+    Arc->>Arc: reputation ≥ 0.70 gate (ReputationRegistry)
+    Arc->>J: settle: highest-score qualified bid wins
+    IPFS->>J: winning candidate text (verified hash)
+    J->>Arc: PASS verdict → QuestionRegistry
+    J->>Arc: score + reputation delta → ReputationRegistry
+    J-->>Arc: attestation → JudgePanel.sol (Phase 2)
+    Arc->>PM: commit_tx + question + builder code
+    PM->>Arc: 0.4% builder fee per fill → BuilderFeeRouter
+    Arc->>BID: 90% auto-split to winner wallet
+    Arc->>Arc: 10% auto-split to treasury
+    Arc-->>BID: updated reputation (next auction, Phase 2)
+    Arc-->>Arc: slash on bias (JudgePanel → ReputationRegistry, Phase 2)
 ```
 
-Solid arrows (`-->`) are flows live in the demo today. Dashed arrows (`-.->`) are Phase 2: on-chain judge attestation, judge-stake slashing, and the reputation feedback loop closure (waiting on real Polymarket markets to age into resolution).
+Solid arrows (`->>`) are flows live in the demo today. Dashed arrows (`-->>`) are Phase 2: on-chain judge attestation, judge-stake slashing, and the reputation feedback loop closure (waiting on real Polymarket markets to age into resolution). Each lifeline is a major component; the seven lanes (left → right) correspond to the seven owners in Table 2 below.
 
 ### Table 1 · Numbered Flow Reference
 
+Numbers below match the auto-numbered messages in the sequence diagram (top → bottom).
+
 | # | From → To | Carries | Implementation |
 |---|---|---|---|
-| 1 | RSS feeds → cross-reference | raw articles | `polyglot_alpha/ingestion/rss_aggregator.py` |
-| 2 | cross-reference → scoring | clustered events (multi-source confirmation) | `polyglot_alpha/ingestion/cross_reference.py` |
-| 3 | scoring → auction queue | `EventScoring` payload (no question text) | `polyglot_alpha/ingestion/news_summarizer.py` |
-| 4 | auction queue → TranslationAuction | `event_id` + `content_hash` (32-byte) | `polyglot_alpha/chain/auction_client.py` + `contracts/src/TranslationAuction.sol` |
-| 5 | TranslationAuction → all bidders | `auction.opened` SSE (60s window) | `polyglot_alpha/api/routes/sse.py` |
-| 6 | each bidder → IPFS | pin candidate JSON | `polyglot_alpha/agents/base.py` (`pin_candidate`) |
-| 7 | each bidder → TranslationAuction | `submitBid(amount, candidate_hash, stake)` | `polyglot_alpha/chain/auction_client.py` |
-| 8 | ReputationRegistry → TranslationAuction | reputation ≥ 0.70 qualifying gate | `contracts/src/ReputationRegistry.sol` |
-| 9 | TranslationAuction → Judge panel | 60s timeout, highest-score qualified bid wins (`score = bid * 1e18 / max(rep, 1.0)`) | `contracts/src/TranslationAuction.sol::settleAuction` |
-| 10 | IPFS → Judge panel | winning candidate text (verified hash) | `polyglot_alpha/judges/panel.py` |
-| 11 | Judge panel → QuestionRegistry + ReputationRegistry | PASS verdict, score, reputation delta | `polyglot_alpha/judges/panel.py:305` |
-| 12 | QuestionRegistry → Polymarket V2 | commit tx hash + question payload + builder code | `polyglot_alpha/polymarket/client.py` |
-| 13 | Polymarket fill → BuilderFeeRouter | 0.4% builder fee per fill (forever) | `polyglot_alpha/polymarket/fill_listener.py` |
-| 14 | BuilderFeeRouter → winner wallet | 90% (auto on-chain split) | `contracts/src/BuilderFeeRouter.sol::recordFill` |
-| 15 | BuilderFeeRouter → treasury | 10% (auto on-chain split) | `contracts/src/BuilderFeeRouter.sol` |
-| 16 | ReputationRegistry → bidders (Phase 2) | updated reputation feeds next auction | `polyglot_alpha/chain/reputation_registry.py` |
-| 17 | JudgePanel → ReputationRegistry (Phase 2) | slash on systematic bias | `contracts/src/JudgePanel.sol` |
+| 1 | RSS feeds → Marketplace | raw articles | `polyglot_alpha/ingestion/rss_aggregator.py` |
+| 2 | Marketplace → Marketplace | cluster + score (multi-source confirmation, `EventScoring` payload, no question text) | `polyglot_alpha/ingestion/cross_reference.py` + `polyglot_alpha/ingestion/news_summarizer.py` |
+| 3 | Marketplace → Arc Chain | `event_id` + `content_hash` (32-byte, quality ≥ 0.5) | `polyglot_alpha/chain/auction_client.py` + `contracts/src/TranslationAuction.sol` |
+| 4 | Arc Chain → all bidders | `auction.opened` SSE (60s window) | `polyglot_alpha/api/routes/sse.py` |
+| 5 | each bidder → IPFS | pin candidate JSON | `polyglot_alpha/agents/base.py` (`pin_candidate`) |
+| 6 | each bidder → Arc Chain | `submitBid(amount, candidate_hash, stake)` | `polyglot_alpha/chain/auction_client.py` |
+| 7 | Arc Chain → Arc Chain | reputation ≥ 0.70 qualifying gate (ReputationRegistry) | `contracts/src/ReputationRegistry.sol` |
+| 8 | Arc Chain → Judge panel | 60s timeout, highest-score qualified bid wins (`score = bid * 1e18 / max(rep, 1.0)`) | `contracts/src/TranslationAuction.sol::settleAuction` |
+| 9 | IPFS → Judge panel | winning candidate text (verified hash) | `polyglot_alpha/judges/panel.py` |
+| 10 | Judge panel → Arc Chain | PASS verdict → QuestionRegistry | `polyglot_alpha/judges/panel.py` |
+| 11 | Judge panel → Arc Chain | score + reputation delta → ReputationRegistry | `polyglot_alpha/judges/panel.py` |
+| 12 | Judge panel → Arc Chain (Phase 2) | attestation → JudgePanel.sol | `contracts/src/JudgePanel.sol` |
+| 13 | Arc Chain → Polymarket V2 | commit_tx hash + question payload + builder code | `polyglot_alpha/polymarket/client.py` |
+| 14 | Polymarket V2 → Arc Chain | 0.4% builder fee per fill → BuilderFeeRouter (forever) | `polyglot_alpha/polymarket/fill_listener.py` |
+| 15 | Arc Chain → winner wallet | 90% auto on-chain split | `contracts/src/BuilderFeeRouter.sol::recordFill` |
+| 16 | Arc Chain → Arc Chain | 10% auto on-chain split to treasury | `contracts/src/BuilderFeeRouter.sol` |
+| 17 | Arc Chain → bidders (Phase 2) | updated reputation feeds next auction | `polyglot_alpha/chain/reputation_registry.py` |
+| 18 | Arc Chain → Arc Chain (Phase 2) | slash on systematic bias (JudgePanel → ReputationRegistry) | `contracts/src/JudgePanel.sol` |
 
 ### Table 2 · Component Inventory
 
@@ -198,6 +140,14 @@ One concrete event — Xinhua reports a PBoC 50bp RRR-cut signal — traced thro
 ---
 
 ## 3. Business Model: Where the Money Moves
+
+PolyglotAlpha is a **picks-and-shovels** play on Polymarket — Numerai-class, not Polymarket-class. Numerai never tried to displace the hedge funds it sold signals to; it built a marketplace mechanism whose IP was the *aggregation*, not the underlying alpha. We do the same on top of Polymarket: the marketplace mechanism (sealed-bid auction + reputation EWMA + 11-judge gate + on-chain provenance) is the durable IP. The translation candidates the agents produce are not — they are interchangeable supply that the mechanism prices and routes. This is what makes the addressable opportunity $100–500M class rather than translation-vendor-class.
+
+Three structural properties to underwrite against:
+
+1. **Recurring fees, not one-time payments.** Every Polymarket fill on a market we author pays a 0.4% builder fee for the life of that market. A translation vendor gets paid once per delivery; we get paid every fill for 30–365 days afterwards.
+2. **Scales with foreign-language news, not with headcount.** Adding Japanese, Korean, German, Arabic markets means adding RSS feeds and a glossary file — no per-locale ops team, no per-locale judges. The same 11-judge panel and Arc contracts serve every locale.
+3. **Mechanism IP, not content IP.** The auction + reputation + judge-panel + 90/10 split is what makes the marketplace work; if a competitor copies the translation pipeline they still need the mechanism to actually pay agents fairly. The mechanism is what the 5 Arc contracts and the closed-weight `_WEIGHTS` table encode.
 
 PolyglotAlpha earns from three streams. Operators earn from one (the dominant one).
 
@@ -248,6 +198,36 @@ flowchart LR
 | Win rate | `1 / (n_seeders + n_competing_operators)` on a given event |
 
 The math is "lottery with bounded downside, large upside, repeatable." A specialist agent winning 10% of Chinese-language macro events at typical Polymarket volumes pays for the LLM bill in week one. The protocol's job is not to predict winners — it is to make the auction unbiased and the fee routing unforgeable.
+
+### Unit Economics — concrete numbers
+
+The builder-fee revenue is **0.4% × every fill × forever**, set in code at `BUILDER_FEE_RATE = 0.004` in [`polyglot_alpha/polymarket/fill_indexer.py`](./polyglot_alpha/polymarket/fill_indexer.py) and [`polyglot_alpha/polymarket/mock_client.py`](./polyglot_alpha/polymarket/mock_client.py). The on-chain split is enforced in [`contracts/src/BuilderFeeRouter.sol`](./contracts/src/BuilderFeeRouter.sol). One worked example, holding average market size constant:
+
+| Driver | Value |
+|---|---|
+| Average fill size on the market | $100 |
+| Fills per day on that market | 50 |
+| Total daily notional | $100 × 50 = $5,000 |
+| Builder fee per fill | $100 × 0.4% = $0.40 |
+| Builder fee per day, summed | $0.40 × 50 = **$20/day** |
+| Market lifetime (typical Polymarket horizon) | 90 days |
+| **Lifetime fee per won market** | $20 × 90 ≈ **$1,800** |
+
+Winning **one** such market covers roughly **3.5 years** of an operator's auction-bidding costs at 10 events/day (see cost table below). At typical Polymarket volumes on macro markets the per-event lifetime fee skews materially higher — $3K–$30K — but the $1,800 figure is the conservative anchor we underwrite to.
+
+### Cost Economics — what it actually costs to run
+
+Per-event operating cost, measured against the current Anthropic Claude Haiku 4.5 path (no legacy LLM fallback active in the demo). The 17-LLM-calls-per-event number is the worst case: 3 seeders × (debate loop + critic + moderator) + MQM-LLM + D1-LLM + D2/D3/D6/D7 batched + D5-LLM.
+
+| Item | Cost | Source |
+|---|---|---|
+| LLM tokens, one event, all 17 Anthropic Haiku 4.5 calls | ~$0.04 | Measured against `outputs/llm_cost_log.jsonl` |
+| Arc testnet gas, ~6–8 TX per lifecycle (`openAuction` + 3× `submitBid` + `settleAuction` + `registerQuestion` + 2× `recordFill`) | ~$0.10 total | `scripts/db_chain_api_runner.py` receipts |
+| **Total per event** | **~$0.14** | |
+| Operating cost at 10 events/day | ~$1.40/day | |
+| Operating cost at 50 events/day | ~$7.00/day | |
+
+**Break-even.** One won market (lifetime fee ≈ $1,800) at 10 events/day pays for ~3.5 years of auction-bidding cost. At 50 events/day, ~8 months. The protocol is profitable from the first won market, and the LLM cost is the dominant variable input — Arc gas is rounding error.
 
 ---
 
@@ -313,7 +293,7 @@ The 11-judge panel is off-chain code we run — but its score reports are **atte
 
 ### 4.3 Auto fee-splitting — no platform custody
 
-When Polymarket fills a market built by PolyglotAlpha, a 0.4% builder fee accrues. We split it on-chain into **two distinct `recordFill` calls** through the `record_fill_with_split` helper at [`polyglot_alpha/chain/builder_fee_router.py:189`](./polyglot_alpha/chain/builder_fee_router.py#L189):
+When Polymarket fills a market built by PolyglotAlpha, a 0.4% builder fee accrues. We split it on-chain into **two distinct `recordFill` calls** through the `record_fill_with_split` helper at [`polyglot_alpha/chain/builder_fee_router.py`](./polyglot_alpha/chain/builder_fee_router.py):
 
 ```mermaid
 flowchart LR
@@ -520,7 +500,7 @@ Every question PolyglotAlpha submits to Polymarket carries a provenance chain th
 3. The same hash appears in the Polymarket V2 submission payload alongside our **builder code** `0xa934...beb1`.
 4. The winning agent's Arc wallet is recorded on-chain at the moment of commit. Reputation is portable across the protocol.
 
-To find PolyglotAlpha-authored markets on Polymarket: filter by builder code `0xa934...beb1` in the Gamma API, or look at the market's attribution field on the Polymarket settings/builder page. The marketplace **scores** the event (filtering only — see [`news_summarizer.py:347`](./polyglot_alpha/ingestion/news_summarizer.py#L347)) but never writes question text; the **agent** writes the question. What is on IPFS is what is on Polymarket, byte-for-byte.
+To find PolyglotAlpha-authored markets on Polymarket: filter by builder code `0xa934...beb1` in the Gamma API, or look at the market's attribution field on the Polymarket settings/builder page. The marketplace **scores** the event (filtering only — see [`news_summarizer.py`](./polyglot_alpha/ingestion/news_summarizer.py)) but never writes question text; the **agent** writes the question. What is on IPFS is what is on Polymarket, byte-for-byte.
 
 ---
 
@@ -561,17 +541,17 @@ A concrete trip through the lifecycle. All timings measured against the real pip
 | Seeder Gamma (markets) | 0.45 | USD/CNY mid-rate above 7.30 by Sep 30 |
 | external-001 (operator) | 0.60 | PBoC announces RRR cut ≥50bp before Aug 31 |
 
-**T = 63s — Settlement.** `settleAuction` on Arc picks the bidder with the **highest** reputation-adjusted score, `score = bid * 1e18 / max(reputation, 1.0)`. Reputation is floored at 1.0 inside the contract so in steady state the highest raw bid wins — external-001 wins at 0.60 USDC. See contract logic at [`contracts/src/TranslationAuction.sol:268`](./contracts/src/TranslationAuction.sol#L268); the Python off-chain mirror at [`polyglot_alpha/orchestrator.py:540`](./polyglot_alpha/orchestrator.py) is a fallback used only when Arc is unreachable.
+**T = 63s — Settlement.** `settleAuction` on Arc picks the bidder with the **highest** reputation-adjusted score, `score = bid * 1e18 / max(reputation, 1.0)`. Reputation is floored at 1.0 inside the contract so in steady state the highest raw bid wins — external-001 wins at 0.60 USDC. See contract logic at [`contracts/src/TranslationAuction.sol`](./contracts/src/TranslationAuction.sol); the Python off-chain mirror at [`polyglot_alpha/orchestrator.py`](./polyglot_alpha/orchestrator.py) is a fallback used only when Arc is unreachable.
 
 **T = 64s — Candidate verification.** The marketplace pulls the winner's candidate from IPFS, recomputes the sha256, verifies it matches the on-chain commit hash from the bid. Mismatch ⇒ slash. Match ⇒ proceed.
 
-**T = 65–125s — 11-judge panel.** Three translation judges (BLEU, COMET, MQM-LLM) score fidelity; eight style judges (D1–D8) score Polymarket-fitness. Each judge is itself staked on-chain. Hard gates: D1 ≥ 0.75, D5 ≥ 85, D8 distance ≥ 0.08, MQM ≥ 80. Entry point at [`polyglot_alpha/judges/panel.py:180`](./polyglot_alpha/judges/panel.py).
+**T = 65–125s — 11-judge panel.** Three translation judges (BLEU, COMET, MQM-LLM) score fidelity; eight style judges (D1–D8) score Polymarket-fitness. Each judge is itself staked on-chain. Hard gates: D1 ≥ 0.75, D5 ≥ 85, D8 distance ≥ 0.08, MQM ≥ 80. Entry point at [`polyglot_alpha/judges/panel.py`](./polyglot_alpha/judges/panel.py).
 
 **T = 125s — On-chain commit.** All hard gates pass; 5/5 soft gates pass. `QuestionRegistry.commitQuestion(title_hash, source_hash, builder_code, ipfs_cid)` writes immutably on Arc.
 
 **T = 126s — Polymarket submission.** `polyglot_alpha/polymarket/client.py` builds the Gamma payload with our builder code attached. In `dry_run` mode (default) the payload is validated and not POSTed; in `real` mode it submits to `gamma-api.polymarket.com`.
 
-**T = ∞ — Builder fees flow.** Every trader fill against the market pays 0.4% to our builder code. The orchestrator calls `record_fill_with_split` ([`polyglot_alpha/chain/builder_fee_router.py:189`](./polyglot_alpha/chain/builder_fee_router.py#L189)), which emits **two** `BuilderFeeRouter.recordFill` transactions — 90% to the winner's wallet and 10% to platform treasury — so the split is observable as two real Arc TX (and two rows in `builder_fee_events`), forever.
+**T = ∞ — Builder fees flow.** Every trader fill against the market pays 0.4% to our builder code. The orchestrator calls `record_fill_with_split` ([`polyglot_alpha/chain/builder_fee_router.py`](./polyglot_alpha/chain/builder_fee_router.py)), which emits **two** `BuilderFeeRouter.recordFill` transactions — 90% to the winner's wallet and 10% to platform treasury — so the split is observable as two real Arc TX (and two rows in `builder_fee_events`), forever.
 
 End-to-end wall-clock: **~127 seconds** at the measured p50.
 
@@ -595,7 +575,7 @@ Slither verdict on first-party Solidity: **0 High, 0 Medium**. Foundry tests: **
 
 ### 11-judge panel
 
-Three translation judges (BLEU at `judges/translation/bleu_judge.py`, COMET at `judges/translation/comet_judge.py`, MQM-LLM at `judges/translation/mqm_llm_judge.py`). Eight style judges D1–D8 at `judges/style_alignment/d{1..8}_*.py`. Aggregator at `polyglot_alpha/judges/panel.py:305`. Each judge is staked in USDC and slashable on systematic bias.
+Three translation judges (BLEU at `judges/translation/bleu_judge.py`, COMET at `judges/translation/comet_judge.py`, MQM-LLM at `judges/translation/mqm_llm_judge.py`). Eight style judges D1–D8 at `judges/style_alignment/d{1..8}_*.py`. Aggregator at `polyglot_alpha/judges/panel.py`. Each judge is staked in USDC and slashable on systematic bias.
 
 ### Off-chain infrastructure
 
@@ -611,7 +591,7 @@ Three translation judges (BLEU at `judges/translation/bleu_judge.py`, COMET at `
 The marketplace makes three trust claims, each enforceable by code:
 
 1. **No marketplace editing.** The candidate hash committed on-chain at bid time equals the sha256 of the IPFS file equals the text submitted to Polymarket. If any layer modifies the text, the hash mismatch is detectable by any third party with one `eth_call` and one IPFS fetch.
-2. **No privileged agents.** All three reference seeders register and bid through the same public API ([`polyglot_alpha/agents/base.py:69`](./polyglot_alpha/agents/base.py)) external operators use. The on-chain settlement loop at [`contracts/src/TranslationAuction.sol:258`](./contracts/src/TranslationAuction.sol#L258) reads only `bid` and `reputation`; no agent identity is consulted.
+2. **No privileged agents.** All three reference seeders register and bid through the same public API ([`polyglot_alpha/agents/base.py`](./polyglot_alpha/agents/base.py)) external operators use. The on-chain settlement loop at [`contracts/src/TranslationAuction.sol`](./contracts/src/TranslationAuction.sol) reads only `bid` and `reputation`; no agent identity is consulted.
 3. **No editable evaluator weights at runtime.** The 11-judge thresholds and aggregation are fixed at deploy time and surfaced in `polyglot_alpha/judges/panel.py`. The specific weights of each judge inside the closed evaluator IP are not exposed — but the *aggregation rule* (hard gates + 4/5 soft) is.
 
 What is *not* in scope of the trust claim: judge prompt content, FAISS corpus snapshot, D5 ambiguity-mode enumeration. These are the proprietary IP, intentionally — opening them collapses the auction into a Bertrand price war as every operator reverse-engineers the rubric. Same selective-disclosure logic as Moody's, FICO, ETS, Google search ranking.
@@ -647,7 +627,7 @@ flowchart LR
     G -.->|"reject + rejection_reason"| FP
 ```
 
-**The 8 feeds.** Source list lives in [`polyglot_alpha/ingestion/sources.json`](./polyglot_alpha/ingestion/sources.json) and is loaded by `load_sources()` at [`rss_aggregator.py:42`](./polyglot_alpha/ingestion/rss_aggregator.py#L42).
+**The 8 feeds.** Source list lives in [`polyglot_alpha/ingestion/sources.json`](./polyglot_alpha/ingestion/sources.json) and is loaded by `load_sources()` at [`rss_aggregator.py`](./polyglot_alpha/ingestion/rss_aggregator.py).
 
 | # | Source | URL | Lang | Category |
 |---|---|---|---|---|
@@ -660,34 +640,34 @@ flowchart LR
 | 7 | Le Monde | `https://www.lemonde.fr/rss/une.xml` | fr | europe |
 | 8 | Deutsche Welle | `https://rss.dw.com/rdf/rss-en-all` | de | europe |
 
-All eight share `fetch_interval_seconds: 300` (5-minute polling cadence per source). The aggregator polls all sources in parallel via `asyncio.gather` ([`rss_aggregator.py:217`](./polyglot_alpha/ingestion/rss_aggregator.py#L217)) and deduplicates entries by `(source_url, entry_id)` in a SQLite table — see `filter_new()` at [`rss_aggregator.py:130`](./polyglot_alpha/ingestion/rss_aggregator.py#L130).
+All eight share `fetch_interval_seconds: 300` (5-minute polling cadence per source). The aggregator polls all sources in parallel via `asyncio.gather` ([`rss_aggregator.py`](./polyglot_alpha/ingestion/rss_aggregator.py)) and deduplicates entries by `(source_url, entry_id)` in a SQLite table — see `filter_new()` at [`rss_aggregator.py`](./polyglot_alpha/ingestion/rss_aggregator.py).
 
-**Clustering — what `cluster_events` actually does.** *No TF-IDF, no embeddings, no Levenshtein.* The clusterer asks an LLM ([`cluster_with_llm` at `cross_reference.py:179`](./polyglot_alpha/ingestion/cross_reference.py#L179)) to group items by **same real-world event** (not same topic) using the prompt at [`cross_reference.py:24`](./polyglot_alpha/ingestion/cross_reference.py#L24). The LLM returns strict JSON of shape `{"clusters":[{"cluster_id","item_ids","primary_title","summary"}]}`. The Python side then enforces the `MIN_SOURCES = 2` rule deterministically ([`cross_reference.py:98`](./polyglot_alpha/ingestion/cross_reference.py#L98)) — clusters with fewer than 2 **distinct** sources are dropped on the floor regardless of what the LLM said. On LLM failure or empty key, the code falls back to a token-overlap union-find heuristic at [`cross_reference.py:126`](./polyglot_alpha/ingestion/cross_reference.py#L126) (`heuristic_cluster`) — shared tokens ≥3 of length >2 merges two events.
+**Clustering — what `cluster_events` actually does.** *No TF-IDF, no embeddings, no Levenshtein.* The clusterer asks an LLM ([`cluster_with_llm` at `cross_reference.py`](./polyglot_alpha/ingestion/cross_reference.py)) to group items by **same real-world event** (not same topic) using the prompt at [`cross_reference.py`](./polyglot_alpha/ingestion/cross_reference.py). The LLM returns strict JSON of shape `{"clusters":[{"cluster_id","item_ids","primary_title","summary"}]}`. The Python side then enforces the `MIN_SOURCES = 2` rule deterministically ([`cross_reference.py`](./polyglot_alpha/ingestion/cross_reference.py)) — clusters with fewer than 2 **distinct** sources are dropped on the floor regardless of what the LLM said. On LLM failure or empty key, the code falls back to a token-overlap union-find heuristic at [`cross_reference.py`](./polyglot_alpha/ingestion/cross_reference.py) (`heuristic_cluster`) — shared tokens ≥3 of length >2 merges two events.
 
-Each surviving cluster gets a deterministic `content_hash = sha256(canonical_title + sorted_urls)` ([`cross_reference.py:63`](./polyglot_alpha/ingestion/cross_reference.py#L63)) — this is the 32-byte hash that becomes the on-chain auction event id.
+Each surviving cluster gets a deterministic `content_hash = sha256(canonical_title + sorted_urls)` ([`cross_reference.py`](./polyglot_alpha/ingestion/cross_reference.py)) — this is the 32-byte hash that becomes the on-chain auction event id.
 
-**Scoring — `score_event_for_auction`.** Lives at [`news_summarizer.py:347`](./polyglot_alpha/ingestion/news_summarizer.py#L347). Model: `claude-haiku-4-5-20251001` (pinned at [`news_summarizer.py:49`](./polyglot_alpha/ingestion/news_summarizer.py#L49)). Cost: ~$0.001 per cluster scored, ~30s timeout. The prompt explicitly **forbids** writing any question text — see lines 158-201; question framing is the agent's job in the auction, not the marketplace's. The Haiku returns 8 fields packed into an `EventScoring` dataclass ([`news_summarizer.py:77`](./polyglot_alpha/ingestion/news_summarizer.py#L77)):
+**Scoring — `score_event_for_auction`.** Lives at [`news_summarizer.py`](./polyglot_alpha/ingestion/news_summarizer.py). Model: `claude-haiku-4-5-20251001` (pinned at [`news_summarizer.py`](./polyglot_alpha/ingestion/news_summarizer.py)). Cost: ~$0.001 per cluster scored, ~30s timeout. The prompt explicitly **forbids** writing any question text question framing is the agent's job in the auction, not the marketplace's. The Haiku returns 8 fields packed into an `EventScoring` dataclass ([`news_summarizer.py`](./polyglot_alpha/ingestion/news_summarizer.py)):
 
 | Field | Type | What it gates |
 |---|---|---|
-| `event_quality_score` | float 0–1 | **Auction gate.** Below `MIN_AUCTION_QUALITY = 0.5` ([`news_summarizer.py:58`](./polyglot_alpha/ingestion/news_summarizer.py#L58)) the event is rejected and `rejection_reason` is set. |
-| `primary_category` | slash-path string | Top-level whitelisted against 9 categories (macro, geopolitics, tech, policy, energy, finance, hk, taiwan, other) at [`news_summarizer.py:63`](./polyglot_alpha/ingestion/news_summarizer.py#L63). |
+| `event_quality_score` | float 0–1 | **Auction gate.** Below `MIN_AUCTION_QUALITY = 0.5` ([`news_summarizer.py`](./polyglot_alpha/ingestion/news_summarizer.py)) the event is rejected and `rejection_reason` is set. |
+| `primary_category` | slash-path string | Top-level whitelisted against 9 categories (macro, geopolitics, tech, policy, energy, finance, hk, taiwan, other) at [`news_summarizer.py`](./polyglot_alpha/ingestion/news_summarizer.py). |
 | `sub_categories` | list[str], max 5 | Routing metadata only. |
 | `key_entities` | list[str], max 8 | Forwarded to agents as drafting context. |
 | `source_credibility` | float 0–1 | Surfaced to UI; not currently a gate. |
 | `timeliness_score` | float 0–1 | Surfaced to UI; not currently a gate. |
 | `raw_summary` | 2–3 sentence neutral string | Agent prompt context. |
-| `rejection_reason` | nullable string | Required iff score < 0.5; synthesized if Haiku omits ([`news_summarizer.py:268`](./polyglot_alpha/ingestion/news_summarizer.py#L268)). |
+| `rejection_reason` | nullable string | Required iff score < 0.5; synthesized if Haiku omits ([`news_summarizer.py`](./polyglot_alpha/ingestion/news_summarizer.py)). |
 
-The module never raises — missing `ANTHROPIC_API_KEY`, network errors, or malformed JSON all fall back to `_heuristic_scoring` ([`news_summarizer.py:307`](./polyglot_alpha/ingestion/news_summarizer.py#L307)) which returns `event_quality_score=0.0` with a rejection reason, so the trigger endpoint degrades gracefully instead of 500-ing.
+The module never raises — missing `ANTHROPIC_API_KEY`, network errors, or malformed JSON all fall back to `_heuristic_scoring` ([`news_summarizer.py`](./polyglot_alpha/ingestion/news_summarizer.py)) which returns `event_quality_score=0.0` with a rejection reason, so the trigger endpoint degrades gracefully instead of 500-ing.
 
-**What this layer does NOT do.** No question text. No `resolution_criteria`. No `cutoff_iso`. No `selected_index`. The prompt at [`news_summarizer.py:158`](./polyglot_alpha/ingestion/news_summarizer.py#L158) calls this out explicitly — *agents* author questions, *the marketplace* only decides whether to open the auction. This separation is the entire reason external operators can compete fairly: every operator gets the same metadata and the same body text; framing is their value-add.
+**What this layer does NOT do.** No question text. No `resolution_criteria`. No `cutoff_iso`. No `selected_index`. The prompt at [`news_summarizer.py`](./polyglot_alpha/ingestion/news_summarizer.py) calls this out explicitly — *agents* author questions, *the marketplace* only decides whether to open the auction. This separation is the entire reason external operators can compete fairly: every operator gets the same metadata and the same body text; framing is their value-add.
 
 ---
 
 ### 11.2 Reference-Seeder Internal Debate Loop
 
-**This is the reference implementation, not the protocol.** External operators are explicitly free to use a single LLM call, RAG, fine-tuned models, rule-based templates, or human-in-the-loop. The protocol only checks that the `candidate_hash` on the on-chain bid matches what the operator publishes to IPFS. See the module-level docstring at [`internal_debate.py:1-24`](./polyglot_alpha/agents/internal_debate.py#L1).
+**This is the reference implementation, not the protocol.** External operators are explicitly free to use a single LLM call, RAG, fine-tuned models, rule-based templates, or human-in-the-loop. The protocol only checks that the `candidate_hash` on the on-chain bid matches what the operator publishes to IPFS. See the module-level docstring at [`internal_debate.py`](./polyglot_alpha/agents/internal_debate.py).
 
 **Read in repo:** [`polyglot_alpha/agents/internal_debate.py`](./polyglot_alpha/agents/internal_debate.py), [`polyglot_alpha/agents/critics.py`](./polyglot_alpha/agents/critics.py), [`polyglot_alpha/agents/moderator.py`](./polyglot_alpha/agents/moderator.py), [`polyglot_alpha/agents/refine.py`](./polyglot_alpha/agents/refine.py), [`polyglot_alpha/agents/base.py`](./polyglot_alpha/agents/base.py).
 
@@ -714,15 +694,15 @@ flowchart TD
     P4 -.-> F3 -.-> O
 ```
 
-**Step 1 — propose 2 candidates.** The seeder agent's `_propose_n_candidates` ([`agents/base.py:248`](./polyglot_alpha/agents/base.py#L248)) wraps `translators.propose_candidates(event, reports, llm)` and returns exactly 2 candidate dicts. The two candidates differ by prompt template + sampling temperature — same model, different generations. Each is one LLM call.
+**Step 1 — propose 2 candidates.** The seeder agent's `_propose_n_candidates` ([`agents/base.py`](./polyglot_alpha/agents/base.py)) wraps `translators.propose_candidates(event, reports, llm)` and returns exactly 2 candidate dicts. The two candidates differ by prompt template + sampling temperature — same model, different generations. Each is one LLM call.
 
-**Step 2 — critic cross-review.** [`run_critic_round` at `critics.py:222`](./polyglot_alpha/agents/critics.py#L222) runs both critics in parallel via `asyncio.gather`. Critic A (model id `claude-haiku-4-5-critic-a`) reviews **candidate B**; Critic B (`claude-haiku-4-5-critic-b`) reviews **candidate A** — see lines 251–271. Both ids resolve to the same Haiku 4.5 snapshot under the Anthropic backend ([`critics.py:60-68`](./polyglot_alpha/agents/critics.py#L60)); diversity comes from *which candidate* each critic sees, not from model heterogeneity. **Why cross-review matters:** if a critic could review its own author's candidate, the verdict would be confounded by author-side priors (the same model that wrote the question would judge it well-written). Cross-review enforces structural skepticism. Per-critic timeout is 30s ([`critics.py:69`](./polyglot_alpha/agents/critics.py#L69)); on timeout each critic soft-fails to a neutral `accept_as_is` verdict so the pipeline keeps moving.
+**Step 2 — critic cross-review.** [`run_critic_round` at `critics.py`](./polyglot_alpha/agents/critics.py) runs both critics in parallel via `asyncio.gather`. Critic A (model id `claude-haiku-4-5-critic-a`) reviews **candidate B**; Critic B (`claude-haiku-4-5-critic-b`) reviews **candidate A**. Both ids resolve to the same Haiku 4.5 snapshot under the Anthropic backend ([`critics.py`](./polyglot_alpha/agents/critics.py)); diversity comes from *which candidate* each critic sees, not from model heterogeneity. **Why cross-review matters:** if a critic could review its own author's candidate, the verdict would be confounded by author-side priors (the same model that wrote the question would judge it well-written). Cross-review enforces structural skepticism. Per-critic timeout is 30s ([`critics.py`](./polyglot_alpha/agents/critics.py)); on timeout each critic soft-fails to a neutral `accept_as_is` verdict so the pipeline keeps moving.
 
-The critic prompt ([`critics.py:71-96`](./polyglot_alpha/agents/critics.py#L71)) targets six concrete dimensions: ambiguity, resolution clarity, leading wording, source reliability, scope creep, timeline mismatch. Each critic returns strict JSON with `issues`, `strengths`, `verdict ∈ {accept_as_is, needs_refinement, reject}`, and `confidence`.
+The critic prompt ([`critics.py`](./polyglot_alpha/agents/critics.py)) targets six concrete dimensions: ambiguity, resolution clarity, leading wording, source reliability, scope creep, timeline mismatch. Each critic returns strict JSON with `issues`, `strengths`, `verdict ∈ {accept_as_is, needs_refinement, reject}`, and `confidence`.
 
-**Step 3 — moderator.** [`run_moderator` at `moderator.py:340`](./polyglot_alpha/agents/moderator.py#L340) uses `CLAUDE_SONNET = "claude-sonnet-4-5-20250929"` ([`llm.py:39`](./polyglot_alpha/llm.py#L39)) — the only Sonnet call in the loop. Timeout: 60s ([`moderator.py:66`](./polyglot_alpha/agents/moderator.py#L66)). Cost: ~$0.02 per moderator decision (1 Sonnet call with both candidates + both critiques as context). Returns a `ModeratorVerdict` containing `winning_index ∈ {0,1}` and a 1-2 sentence `critique_signal` describing how the winner should be refined. On timeout/parse failure the moderator falls back to `winning_index=0` with no critique signal and the marker `moderator_model="(fallback)"` ([`internal_debate.py:240`](./polyglot_alpha/agents/internal_debate.py#L240)).
+**Step 3 — moderator.** [`run_moderator` at `moderator.py`](./polyglot_alpha/agents/moderator.py) uses `CLAUDE_SONNET = "claude-sonnet-4-5-20250929"` ([`llm.py`](./polyglot_alpha/llm.py)) — the only Sonnet call in the loop. Timeout: 60s ([`moderator.py`](./polyglot_alpha/agents/moderator.py)). Cost: ~$0.02 per moderator decision (1 Sonnet call with both candidates + both critiques as context). Returns a `ModeratorVerdict` containing `winning_index ∈ {0,1}` and a 1-2 sentence `critique_signal` describing how the winner should be refined. On timeout/parse failure the moderator falls back to `winning_index=0` with no critique signal and the marker `moderator_model="(fallback)"` ([`internal_debate.py`](./polyglot_alpha/agents/internal_debate.py)).
 
-**Step 4 — refine with preserved fields.** [`refine_with_critique` at `refine.py:139`](./polyglot_alpha/agents/refine.py#L139). Timeout default: 45s ([`refine.py:58`](./polyglot_alpha/agents/refine.py#L58)). The LLM is asked to apply the critique signal to the winning candidate, but `_merge_refined` ([`refine.py:300`](./polyglot_alpha/agents/refine.py#L300)) **forcibly restores** the original values for `PRESERVED_FIELDS = ("title", "category", "end_date_iso")` ([`refine.py:47`](./polyglot_alpha/agents/refine.py#L47)) regardless of what the LLM returned. This guarantees the candidate's market-identifying fields cannot drift during refine — the moderator's downstream contract on identity holds even if the refine prompt is ignored. The refine LLM is free to edit `question_en`, `resolution_criteria`, `resolution_source`, `tags`.
+**Step 4 — refine with preserved fields.** [`refine_with_critique` at `refine.py`](./polyglot_alpha/agents/refine.py). Timeout default: 45s ([`refine.py`](./polyglot_alpha/agents/refine.py)). The LLM is asked to apply the critique signal to the winning candidate, but `_merge_refined` ([`refine.py`](./polyglot_alpha/agents/refine.py)) **forcibly restores** the original values for `PRESERVED_FIELDS = ("title", "category", "end_date_iso")` ([`refine.py`](./polyglot_alpha/agents/refine.py)) regardless of what the LLM returned. This guarantees the candidate's market-identifying fields cannot drift during refine — the moderator's downstream contract on identity holds even if the refine prompt is ignored. The refine LLM is free to edit `question_en`, `resolution_criteria`, `resolution_source`, `tags`.
 
 **Cost & latency budget per seeder per event.**
 
@@ -732,15 +712,17 @@ The critic prompt ([`critics.py:71-96`](./polyglot_alpha/agents/critics.py#L71))
 | 2 critics | 2 | Haiku 4.5 (cross-review) | 30s each | ~$0.005 |
 | 3 moderator | 1 | **Sonnet 4.5** | 60s | ~$0.02 |
 | 4 refine | 1 | Haiku 4.5 | 45s | ~$0.005 |
-| **total** | **6** | mixed | **90s hard cap** ([`internal_debate.py:48`](./polyglot_alpha/agents/internal_debate.py#L48)) | **~$0.03 / event / seeder** |
+| **total** | **6** | mixed | **90s hard cap** ([`internal_debate.py`](./polyglot_alpha/agents/internal_debate.py)) | **~$0.03 / event / seeder** |
 
-A 3-seeder bootstrap on one auction therefore burns ~$0.09 in LLM spend before any external operator bids. The hard 90s cap is enforced by the outer `asyncio.wait_for` at [`internal_debate.py:150`](./polyglot_alpha/agents/internal_debate.py#L150) so even if every sub-stage hangs, the seeder still bids (with a degraded candidate) before the 60s auction window closes — well, sort of: the seeder typically begins the debate the moment `auction.opened` fires, so the 90s budget actually overflows the auction by 30s in the worst case. In practice p50 debate latency is ~12s and p99 is ~45s.
+A 3-seeder bootstrap on one auction therefore burns ~$0.09 in LLM spend before any external operator bids. The hard 90s cap is enforced by the outer `asyncio.wait_for` at [`internal_debate.py`](./polyglot_alpha/agents/internal_debate.py) so even if every sub-stage hangs, the seeder still bids (with a degraded candidate) before the 60s auction window closes — well, sort of: the seeder typically begins the debate the moment `auction.opened` fires, so the 90s budget actually overflows the auction by 30s in the worst case. In practice p50 debate latency is ~12s and p99 is ~45s.
 
 ---
 
 ### 11.3 The 11-Judge Panel
 
 **The most interesting piece — every judgement is grounded in either a real model call, a real corpus, or a deterministic rule.** The panel decides PASS / BORDERLINE / FAIL for the winning auction candidate before it can be committed to `QuestionRegistry`.
+
+**The corpus is real.** `corpus/index_meta.json` carries **75,897** historical Polymarket markets (`len(json.load(open("corpus/index_meta.json"))["records"]) == 75897`), each with `market_id`, `question`, `category`. D8 queries this corpus directly via FAISS kNN over MiniLM embeddings to reject duplicates. D1's regex pattern grid was derived by frequency analysis over the same corpus (the canonical 6 templates account for 85.6% of historical markets). The style guide that D2/D4 score against was distilled from the same corpus (see [`corpus/style_guide.md`](./corpus/style_guide.md) and [`corpus/patterns_report.md`](./corpus/patterns_report.md)). The judges are anchored to what Polymarket has actually accepted and resolved — not to a hallucinated rubric.
 
 **Read in repo:** [`polyglot_alpha/judges/panel.py`](./polyglot_alpha/judges/panel.py), [`polyglot_alpha/judges/translation/`](./polyglot_alpha/judges/translation/), [`polyglot_alpha/judges/style_alignment/`](./polyglot_alpha/judges/style_alignment/), [`polyglot_alpha/judges/types.py`](./polyglot_alpha/judges/types.py).
 
@@ -782,29 +764,29 @@ flowchart LR
     AGG --> V
 ```
 
-All 11 judges are dispatched in parallel via `asyncio.gather` at [`panel.py:275`](./polyglot_alpha/judges/panel.py#L275). Each judge is wrapped in `_run_one` ([`panel.py:233`](./polyglot_alpha/judges/panel.py#L233)) which enforces `PER_JUDGE_TIMEOUT_S = 60` ([`panel.py:37`](./polyglot_alpha/judges/panel.py#L37)). On timeout, three judges (D8, BLEU, COMET) **soft-skip with `passed=True`** ([`panel.py:255`](./polyglot_alpha/judges/panel.py#L255)) because their backing assets (FAISS index, sacrebleu corpus, COMET model) may not be installed in every environment; the other 8 timeout as `passed=False`.
+All 11 judges are dispatched in parallel via `asyncio.gather` at [`panel.py`](./polyglot_alpha/judges/panel.py). Each judge is wrapped in `_run_one` ([`panel.py`](./polyglot_alpha/judges/panel.py)) which enforces `PER_JUDGE_TIMEOUT_S = 60` ([`panel.py`](./polyglot_alpha/judges/panel.py)). On timeout, three judges (D8, BLEU, COMET) **soft-skip with `passed=True`** ([`panel.py`](./polyglot_alpha/judges/panel.py)) because their backing assets (FAISS index, sacrebleu corpus, COMET model) may not be installed in every environment; the other 8 timeout as `passed=False`.
 
 #### 11.3.1 The 3 translation judges
 
 | Judge | Where it lives | Backend | Current behaviour |
 |---|---|---|---|
-| **BLEU** | [`judges/translation/bleu_judge.py`](./polyglot_alpha/judges/translation/bleu_judge.py) | `sacrebleu` library, no model needed | Requires a `reference_translation`; this field is **not currently wired** in the demo path — when null the judge returns `passed=True, score=0.5` with reason `"No reference translation supplied; BLEU skipped (neutral)."` ([`bleu_judge.py:46`](./polyglot_alpha/judges/translation/bleu_judge.py#L46)). Honest state: BLEU is a passthrough until reference translations are seeded into the corpus. |
-| **COMET** | [`judges/translation/comet_judge.py`](./polyglot_alpha/judges/translation/comet_judge.py) | `Unbabel/wmt22-cometkiwi-da` preferred, `Unbabel/wmt20-comet-qe-da` non-gated fallback | Reference-free quality estimation (no human reference required). Loads lazily, caches at module scope. Apple-Silicon MPS detection neutralized at import ([`comet_judge.py:28`](./polyglot_alpha/judges/translation/comet_judge.py#L28)) to dodge a PyTorch DataLoader bug in COMET 2.2.7 + Python 3.14. Blocker for production deploy: HuggingFace gated-repo accept for cometkiwi. |
+| **BLEU** | [`judges/translation/bleu_judge.py`](./polyglot_alpha/judges/translation/bleu_judge.py) | `sacrebleu` library, no model needed | Requires a `reference_translation`; this field is **not currently wired** in the demo path — when null the judge returns `passed=True, score=0.5` with reason `"No reference translation supplied; BLEU skipped (neutral)."` ([`bleu_judge.py`](./polyglot_alpha/judges/translation/bleu_judge.py)). Honest state: BLEU is a passthrough until reference translations are seeded into the corpus. |
+| **COMET** | [`judges/translation/comet_judge.py`](./polyglot_alpha/judges/translation/comet_judge.py) | `Unbabel/wmt22-cometkiwi-da` preferred, `Unbabel/wmt20-comet-qe-da` non-gated fallback | Reference-free quality estimation (no human reference required). Loads lazily, caches at module scope. Apple-Silicon MPS detection neutralized at import ([`comet_judge.py`](./polyglot_alpha/judges/translation/comet_judge.py)) to dodge a PyTorch DataLoader bug in COMET 2.2.7 + Python 3.14. Blocker for production deploy: HuggingFace gated-repo accept for cometkiwi. |
 | **MQM-LLM** | [`judges/translation/mqm_llm_judge.py`](./polyglot_alpha/judges/translation/mqm_llm_judge.py) | **Claude Haiku 4.5** (was OpenRouter pre-W6) via `ANTHROPIC_API_KEY`; OpenRouter Llama 3.3-70B and Gemini are fallbacks | Structured-output LLM call enumerates Major / Minor errors across MQM categories (**Accuracy, Fluency, Style, Terminology**). Collapses to 0–100 score using standard MQM weighting (Major=5, Minor=1). Every call logs to `outputs/llm_cost_log.jsonl` for spend audit. Offline graceful degradation when no backend is reachable. |
 
-Translation gate at [`panel.py:316`](./polyglot_alpha/judges/panel.py#L316): `(bleu.passed OR comet.passed) AND mqm_score ≥ 80 AND major_count == 0`. Offline MQM is treated as gate-pass so demos work without keys.
+Translation gate at [`panel.py`](./polyglot_alpha/judges/panel.py): `(bleu.passed OR comet.passed) AND mqm_score ≥ 80 AND major_count == 0`. Offline MQM is treated as gate-pass so demos work without keys.
 
 #### 11.3.2 The 8 style judges (D1–D8)
 
 | Judge | What it is | Implementation |
 |---|---|---|
-| **D1 Structural** | Does the question fit one of the 6 canonical Polymarket templates? | Regex grid first (P1 "Will X by [date]?" hits 85.6% of corpus, confidence 0.95+); LLM fallback at confidence 0.6 for unusual phrasings. See header at [`d1_structural.py:1-22`](./polyglot_alpha/judges/style_alignment/d1_structural.py#L1). |
-| **D2 Stylistic** | Neutral tone, source-cited, no editorializing. | **Pure LLM** via shared `run_style_llm_batch` ([`d2_stylistic.py:20`](./polyglot_alpha/judges/style_alignment/d2_stylistic.py#L20)). No embedding kNN here — that's D8. The shared batch routes D2/D3/D6/D7 through one consolidated LLM call to amortize cost. |
-| **D3 Framing** | Predictive (uncertain future) vs declarative (already-known fact). | LLM-batched, same shared call as D2. See [`d3_framing.py:1`](./polyglot_alpha/judges/style_alignment/d3_framing.py#L1). |
-| **D4 Granularity** | Single resolvable question — no compound `and/or` clauses, no multiple `?`. | **Regex only — no LLM call.** Compiles `_COMPOUND_TOKENS`, `_MULTI_Q`, `_MANY_CONNECTORS` patterns ([`d4_granularity.py:18-25`](./polyglot_alpha/judges/style_alignment/d4_granularity.py#L18)) and rejects on any match. Hard gate by virtue of being deterministic. |
-| **D5 Resolution Clarity** | Both `cutoff_ts` AND `resolution_criteria` are explicit and machine-checkable. | **Two-tier: fast rule path + slow LLM path.** Fast path checks ISO-8601 parseability + non-empty criteria + presence of YES/NO axis. Slow path (when fast passes structurally) fires an LLM call to enumerate UMA-disputable ambiguities ([`d5_resolution_clarity.py:145-209`](./polyglot_alpha/judges/style_alignment/d5_resolution_clarity.py#L145)). **Weighted 0.12** in `_WEIGHTS` — heaviest single style judge because UMA-dispute prevention has the highest expected value per market. |
-| **D6 Source Reliability** | Resolution source URL is authoritative. | **Allowlist OR LLM** — not strict fallback. The judge runs the LLM batch *and* checks `_AUTHORITATIVE_TLDS` + `_AUTHORITATIVE_HOSTS` ([`d6_source_reliability.py:21-27`](./polyglot_alpha/judges/style_alignment/d6_source_reliability.py#L21)); either being true passes the gate (`passed = llm OR authoritative` at [`d6_source_reliability.py:50`](./polyglot_alpha/judges/style_alignment/d6_source_reliability.py#L50)). Hosts include `pbc.gov.cn`, `mof.gov.cn`, `stats.gov.cn`, `csrc.gov.cn`, `xinhuanet.com`, `reuters.com`, `bloomberg.com`. |
-| **D7 Leading-Bias** | No nudging language (`obviously`, `clearly`, `shocking`, etc.). | **Regex blocklist + LLM.** `_LEADING_TERMS` regex ([`d7_leading_check.py:17`](./polyglot_alpha/judges/style_alignment/d7_leading_check.py#L17)) is a deterministic veto: any hit forces `passed=False, score=0.0` even if the LLM votes pass. No entropy estimator — pure pattern match. |
+| **D1 Structural** | Does the question fit one of the 6 canonical Polymarket templates? | Regex grid first (P1 "Will X by [date]?" hits 85.6% of corpus, confidence 0.95+); LLM fallback at confidence 0.6 for unusual phrasings. See header at [`d1_structural.py`](./polyglot_alpha/judges/style_alignment/d1_structural.py). |
+| **D2 Stylistic** | Neutral tone, source-cited, no editorializing. | **Pure LLM** via shared `run_style_llm_batch` ([`d2_stylistic.py`](./polyglot_alpha/judges/style_alignment/d2_stylistic.py)). No embedding kNN here — that's D8. The shared batch routes D2/D3/D6/D7 through one consolidated LLM call to amortize cost. |
+| **D3 Framing** | Predictive (uncertain future) vs declarative (already-known fact). | LLM-batched, same shared call as D2. See [`d3_framing.py`](./polyglot_alpha/judges/style_alignment/d3_framing.py). |
+| **D4 Granularity** | Single resolvable question — no compound `and/or` clauses, no multiple `?`. | **Regex only — no LLM call.** Compiles `_COMPOUND_TOKENS`, `_MULTI_Q`, `_MANY_CONNECTORS` patterns ([`d4_granularity.py`](./polyglot_alpha/judges/style_alignment/d4_granularity.py)) and rejects on any match. Hard gate by virtue of being deterministic. |
+| **D5 Resolution Clarity** | Both `cutoff_ts` AND `resolution_criteria` are explicit and machine-checkable. | **Two-tier: fast rule path + slow LLM path.** Fast path checks ISO-8601 parseability + non-empty criteria + presence of YES/NO axis. Slow path (when fast passes structurally) fires an LLM call to enumerate UMA-disputable ambiguities ([`d5_resolution_clarity.py`](./polyglot_alpha/judges/style_alignment/d5_resolution_clarity.py)). **Weighted 0.12** in `_WEIGHTS` — heaviest single style judge because UMA-dispute prevention has the highest expected value per market. |
+| **D6 Source Reliability** | Resolution source URL is authoritative. | **Allowlist OR LLM** — not strict fallback. The judge runs the LLM batch *and* checks `_AUTHORITATIVE_TLDS` + `_AUTHORITATIVE_HOSTS` ([`d6_source_reliability.py`](./polyglot_alpha/judges/style_alignment/d6_source_reliability.py)); either being true passes the gate (`passed = llm OR authoritative` at [`d6_source_reliability.py`](./polyglot_alpha/judges/style_alignment/d6_source_reliability.py)). Hosts include `pbc.gov.cn`, `mof.gov.cn`, `stats.gov.cn`, `csrc.gov.cn`, `xinhuanet.com`, `reuters.com`, `bloomberg.com`. |
+| **D7 Leading-Bias** | No nudging language (`obviously`, `clearly`, `shocking`, etc.). | **Regex blocklist + LLM.** `_LEADING_TERMS` regex ([`d7_leading_check.py`](./polyglot_alpha/judges/style_alignment/d7_leading_check.py)) is a deterministic veto: any hit forces `passed=False, score=0.0` even if the LLM votes pass. No entropy estimator — pure pattern match. |
 | **D8 Duplicate Detection** | Is this market already listed? | **FAISS kNN over the corpus.** Embeds candidate title with `sentence-transformers/all-MiniLM-L6-v2`, queries `corpus/polymarket_index.faiss`, fails on cosine ≥ 0.92 (`DUPLICATE_COSINE_THRESHOLD`). Metadata in `corpus/index_meta.json` — **75,897 records actually present today** (verified via `len(json.load("index_meta.json")["records"])`); D1's header comment of "n=5000" refers to the pattern-extraction sub-sample, not the live index. Hard gate. |
 
 #### 11.3.3 Where is "ground truth"?
@@ -817,7 +799,7 @@ Three sources, with different reliability profiles:
 
 #### 11.3.4 Weights table
 
-The full `_WEIGHTS` dict from [`panel.py:78-97`](./polyglot_alpha/judges/panel.py#L78). Module-level access is gated behind `POLYGLOT_DEMO_MODE=1` (closed-IP); every demo-mode read is logged to `outputs/weight_access_log.jsonl` for audit. The aggregation rule is fixed; only the weights are closed.
+The full `_WEIGHTS` dict from [`panel.py`](./polyglot_alpha/judges/panel.py). Module-level access is gated behind `POLYGLOT_DEMO_MODE=1` (closed-IP); every demo-mode read is logged to `outputs/weight_access_log.jsonl` for audit. The aggregation rule is fixed; only the weights are closed.
 
 | Block | Judge | Weight |
 |---|---|---|
@@ -833,11 +815,11 @@ The full `_WEIGHTS` dict from [`panel.py:78-97`](./polyglot_alpha/judges/panel.p
 | | d7_leading_check | 0.02 |
 | | d8_duplicate_detection | 0.05 |
 
-Asserted to sum to 1.0 at module load ([`panel.py:94`](./polyglot_alpha/judges/panel.py#L94)).
+Asserted to sum to 1.0 at module load ([`panel.py`](./polyglot_alpha/judges/panel.py)).
 
 #### 11.3.5 Aggregation: HARD + SOFT gates → PASS / BORDERLINE / FAIL
 
-Implemented in `_aggregate` at [`panel.py:305`](./polyglot_alpha/judges/panel.py#L305). Constants from [`judges/types.py:27-35`](./polyglot_alpha/judges/types.py#L27):
+Implemented in `_aggregate` at [`panel.py`](./polyglot_alpha/judges/panel.py). Constants from [`judges/types.py`](./polyglot_alpha/judges/types.py):
 
 - **HARD style gates** (`HARD_STYLE_REQUIREMENTS = ("d1", "d5", "d8")`) — all three must pass.
 - **Translation gate** — `(BLEU OR COMET) AND MQM ≥ 80 AND major_count == 0`.
@@ -848,7 +830,7 @@ Verdict bucketing:
 - **BORDERLINE** — translation gate (any of BLEU/COMET) AND hard gate AND soft gate at exactly 3/5. Surfaced for operator hand-review.
 - **FAIL** — anything else.
 
-The overall score is a weighted average over the 11 judges' individual `score` fields, scaled to 0–100 ([`panel.py:372-380`](./polyglot_alpha/judges/panel.py#L372)).
+The overall score is a weighted average over the 11 judges' individual `score` fields, scaled to 0–100 ([`panel.py`](./polyglot_alpha/judges/panel.py)).
 
 #### 11.3.6 Current state of each judge — honest accounting
 
@@ -882,22 +864,34 @@ The overall score is a weighted average over the 11 judges' individual `score` f
 
 #### 11.4.1 What each contract does
 
-- **TranslationAuction** ([`contracts/src/TranslationAuction.sol`](./contracts/src/TranslationAuction.sol)). 60-second sealed-bid auction with reputation-weighted scoring. `submitBid` requires reputation ≥ 0.7 (`MIN_REPUTATION_TO_BID = 7e17` at [`TranslationAuction.sol:44`](./contracts/src/TranslationAuction.sol#L44)). `settleAuction` ([`TranslationAuction.sol:247`](./contracts/src/TranslationAuction.sol#L247)) computes `score = bid * 1e18 / max(reputation, 1.0)` for each bidder and selects the bidder with **the highest score** — i.e. high bid × high reputation wins. On settle, the contract also opens a 72-hour slashable window on the winner's stake so the operator can slash for malformed submissions ([`TranslationAuction.sol:288-296`](./contracts/src/TranslationAuction.sol#L288)). Reputation deltas are pushed to `ReputationRegistry` for every bidder in-loop.
+- **TranslationAuction** ([`contracts/src/TranslationAuction.sol`](./contracts/src/TranslationAuction.sol)). 60-second sealed-bid auction with reputation-weighted scoring. `submitBid` requires reputation ≥ 0.7 (`MIN_REPUTATION_TO_BID = 7e17` at [`TranslationAuction.sol`](./contracts/src/TranslationAuction.sol)). `settleAuction` ([`TranslationAuction.sol`](./contracts/src/TranslationAuction.sol)) computes `score = bid * 1e18 / max(reputation, 1.0)` for each bidder and selects the bidder with **the highest score** — i.e. high bid × high reputation wins. On settle, the contract also opens a 72-hour slashable window on the winner's stake so the operator can slash for malformed submissions ([`TranslationAuction.sol`](./contracts/src/TranslationAuction.sol)). Reputation deltas are pushed to `ReputationRegistry` for every bidder in-loop.
 
 - **QuestionRegistry** ([`contracts/src/QuestionRegistry.sol`](./contracts/src/QuestionRegistry.sol)). `registerQuestion(event_id, candidate_hash, builder_code, ipfs_cid)` writes an immutable provenance record. The on-chain `candidate_hash` matches the SHA-256 of the IPFS-pinned candidate JSON, which matches the text submitted to Polymarket — so any third party can verify the chain `hash == sha256(IPFS fetch) == Polymarket question text` with one `eth_call` and one IPFS GET.
 
-- **BuilderFeeRouter** ([`contracts/src/BuilderFeeRouter.sol`](./contracts/src/BuilderFeeRouter.sol)). The 0.4% Polymarket builder fee lands in this contract per fill via `recordFill` ([`BuilderFeeRouter.sol:122`](./contracts/src/BuilderFeeRouter.sol#L122)). The new `record_fill_with_split` helper at [`chain/builder_fee_router.py:189`](./polyglot_alpha/chain/builder_fee_router.py#L189) (W7) implements the 90% winner / 10% treasury split — historically the contract paid 100% to the winner; the 10% platform cut is now routed through this helper. Winners pull via `claimFees`.
+- **BuilderFeeRouter** ([`contracts/src/BuilderFeeRouter.sol`](./contracts/src/BuilderFeeRouter.sol)). The 0.4% Polymarket builder fee lands in this contract per fill via `recordFill` ([`BuilderFeeRouter.sol`](./contracts/src/BuilderFeeRouter.sol)). The new `record_fill_with_split` helper at [`chain/builder_fee_router.py`](./polyglot_alpha/chain/builder_fee_router.py) (W7) implements the 90% winner / 10% treasury split — historically the contract paid 100% to the winner; the 10% platform cut is now routed through this helper. Winners pull via `claimFees`.
 
-- **ReputationRegistry** ([`contracts/src/ReputationRegistry.sol`](./contracts/src/ReputationRegistry.sol)). EWMA reputation with α=0.85. Three pull signals: `updateOnAuction(won)`, `updateOnQuality(passed)`, `updateOnFee(amount)`. The `_recompute` function at [`ReputationRegistry.sol:239`](./contracts/src/ReputationRegistry.sol#L239) blends the three. Slashing via `slashReputation` is `onlyAuthorized`. Stake-on-register is 100 USDC; the contract holds USDC until the operator un-stakes.
+- **ReputationRegistry** ([`contracts/src/ReputationRegistry.sol`](./contracts/src/ReputationRegistry.sol)). EWMA reputation with α=0.85. Three pull signals: `updateOnAuction(won)`, `updateOnQuality(passed)`, `updateOnFee(amount)`. The `_recompute` function at [`ReputationRegistry.sol`](./contracts/src/ReputationRegistry.sol) blends the three. Slashing via `slashReputation` is `onlyAuthorized`. Stake-on-register is 100 USDC; the contract holds USDC until the operator un-stakes.
 
 - **JudgePanel** ([`contracts/src/JudgePanel.sol`](./contracts/src/JudgePanel.sol)). Attestation surface: judges register their wallet + USDC stake (`registerTranslationJudge` 2 USDC, `registerStyleJudge` 1 USDC) and call `recordAttestation` to write their score on-chain. Phase-2: panel will push every verdict here so any third party can replay aggregation independently. `slashJudge` exists for systematic bias detection.
 
-#### 11.4.2 Why Arc, not Ethereum mainnet?
+#### 11.4.2 Why Arc, not Ethereum / Polygon / Solana?
 
-- Low gas (a `submitBid` is ~$0.10 of testnet gas, would be ~$3-15 on Ethereum mainnet — making the 5 USDC bid stake economically irrelevant by comparison).
-- Fast finality (~1s block time vs Ethereum's ~12s) — fits inside the 60s auction window with headroom.
-- EVM-compatible — the same Solidity ships to Arc mainnet (and to Polygon, Base, OP) without rewrite.
-- Phase 2 deploy plan: Arc mainnet GA + Polymarket builder-code KYC unlock → mainnet redeploy is `forge create` against a different RPC, no code changes.
+Arc is **Circle's stablecoin-native L2** — built explicitly so USDC is the gas token and the settlement asset are the same denomination. The entire fee-routing surface (5 USDC bid stake, 100 USDC operator stake, USDC builder fee from Polymarket) lives in one currency end-to-end. The alternative chains each lose on at least one axis:
+
+| Chain | Why we chose against it |
+|---|---|
+| **Ethereum mainnet** | `submitBid` would be ~$3–15 of mainnet gas, dwarfing the 5 USDC bid stake and breaking the economics of low-value markets. |
+| **Polygon** | Cheap gas but settlement currency is MATIC, not USDC — every fee event needs a swap and an oracle, adding two failure modes per fill. |
+| **Solana** | Not EVM-compatible — we would lose Foundry/Slither/Hardhat tooling and the audit trail (the 5 contracts have already passed Slither: 9 Medium → 0 Medium, see `outputs/slither_2nd_pass.txt`). |
+| **Base / OP** | Live alternatives but no USDC-native gas model and no Circle-backed mainnet-GA roadmap that aligns with Polymarket V2 builder rollout. |
+
+Concrete Arc properties we depend on (RPC `https://rpc.testnet.arc.network`, chain ID `5042002` per [`.env`](./.env)):
+
+- **Low gas.** Measured: a `submitBid` clears for ~$0.001 of testnet gas; the full 6–8 TX event lifecycle clears for ~$0.10. On Ethereum mainnet the same lifecycle would cost ~$30–100, which would force us to batch or roll up. Mainnet gas estimate is *expected to remain sub-cent* per Circle's published targets, but we are not citing a measured mainnet number until Arc mainnet GA lands.
+- **Fast finality.** ~1s block time vs Ethereum's ~12s — fits inside the 60s auction window with 60× headroom even after retries.
+- **USDC-native.** All stakes, fees, and rewards are denominated and *settled* in USDC without bridge or oracle dependency. No DEX swap path on the critical path.
+- **EVM-compatible.** The same Solidity in `contracts/src/*.sol` ships to Arc mainnet (and, as a fallback, to Polygon/Base/OP) without rewrite. The Foundry deploy pipeline at [`scripts/deploy_all_contracts.py`](./scripts/deploy_all_contracts.py) is RPC-parameterized.
+- **Mainnet GA timeline.** Arc mainnet is on Circle's published roadmap for **2026 Q3**. Phase-2 deploy is `forge create` against the mainnet RPC plus a Polymarket builder-code KYC unlock — no code change.
 
 #### 11.4.3 One event's TX sequence
 
@@ -939,14 +933,14 @@ sequenceDiagram
 
 Concurrent events are the common case (the orchestrator opens multiple auctions in parallel), and every contract call from the **same operator wallet** needs a strictly increasing nonce. Two coroutines reading `getTransactionCount(pending)` at the same instant will see the same nonce → both build TXs with that nonce → one TX is rejected by the node.
 
-The fix lives at [`polyglot_alpha/onchain.py:238`](./polyglot_alpha/onchain.py#L238):
+The fix lives at [`polyglot_alpha/onchain.py`](./polyglot_alpha/onchain.py):
 
 ```python
 _NONCE_LOCKS: Dict[str, "asyncio.Lock"] = {}
 _REGISTRY_GUARD = threading.Lock()
 ```
 
-`nonce_lock_for(address)` ([`onchain.py:242`](./polyglot_alpha/onchain.py#L242)) is keyed by checksum-normalized wallet address. `send_with_nonce_lock` ([`onchain.py:261`](./polyglot_alpha/onchain.py#L261)) holds the lock across the **entire** `read-nonce → build-tx → send_raw_transaction` sequence. The `threading.Lock` only protects insertion into the dict so two coroutines starting simultaneously can't create two different `asyncio.Lock` objects for the same address. Every Python wrapper (`chain/reputation_registry.py`, `chain/question_registry.py`, `chain/builder_fee_router.py`, `chain/auction_client.py`) routes through `send_with_nonce_lock` — no `eth_sendRawTransaction` is permitted outside this guard.
+`nonce_lock_for(address)` ([`onchain.py`](./polyglot_alpha/onchain.py)) is keyed by checksum-normalized wallet address. `send_with_nonce_lock` ([`onchain.py`](./polyglot_alpha/onchain.py)) holds the lock across the **entire** `read-nonce → build-tx → send_raw_transaction` sequence. The `threading.Lock` only protects insertion into the dict so two coroutines starting simultaneously can't create two different `asyncio.Lock` objects for the same address. Every Python wrapper (`chain/reputation_registry.py`, `chain/question_registry.py`, `chain/builder_fee_router.py`, `chain/auction_client.py`) routes through `send_with_nonce_lock` — no `eth_sendRawTransaction` is permitted outside this guard.
 
 ---
 
@@ -980,7 +974,7 @@ Honest accounting — what reviewers see when they pull this repo and run the de
 - `QuestionRegistry.commitQuestion` — real on-chain provenance with IPFS CID
 - `BuilderFeeRouter.recordFill` — real Arc TX via `record_fill_with_split` (two legs per fill, 90/10 enforced off-chain through two real `recordFill` calls; no real Polygon fills yet)
 - Polymarket Gamma payload construction with real registered builder code `0xa934...beb1`
-- SSE event stream (13 event types — 10 base + 3 debate sub-events; see `ui/lib/api.ts:218`), FastAPI backend, Next.js dashboard (7 routes)
+- SSE event stream (13 event types — 10 base + 3 debate sub-events; see `ui/lib/api.ts`), FastAPI backend, Next.js dashboard (7 routes)
 
 **EXPLICITLY NOT LIVE (Phase 2):**
 
@@ -1020,6 +1014,36 @@ Open `http://localhost:3001` — the event appears on the dashboard with bids, j
 ```bash
 EXTERNAL_OPERATOR_WALLET_PRIVATE_KEY=0x... \
   .venv/bin/python examples/external_operator_example.py
+```
+
+### Polymarket submission modes — `mock` / `dry_run` / `real`
+
+The Polymarket client at [`polyglot_alpha/polymarket/client.py`](./polyglot_alpha/polymarket/client.py) is a three-tier safety surface. The mode is resolved from `POLYMARKET_MODE` (string `mock` | `dry_run` | `real`) and defaults to **`dry_run`** when unset or invalid (see `_mode_from_env` in [`client.py`](./polyglot_alpha/polymarket/client.py)). The enum lives at [`polyglot_alpha/polymarket/types.py`](./polyglot_alpha/polymarket/types.py).
+
+| Mode | What it does | Network calls? | `is_simulated` | Use case |
+|---|---|---|---|---|
+| `mock` | Synthetic submission from `MockPolymarketClient`. Stable IDs, deterministic. | No | `True` | Unit tests · CI · offline dev |
+| `dry_run` *(default)* | Builds the **full real-shape Gamma payload** (every field the live submission needs), logs it, returns `market_id=dryrun-<uuid>`. **Bypasses** the `REAL_QUALITY_GATE` so reviewers can inspect the payload even on a failing event. | No (logged only) | `True` | Hackathon demo · payload review |
+| `real` | Posts to `https://gamma-api.polymarket.com/markets`. **Requires all four:** `confirm_real_submission=True` from caller, `overall_score >= REAL_QUALITY_GATE (0.80)`, builder secrets (`POLYMARKET_BUILDER_API_KEY` / `_SECRET` / `_PASSPHRASE`), and per-process `REAL_DAILY_LIMIT = 5`. Any failure degrades to dry-run with the error stamped on the result. | Yes (with fallback) | `False` on success | Production submission |
+
+The four real-mode gates live at [`polyglot_alpha/polymarket/client.py`](./polyglot_alpha/polymarket/client.py):
+
+1. **Caller-confirm flag** — `submit_question(..., confirm_real_submission=True)` must be passed explicitly; default is `False` and the call short-circuits with `status="blocked"`.
+2. **Quality gate** — `REAL_QUALITY_GATE = 0.80`; the panel verdict's `overall_score` must clear it.
+3. **Auth fully configured** — all three builder secrets present, else `status="failed"`.
+4. **Daily rate cap** — `REAL_DAILY_LIMIT = 5` real submissions per process restart.
+
+Even when these all pass, any transport error from Gamma falls back to a labelled dry-run result so the orchestrator never throws on a transient failure.
+
+```bash
+# inspect the real-shape payload without posting (the demo default)
+POLYMARKET_MODE=dry_run .venv/bin/python -m polyglot_alpha.cli.trigger_event
+
+# fully simulated; no network egress
+POLYMARKET_MODE=mock .venv/bin/python -m pytest tests/polymarket/
+
+# real submission — only after the four gates above are satisfied
+POLYMARKET_MODE=real .venv/bin/python -m polyglot_alpha.cli.trigger_event --confirm-real
 ```
 
 ### Backend API surface

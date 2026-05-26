@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import re
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,7 @@ from sqlmodel import select
 from ...orchestrator import BidRecord, create_pending_event, run_lifecycle
 from ...persistence import session_scope
 from ...persistence.models import Event
+from ...pubsub import get_pubsub
 from ..rate_limit import limiter
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,12 @@ _DEMO_FALLBACK_SOURCES: list[dict[str, str]] = [
         "language": "zh",
     }
 ]
+
+# Placeholder title written into the PENDING events row while the
+# background RSS fetch + Haiku scoring is still in flight. Once the
+# real headline lands, the row is updated and ``event.created`` is
+# republished so SSE listeners refresh the title in the UI.
+_RSS_PLACEHOLDER_TITLE: str = "Fetching latest non-English news…"
 
 
 # ---------------------------------------------------------------------------
@@ -426,25 +434,124 @@ async def trigger_event(
     resolved_scoring: dict[str, Any] | None = None
 
     if source_mode == "rss":
-        rss_event = await _fetch_rss_demo_event(payload.rss_window_minutes)
-        if rss_event is None:
-            # Try hardcoded sample, then in-process fallback.
-            rss_event = _load_hardcoded_sample() or _fallback_demo_event()
-            logger.info(
-                "trigger: event_source=rss degraded to hardcoded fallback"
+        # Demo-grade fast path for RSS: we do NOT block the HTTP response
+        # on the 5-15 s RSS fetch + Haiku scoring. Instead we pre-create a
+        # PENDING event row with a placeholder title and schedule a single
+        # BackgroundTask that:
+        #   1. Runs ``_fetch_rss_demo_event(...)`` (RSS poll + Haiku score)
+        #   2. UPDATEs the events row with the real title / sources / lang.
+        #   3. Re-publishes ``event.created`` so SSE listeners refresh.
+        #   4. Calls ``run_lifecycle(precreated_event_id=event_id)``.
+        # This lets the UI navigate to ``/events/{id}`` in <200 ms and
+        # render the news-fetch step as a regular SSE timeline phase.
+        try:
+            bids = _coerce_bids(payload.mock_bids)
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=exc.errors(),
+            ) from exc
+
+        # Salt the placeholder title with a per-click unique token so every
+        # button click creates a NEW event row (no dedup on placeholders).
+        # The earlier 5-min-epoch-bucket salt caused repeated clicks within
+        # 5 minutes to all map to the same content_hash and dedup back to
+        # the first event_id — that broke the user's expectation of "every
+        # click runs a fresh demo". Real-content dedup still happens later
+        # in the background task when run_lifecycle computes the content_hash
+        # over the resolved RSS headline + sources.
+        unique_token = uuid.uuid4().hex
+        placeholder_title = f"{_RSS_PLACEHOLDER_TITLE} [{unique_token}]"
+        placeholder_dict: dict[str, Any] = {
+            "title": placeholder_title,
+            "sources": resolved_sources or list(_DEMO_FALLBACK_SOURCES),
+            "language": payload.language or "zh",
+            "category": payload.category or "geopolitics",
+        }
+        prep = await create_pending_event(placeholder_dict)
+        precreated_event_id_rss: int = int(prep["event_id"])
+
+        async def _rss_then_lifecycle() -> None:
+            rss_event = await _fetch_rss_demo_event(payload.rss_window_minutes)
+            if rss_event is None:
+                rss_event = _load_hardcoded_sample() or _fallback_demo_event()
+                logger.info(
+                    "trigger: event_source=rss degraded to hardcoded fallback"
+                )
+            real_title = rss_event.get("title") or _DEMO_FALLBACK_TITLE
+            real_sources = list(
+                rss_event.get("sources") or _DEMO_FALLBACK_SOURCES
             )
-        resolved_title = rss_event.get("title") or _DEMO_FALLBACK_TITLE
-        resolved_sources = list(rss_event.get("sources") or _DEMO_FALLBACK_SOURCES)
-        resolved_language = str(rss_event.get("language") or "en")
-        resolved_category = str(rss_event.get("category") or "geopolitics")
-        resolved_summary = rss_event.get("summary")
-        # Marketplace-side scoring metadata (quality, category, entities,
-        # credibility, timeliness, neutral summary). Surfaced to agents
-        # so they can frame their own Polymarket questions. The
-        # marketplace itself never writes question text.
-        scoring = rss_event.get("scoring")
-        if isinstance(scoring, dict):
-            resolved_scoring = scoring
+            real_language = str(rss_event.get("language") or "zh")
+            real_category = str(rss_event.get("category") or "geopolitics")
+            real_summary = rss_event.get("summary")
+            real_scoring = rss_event.get("scoring")
+
+            # UPDATE the pre-created event row in-place so subsequent
+            # ``GET /events/{id}`` calls return the real headline.
+            try:
+                with session_scope() as session:
+                    row = session.get(Event, precreated_event_id_rss)
+                    if row is not None:
+                        row.title = real_title
+                        row.sources = real_sources
+                        row.language = real_language
+                        session.add(row)
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning(
+                    "trigger: failed to update RSS placeholder row id=%s: %s",
+                    precreated_event_id_rss,
+                    exc,
+                )
+
+            # Re-publish ``event.created`` with the real title so SSE
+            # subscribers can refresh the header. We include both the new
+            # title and the original placeholder so UI can detect updates.
+            try:
+                hub = get_pubsub()
+                await hub.publish(
+                    "event.updated",
+                    {
+                        "event_id": precreated_event_id_rss,
+                        "title": real_title,
+                        "scoring": real_scoring if isinstance(real_scoring, dict) else None,
+                    },
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning(
+                    "trigger: pubsub republish failed (%s)", exc
+                )
+
+            # Now run the lifecycle with the real event_dict. We pass
+            # ``precreated_event_id`` so the orchestrator adopts the same
+            # row rather than inserting a duplicate.
+            final_event_dict: dict[str, Any] = {
+                "title": real_title,
+                "sources": real_sources,
+                "language": real_language,
+                "category": real_category,
+            }
+            if real_summary is not None:
+                final_event_dict["summary"] = real_summary
+            if isinstance(real_scoring, dict):
+                final_event_dict["scoring"] = real_scoring
+
+            await run_lifecycle(
+                final_event_dict,
+                auction_window_seconds=payload.auction_window_seconds,
+                mock_bids=bids,
+                auction_mode=payload.auction_mode,
+                confirm_real_polymarket=payload.confirm_real_polymarket,
+                precreated_event_id=precreated_event_id_rss,
+            )
+
+        background_tasks.add_task(_rss_then_lifecycle)
+        return {
+            "event_id": precreated_event_id_rss,
+            "status": "PENDING",
+            "scheduled": True,
+            "title": placeholder_title,
+        }
     elif source_mode == "hardcoded":
         hard = _load_hardcoded_sample() or _fallback_demo_event()
         resolved_title = hard.get("title") or _DEMO_FALLBACK_TITLE
@@ -514,13 +621,10 @@ async def trigger_event(
                     "deduped": True,
                 }
 
-        # Salt the title with a 5-minute epoch bucket so an older
-        # duplicate (>5 min ago) doesn't trip the orchestrator's forever
-        # content_hash dedup. We only do this for RSS-driven events where
-        # the title comes from a finite Haiku candidate pool.
-        if source_mode == "rss":
-            bucket = int(datetime.now(tz=timezone.utc).timestamp()) // 300
-            event_dict["title"] = f"{resolved_title} [{bucket}]"
+        # NOTE: the previous ``source_mode == "rss"`` 5-min-bucket salt that
+        # lived here was removed when the RSS branch was inverted into a
+        # placeholder + BackgroundTask flow (the fetch now runs *after* the
+        # response). RSS triggers never reach this block.
 
     # Demo-grade fast path: pre-create the PENDING event row so the caller
     # gets ``event_id`` back in ~10 ms and can navigate to ``/events/{id}``

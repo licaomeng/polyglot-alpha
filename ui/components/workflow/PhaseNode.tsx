@@ -26,7 +26,19 @@ export function PhaseNode({ data }: { data: NodeData }) {
       )}
       title="Click to jump to this phase in the timeline"
     >
-      <Handle type="target" position={Position.Left} className="!h-2 !w-2 !bg-primary/60" />
+      {/* 4-side handles so the snake-pattern grid (row 0 → right, row 1 →
+          left, row 2 → right) can connect cleanly: vertical hops use
+          top/bottom; horizontal hops use left/right. Each side exposes
+          both a source and a target handle with an explicit id so edges
+          can pick the right one. */}
+      <Handle id="t-target" type="target" position={Position.Top} className="!h-2 !w-2 !bg-primary/60" />
+      <Handle id="t-source" type="source" position={Position.Top} className="!h-2 !w-2 !bg-primary/60" />
+      <Handle id="r-target" type="target" position={Position.Right} className="!h-2 !w-2 !bg-primary/60" />
+      <Handle id="r-source" type="source" position={Position.Right} className="!h-2 !w-2 !bg-primary/60" />
+      <Handle id="b-target" type="target" position={Position.Bottom} className="!h-2 !w-2 !bg-primary/60" />
+      <Handle id="b-source" type="source" position={Position.Bottom} className="!h-2 !w-2 !bg-primary/60" />
+      <Handle id="l-target" type="target" position={Position.Left} className="!h-2 !w-2 !bg-primary/60" />
+      <Handle id="l-source" type="source" position={Position.Left} className="!h-2 !w-2 !bg-primary/60" />
       <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
         {typeof data.index === "number" ? `STEP ${data.index.toString().padStart(2, "0")}` : "STEP"}
       </div>
@@ -43,7 +55,6 @@ export function PhaseNode({ data }: { data: NodeData }) {
         />
         <span className="text-xs capitalize text-muted-foreground">{status}</span>
       </div>
-      <Handle type="source" position={Position.Right} className="!h-2 !w-2 !bg-primary/60" />
     </div>
   );
 }

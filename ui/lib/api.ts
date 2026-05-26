@@ -217,6 +217,7 @@ export interface TriggerPayload {
 /** The 10 core lifecycle events (one per top-level phase transition). */
 export type SseEventType =
   | "event.created"
+  | "event.updated"
   | "auction.opened"
   | "bid.submitted"
   | "auction.settled"
@@ -238,6 +239,7 @@ export type AnySseEventType = SseEventType | DebateSseEventType;
 
 export const SSE_EVENT_TYPES: AnySseEventType[] = [
   "event.created",
+  "event.updated",
   "auction.opened",
   "bid.submitted",
   "auction.settled",
@@ -255,6 +257,7 @@ export const SSE_EVENT_TYPES: AnySseEventType[] = [
 /** Maps every SSE event → 7-phase index. Debate events all live in phase 2. */
 export const SSE_TO_PHASE_INDEX: Record<AnySseEventType, number> = {
   "event.created": 0,
+  "event.updated": 0,
   "auction.opened": 1,
   "bid.submitted": 1,
   "auction.settled": 1,

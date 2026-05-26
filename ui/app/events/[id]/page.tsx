@@ -10,6 +10,7 @@ import { EventStatusBadge } from "@/components/event/EventStatusBadge";
 import { WorkflowOverview } from "@/components/workflow/WorkflowOverview";
 import { useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { relativeTime } from "@/lib/utils";
 import { usePhaseState } from "@/hooks/usePhaseState";
 import { SSE_TO_PHASE_INDEX, type AnySseEventType } from "@/lib/api";
@@ -21,6 +22,7 @@ export default function EventDetailPage() {
   const { data: event, isLoading, isError, error } = useEvent(id);
   const { phases: livePhases, connected, latest } = useEventStream(id);
   const { setActivePhase } = usePhaseState();
+  const queryClient = useQueryClient();
 
   // When SSE delivers a phase transition, spotlight the matching DAG node +
   // timeline card so both views stay in lockstep with the backend.
@@ -29,7 +31,14 @@ export default function EventDetailPage() {
     if (latest.type === "hello" || latest.type === "heartbeat") return;
     const idx = SSE_TO_PHASE_INDEX[latest.type as AnySseEventType];
     if (idx !== undefined) setActivePhase(idx);
-  }, [latest, setActivePhase]);
+    // `event.updated` fires after RSS poll + Haiku scoring lands on the
+    // server. The pre-created event row had a placeholder title; we need
+    // to invalidate the cached `GET /events/{id}` so the header re-renders
+    // with the real title + sources.
+    if (latest.type === "event.updated") {
+      queryClient.invalidateQueries({ queryKey: ["event", id] });
+    }
+  }, [latest, setActivePhase, queryClient, id]);
 
   const merged = useMemo(() => {
     if (!event) return event;

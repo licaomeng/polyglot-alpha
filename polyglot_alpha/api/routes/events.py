@@ -107,8 +107,14 @@ def _build_phases(
 ) -> list[dict[str, Any]]:
     """Synthesize 7 phase records reflecting on-chain progress for the UI."""
 
+    # Event Ingestion is RUNNING while status=PENDING (RSS poll + Haiku
+    # scoring still in flight); only flip to completed once status has moved
+    # past PENDING to AUCTION_OPEN or beyond. This makes phase 0 light up
+    # then settle as the user watches, instead of being pre-completed at
+    # page-load time.
+    ingestion_completed = event.status not in ("PENDING",)
     completed_flags = [
-        True,  # Event Ingestion (always completed once the row exists)
+        ingestion_completed,
         auction is not None and auction.settled_at is not None,
         translation is not None,
         quality is not None,

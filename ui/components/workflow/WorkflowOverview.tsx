@@ -79,10 +79,30 @@ export function WorkflowOverview({ phases }: { phases?: PhaseState[] }) {
         const next = NODE_DEFS[idx + 1];
         const status = statusByPhase[next.phase];
         const isRunning = status === "running";
+        // Pick handles based on grid geometry so the snake pattern routes
+        // without crossings: same-row → horizontal; same-col → vertical;
+        // otherwise default to right→left.
+        let sourceHandle = "r-source";
+        let targetHandle = "l-target";
+        if (def.row === next.row) {
+          if (def.col < next.col) {
+            sourceHandle = "r-source"; targetHandle = "l-target";
+          } else if (def.col > next.col) {
+            sourceHandle = "l-source"; targetHandle = "r-target";
+          }
+        } else if (def.col === next.col) {
+          if (def.row < next.row) {
+            sourceHandle = "b-source"; targetHandle = "t-target";
+          } else {
+            sourceHandle = "t-source"; targetHandle = "b-target";
+          }
+        }
         return {
           id: `${def.id}->${next.id}`,
           source: def.id,
           target: next.id,
+          sourceHandle,
+          targetHandle,
           animated: isRunning,
           style: {
             stroke:

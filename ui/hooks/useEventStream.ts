@@ -62,6 +62,21 @@ function applyEvent(
 
   // Phase-specific status transitions.
   if (type === "event.created") {
+    // The event row is freshly created with a placeholder title — RSS poll
+    // + Haiku scoring are still happening in the background. Show phase 0
+    // (Event Ingestion) as RUNNING with the placeholder label so the user
+    // sees the news-fetch step animate. `event.updated` will flip it to
+    // completed once the real title + scoring metadata land.
+    base[idx] = {
+      ...base[idx],
+      status: nextStatus(base[idx].status, "running"),
+      startedAt: base[idx].startedAt ?? now,
+      details: { ...(base[idx].details ?? {}), ...data },
+    };
+  } else if (type === "event.updated") {
+    // RSS poll + Haiku scoring done — real title + sources + scoring
+    // metadata arrived. Mark phase 0 completed and merge new data into
+    // phase details so the page can re-render the title.
     base[idx] = {
       ...base[idx],
       status: nextStatus(base[idx].status, "completed"),

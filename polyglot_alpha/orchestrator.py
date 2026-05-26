@@ -1226,6 +1226,24 @@ async def create_pending_event(
     }
 
 
+# Module-level concurrency gate for lifecycle execution. Lazy-init so it
+# picks up the running event loop. Default of 1 keeps memory bounded —
+# each parallel lifecycle loads FAISS + a SentenceTransformer into RAM,
+# and running 2 concurrently on the dev machine triggers macOS OOM-kill
+# of the uvicorn process. Phase 2: cache FAISS + SBert at module level
+# so concurrency 2-3 becomes safe. Override via ``LIFECYCLE_MAX_CONCURRENCY``
+# env var (min 1).
+_LIFECYCLE_SEMA: asyncio.Semaphore | None = None
+
+
+def _get_lifecycle_sema() -> asyncio.Semaphore:
+    global _LIFECYCLE_SEMA
+    if _LIFECYCLE_SEMA is None:
+        n = max(1, int(os.environ.get("LIFECYCLE_MAX_CONCURRENCY", "1")))
+        _LIFECYCLE_SEMA = asyncio.Semaphore(n)
+    return _LIFECYCLE_SEMA
+
+
 async def run_lifecycle(
     event_dict: dict[str, Any],
     *,
@@ -1240,18 +1258,25 @@ async def run_lifecycle(
     lifecycle so events never stay forever in an in-flight status. On
     failure we mark the matching event row FAILED and emit a synthetic
     ``event.finalized`` SSE so the UI can react.
+
+    Wrapped in a module-level semaphore (``LIFECYCLE_MAX_CONCURRENCY``,
+    default 1) so concurrent triggers queue up behind the active lifecycle
+    instead of all running in parallel — protects the backend from the
+    44-LLM-call burst that 4 simultaneous panel.evaluates would produce.
     """
 
+    sema = _get_lifecycle_sema()
     try:
-        return await _run_lifecycle_inner(
-            event_dict,
-            auction_window_seconds=auction_window_seconds,
-            mock_bids=mock_bids,
-            publish=publish,
-            auction_mode=auction_mode,
-            confirm_real_polymarket=confirm_real_polymarket,
-            precreated_event_id=precreated_event_id,
-        )
+        async with sema:
+            return await _run_lifecycle_inner(
+                event_dict,
+                auction_window_seconds=auction_window_seconds,
+                mock_bids=mock_bids,
+                publish=publish,
+                auction_mode=auction_mode,
+                confirm_real_polymarket=confirm_real_polymarket,
+                precreated_event_id=precreated_event_id,
+            )
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception(
             "orchestrator.run_lifecycle: unhandled exception (%s); marking FAILED",
