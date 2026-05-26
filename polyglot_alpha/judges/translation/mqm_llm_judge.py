@@ -5,19 +5,19 @@ structured-output LLM call enumerates Major / Minor errors across MQM
 categories (Accuracy, Fluency, Style, Terminology), then we collapse to
 a 0-100 score using the standard MQM weighting (Major=5, Minor=1).
 
-**Provider mapping (anti-collusion via diverse LLM providers — Option A
-from README §5.22).** The translation judges are kept at three (BLEU,
-COMET, MQM-LLM) per §5.6; provider diversity is achieved by pinning
-each judge to a different stack:
-
-    * BLEU   — sacrebleu (no LLM).
-    * COMET  — Unbabel/wmt22-cometkiwi-da (Apache 2.0 model, no LLM).
-    * MQM    — Llama 3.3 70B via OpenRouter (this module). Distinct from
-      Gemini (style D1/D8 fallback) and DeepSeek/Llama (style D2-D7).
+**Provider mapping.** The translation judges are kept at three (BLEU,
+COMET, MQM-LLM); MQM is now routed through Anthropic Claude Haiku 4.5
+direct (matching the seeders' backing model so the panel infra is a
+single provider after the OpenRouter swap). BLEU + COMET remain
+non-LLM offline judges. Anti-collusion still holds because BLEU/COMET
+share no upstream with the Claude judge.
 
 Backends:
-    * OpenRouter Llama 3.3 70B (default) when ``OPENROUTER_API_KEY`` is set.
-    * Gemini fallback when ``GEMINI_API_KEY`` is set and OpenRouter is not.
+    * Anthropic Haiku 4.5 (default) when ``ANTHROPIC_API_KEY`` is set.
+    * OpenRouter Llama 3.3 70B (legacy fallback) when only
+      ``OPENROUTER_API_KEY`` is set.
+    * Gemini fallback when ``GEMINI_API_KEY`` is set and neither
+      Anthropic nor OpenRouter are reachable.
     * Any user-supplied async callable passed as ``llm_call``.
     * Offline graceful degradation when no backend is reachable.
 
@@ -37,7 +37,7 @@ from typing import Any, Awaitable, Callable, Optional
 from polyglot_alpha.judges.types import JudgeResult, PanelQuestion
 
 JUDGE_NAME = "mqm_llm"
-PROVIDER_LABEL = "openrouter:meta-llama/llama-3.3-70b-instruct"
+PROVIDER_LABEL = "anthropic:claude-haiku-4-5-20251001"
 LLM_COST_LOG_PATH = Path("outputs/llm_cost_log.jsonl")
 
 
@@ -160,18 +160,33 @@ def _score_from_errors(errors: list[dict[str, Any]]) -> tuple[int, int, int]:
     return score, major, minor
 
 
-async def _call_openrouter_llama(prompt: str) -> str:
-    """Default MQM backend: Llama 3.3 70B Instruct via OpenRouter.
+async def _call_anthropic_haiku(prompt: str) -> str:
+    """Default MQM backend: Claude Haiku 4.5 direct via the Anthropic SDK.
 
-    Pinned to OpenRouter (not Gemini) for provider diversity vs. the
-    style-alignment judges (which fan out across Gemini / DeepSeek /
-    Llama). Falls back to Gemini only if OpenRouter is unavailable.
+    Falls back to OpenRouter Llama (legacy) when only
+    ``OPENROUTER_API_KEY`` is set, then to Gemini if neither is
+    available.
     """
 
     import asyncio
 
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if api_key:
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    if anthropic_key:
+        from polyglot_alpha.llm import AnthropicLLM, CLAUDE_HAIKU
+
+        llm = AnthropicLLM(model=CLAUDE_HAIKU, api_key=anthropic_key)
+        return await llm.complete(
+            system=(
+                "You are an MQM annotator. Return ONLY a JSON object —"
+                " no prose, no markdown fences."
+            ),
+            user=prompt,
+            max_tokens=1024,
+            temperature=0.0,
+        )
+
+    openrouter_key = os.getenv("OPENROUTER_API_KEY")
+    if openrouter_key:
         try:
             import httpx
         except ImportError:
@@ -180,7 +195,7 @@ async def _call_openrouter_llama(prompt: str) -> str:
         if httpx is not None:
             url = "https://openrouter.ai/api/v1/chat/completions"
             headers = {
-                "Authorization": f"Bearer {api_key}",
+                "Authorization": f"Bearer {openrouter_key}",
                 "Content-Type": "application/json",
             }
             body = {
@@ -194,13 +209,14 @@ async def _call_openrouter_llama(prompt: str) -> str:
                 data = resp.json()
                 return data["choices"][0]["message"]["content"] or ""
 
-    # Fall back to Gemini if OpenRouter is not configured.
+    # Fall back to Gemini if neither Anthropic nor OpenRouter is configured.
     import google.generativeai as genai
 
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not api_key:
         raise RuntimeError(
-            "Neither OPENROUTER_API_KEY nor GEMINI_API_KEY is set"
+            "None of ANTHROPIC_API_KEY, OPENROUTER_API_KEY, or"
+            " GEMINI_API_KEY is set"
         )
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-2.0-flash-exp")
@@ -212,8 +228,9 @@ async def _call_openrouter_llama(prompt: str) -> str:
     return await asyncio.to_thread(_sync)
 
 
-# Backwards-compatible alias — older callers / tests may import _call_gemini.
-_call_gemini = _call_openrouter_llama
+# Backwards-compatible aliases — older callers / tests may import either name.
+_call_openrouter_llama = _call_anthropic_haiku
+_call_gemini = _call_anthropic_haiku
 
 
 async def judge_mqm_llm(
@@ -234,7 +251,7 @@ async def judge_mqm_llm(
             evidence={"score_raw": 0, "errors": []},
         )
 
-    backend: LlmCall = llm_call or _call_openrouter_llama
+    backend: LlmCall = llm_call or _call_anthropic_haiku
     provider = PROVIDER_LABEL if llm_call is None else "injected"
     prompt = _build_prompt(question)
 

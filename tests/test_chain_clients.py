@@ -342,6 +342,61 @@ def test_record_fill_converts_usdc_to_units() -> None:
     assert units == 2_500_000
 
 
+def test_record_fill_with_split_emits_two_recordFill_calls() -> None:
+    """Path A: split a builder fee 90/10 by emitting two on-chain TXs."""
+
+    mock = _build_mock_onchain()
+    fake_contract = MagicMock()
+    fake_contract.functions.recordFill.return_value.build_transaction.return_value = {
+        "to": "0xdead", "data": "0x", "gas": 250_000,
+    }
+    mock.w3.eth.contract = MagicMock(return_value=fake_contract)
+
+    winner = "0x" + "11" * 20
+    treasury = "0x" + "22" * 20
+
+    result = asyncio.run(
+        builder_mod.record_fill_with_split(
+            market_id="market-split",
+            fill_amount_usdc=1.0,
+            winner=winner,
+            treasury=treasury,
+            onchain=mock,
+        )
+    )
+
+    # Both legs should produce tx hashes.
+    assert result["winner_tx"].startswith("0x")
+    assert result["treasury_tx"].startswith("0x")
+    # Two recordFill calls fired with the right split amounts.
+    assert fake_contract.functions.recordFill.call_count == 2
+    calls = fake_contract.functions.recordFill.call_args_list
+    # First call should be the 90% winner leg.
+    winner_args = calls[0].args
+    treasury_args = calls[1].args
+    assert winner_args[0] == "market-split"
+    assert winner_args[1] == 900_000  # 0.9 USDC in 6-decimal units
+    assert treasury_args[1] == 100_000  # 0.1 USDC in 6-decimal units
+    # The amounts in the result dict match the leg credits.
+    assert result["winner_amount"] == pytest.approx(0.9)
+    assert result["treasury_amount"] == pytest.approx(0.1)
+
+
+def test_record_fill_with_split_rejects_invalid_inputs() -> None:
+    mock = _build_mock_onchain()
+    # Zero fill -> ValueError.
+    with pytest.raises(ValueError):
+        asyncio.run(
+            builder_mod.record_fill_with_split(
+                market_id="m",
+                fill_amount_usdc=0.0,
+                winner="0x" + "11" * 20,
+                treasury="0x" + "22" * 20,
+                onchain=mock,
+            )
+        )
+
+
 def test_claim_fees_calls_contract() -> None:
     mock = _build_mock_onchain()
     fake_contract = MagicMock()
@@ -363,6 +418,42 @@ def test_claim_fees_calls_contract() -> None:
 # --------------------------------------------------------------------------- #
 # ReputationRegistry: update / get                                            #
 # --------------------------------------------------------------------------- #
+
+
+def test_register_agent_with_stake_emits_transfer_and_register(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Path A anti-Sybil: USDC.transfer + ReputationRegistry.registerAgent."""
+
+    monkeypatch.setenv("PLATFORM_TREASURY_ADDRESS", "0x" + "fe" * 20)
+
+    mock = _build_mock_onchain()
+    # USDC.transfer chain
+    mock.usdc.functions.transfer.return_value.build_transaction.return_value = {
+        "to": "0xusdc", "data": "0x", "gas": 120_000,
+    }
+    # ReputationRegistry.registerAgent
+    mock.reputation.functions.registerAgent.return_value.build_transaction.return_value = {
+        "to": "0xrep", "data": "0x", "gas": 200_000,
+    }
+
+    result = asyncio.run(
+        rep_mod.register_agent_with_stake(
+            operator_address="0x" + "ab" * 20,
+            stake_usdc=100.0,
+            onchain=mock,
+        )
+    )
+
+    assert result["stake_tx"].startswith("0x")
+    assert result["register_tx"].startswith("0x")
+    assert result["stake_usdc"] == 100.0
+    # USDC transfer to treasury for the stake.
+    mock.usdc.functions.transfer.assert_called_once()
+    transfer_args = mock.usdc.functions.transfer.call_args.args
+    assert transfer_args[1] == 100_000_000  # 100 USDC in 6-decimal units
+    # registerAgent called once.
+    mock.reputation.functions.registerAgent.assert_called_once()
 
 
 def test_update_reputation_sends_all_three_signals() -> None:

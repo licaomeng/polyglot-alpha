@@ -2,11 +2,11 @@
 
 These tests cover the dispatch surface that ``orchestrator.py`` depends on:
 
-* All 4 reference agents instantiate without a real wallet (eval-only).
-* ``collect_bids_inline`` returns one bid per agent, with bid amounts that
-  visibly differ across the four bid strategies.
-* ``collect_bids_inline`` tolerates a single agent crashing and still
-  returns 4 bids (the failing one carries an ``_error`` key).
+* All 3 reference seeders instantiate without a real wallet (eval-only).
+* ``collect_bids_inline`` returns one bid per seeder, with bid amounts that
+  visibly differ across the three bid strategies.
+* ``collect_bids_inline`` tolerates a single seeder crashing and still
+  returns the remaining 2 bids (no synthetic placeholder).
 * ``run_pipeline`` produces a valid ``polymarket.types.Question`` with a
   populated layer trace.
 * ``run_for_winner`` returns a ``PipelineResult`` whose ``final_question``
@@ -74,10 +74,10 @@ def mock_llm_factory():
 # --------------------------------------------------------------------------- #
 
 
-def test_all_four_agents_instantiate_without_real_wallet() -> None:
-    """The four reference agents must construct with a throwaway PK."""
+def test_all_seeders_instantiate_without_real_wallet() -> None:
+    """The three reference seeders must construct with a throwaway PK."""
 
-    assert set(AGENT_REGISTRY.keys()) == {"gemini", "deepseek", "qwen", "llama"}
+    assert set(AGENT_REGISTRY.keys()) == {"gemini", "deepseek", "qwen"}
     for name, cls in AGENT_REGISTRY.items():
         pk = dispatch._throwaway_pk()
         agent = cls(wallet_pk=pk)
@@ -92,24 +92,23 @@ def test_all_four_agents_instantiate_without_real_wallet() -> None:
 
 
 @pytest.mark.asyncio
-async def test_collect_bids_inline_returns_four_distinct_bids(
+async def test_collect_bids_inline_returns_three_distinct_bids(
     sample_event: dict[str, Any],
 ) -> None:
-    """All 4 agents must bid; bid_strategy spread should yield distinct values."""
+    """All 3 seeders must bid; bid_strategy spread should yield distinct values."""
 
     bids = await dispatch.collect_bids_inline(sample_event, window_seconds=10.0)
 
-    assert len(bids) == 4
+    assert len(bids) == 3
     names = {b["agent_name"] for b in bids}
-    assert names == {"GeminiAgent", "DeepSeekAgent", "QwenAgent", "LlamaAgent"} or \
-           names == {"gemini", "deepseek", "qwen", "llama"}, (
-               f"unexpected agent_name values: {names}"
-           )
+    assert names == {"gemini", "deepseek", "qwen"}, (
+        f"unexpected agent_name values: {names}"
+    )
     bid_amounts = [b["bid_amount"] for b in bids]
     # All bids are positive.
     assert all(amount > 0 for amount in bid_amounts)
-    # The four bid windows differ (BID_MIN/MAX configured per agent), so at
-    # least two distinct amounts must appear.
+    # The three bid windows differ (BID_MIN/MAX configured per seeder), so
+    # at least two distinct amounts must appear.
     assert len(set(round(a, 4) for a in bid_amounts)) >= 2, (
         f"expected bid spread, got {bid_amounts}"
     )
@@ -161,9 +160,9 @@ async def test_collect_bids_inline_drops_failed_agents(
     )
 
     bids = await dispatch.collect_bids_inline(sample_event, window_seconds=10.0)
-    # Only 3 agents successfully bid; the failing one is dropped entirely
+    # Only 2 seeders successfully bid; the failing one is dropped entirely
     # so no synthetic placeholder enters the auction.
-    assert len(bids) == 3
+    assert len(bids) == 2
     for bid in bids:
         assert "_error" not in bid
         assert bid["candidate_hash"] != "0x0"

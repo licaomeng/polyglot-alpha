@@ -369,9 +369,9 @@ async def _drive_real_auction(
     event_id: int,
     window_seconds: float,
 ) -> list[BidRecord]:
-    """Spawn 4 reference agents in parallel, each submits a real bid."""
+    """Spawn 3 reference seeders in parallel, each submits a real bid."""
 
-    agent_names = ("gemini", "deepseek", "qwen", "llama")
+    agent_names = ("gemini", "deepseek", "qwen")
     bid_tasks = [
         asyncio.create_task(_drive_agent_bid(event_dict, event_id, name))
         for name in agent_names
@@ -853,6 +853,25 @@ async def _submit_to_polymarket(
     }
 
 
+def _platform_treasury_address() -> str | None:
+    """Return the platform treasury wallet address for the 10% protocol cut.
+
+    Resolution order:
+      1. ``PLATFORM_TREASURY_ADDRESS`` env var (production).
+      2. ``HACKATHON_WALLET_ADDRESS`` env var (demo fallback — operator wallet
+         doubles as treasury; the 90/10 split is still observable on-chain
+         because the two ``recordFill`` calls credit different translator
+         buckets in ``BuilderFeeRouter.cumulativeFees``).
+      3. ``None`` if neither is set — the caller will fall back to a single
+         100% leg via the legacy code path.
+    """
+
+    return (
+        os.environ.get("PLATFORM_TREASURY_ADDRESS")
+        or os.environ.get("HACKATHON_WALLET_ADDRESS")
+    )
+
+
 async def _record_builder_fee_on_chain(
     market_id: str,
     fill_amount_usdc: float,
@@ -892,6 +911,49 @@ async def _record_builder_fee_on_chain(
             "falling back to simulated builder-fee event",
             market_id,
             translator_address,
+            exc,
+        )
+        return None
+
+
+async def _record_builder_fee_split_on_chain(
+    market_id: str,
+    fill_amount_usdc: float,
+    winner_address: str,
+    treasury_address: str,
+) -> dict[str, str | None] | None:
+    """Emit the 90/10 winner/treasury split as two ``recordFill`` calls.
+
+    Path A of the WEB3_STORY decentralization plan — see
+    ``polyglot_alpha.chain.builder_fee_router.record_fill_with_split`` for
+    the canonical implementation. Returns the split dict on partial/full
+    success, or ``None`` if the chain package is unavailable.
+    """
+
+    builder_fee_router = _get_chain_builder_fee_router()
+    if builder_fee_router is None:
+        return None
+    try:
+        return await builder_fee_router.record_fill_with_split(
+            market_id, fill_amount_usdc, winner_address, treasury_address
+        )
+    except _CHAIN_RUNTIME_ERRORS as exc:
+        logger.error(
+            "record_fill_with_split chain call failed "
+            "(market=%s winner=%s treasury=%s): %s; falling back to simulated",
+            market_id,
+            winner_address,
+            treasury_address,
+            exc,
+        )
+        return None
+    except RuntimeError as exc:
+        logger.error(
+            "record_fill_with_split chain call failed "
+            "(market=%s winner=%s treasury=%s): %s; falling back to simulated",
+            market_id,
+            winner_address,
+            treasury_address,
             exc,
         )
         return None
@@ -1566,32 +1628,114 @@ async def _run_lifecycle_inner(
         builder_fill_amount = 100.0
         builder_fee_amount = 1.0
 
-        arc_tx_hash = await _record_builder_fee_on_chain(
-            market_id=fee_market_id,
-            fill_amount_usdc=builder_fee_amount,
-            translator_address=winner.agent_address,
+        # Protocol-level 90/10 split (Path A): emit TWO recordFill TXs so the
+        # split is enforced by on-chain BuilderFeeRouter state, not by us.
+        # See outputs/WEB3_STORY.md section 3 for the rationale.
+        treasury_address = _platform_treasury_address()
+        # Only attempt the on-chain split when the winner address looks like
+        # a valid Ethereum address. Mock-bid tests use shorthand addresses
+        # like ``0xagent_lo`` which are valid identifiers for in-memory state
+        # but would cause the chain call to raise during checksum validation.
+        # When the winner address is non-standard, we still emit the two
+        # ``builder_fee_event`` rows for the split (so dashboards stay
+        # consistent) but mark both legs simulated with ``arc_tx_hash=None``.
+        winner_addr_looks_real = (
+            isinstance(winner.agent_address, str)
+            and winner.agent_address.startswith("0x")
+            and len(winner.agent_address) == 42
+            and all(c in "0123456789abcdefABCDEF" for c in winner.agent_address[2:])
         )
-        fee_is_simulated = arc_tx_hash is None
+        split_result: dict[str, str | None] | None = None
+        if treasury_address and winner_addr_looks_real:
+            split_result = await _record_builder_fee_split_on_chain(
+                market_id=fee_market_id,
+                fill_amount_usdc=builder_fee_amount,
+                winner_address=winner.agent_address,
+                treasury_address=treasury_address,
+            )
+
+        # Compose the per-leg writes. If the split is available, persist
+        # TWO builder_fee_events rows (90% winner + 10% treasury) so the
+        # on-chain state and the DB are consistent. If the split call
+        # failed (chain pkg missing, etc.), fall back to a single 100% leg
+        # via the legacy single-recordFill path.
+        from polyglot_alpha.chain import builder_fee_router as _bfr_mod
+        winner_share = getattr(_bfr_mod, "WINNER_SHARE", 0.9)
+        treasury_share = 1.0 - winner_share
+
+        if split_result is not None:
+            # Real chain path: TWO on-chain TXs were attempted (may have
+            # partially failed — per-leg ``arc_tx_hash`` will be None for
+            # whichever leg reverted).
+            winner_tx = split_result.get("winner_tx")
+            treasury_tx = split_result.get("treasury_tx")
+            legs: list[tuple[str, float, str | None]] = [
+                (
+                    winner.agent_address,
+                    builder_fee_amount * winner_share,
+                    winner_tx,
+                ),
+                (
+                    treasury_address or winner.agent_address,
+                    builder_fee_amount * treasury_share,
+                    treasury_tx,
+                ),
+            ]
+        elif treasury_address:
+            # Split is the canonical accounting shape; persist the two-row
+            # breakdown even when we couldn't fire on-chain TXs (winner
+            # address not a real 0x... address, chain pkg unavailable, etc.).
+            # arc_tx_hash=None on both legs flags them as simulated.
+            legs = [
+                (
+                    winner.agent_address,
+                    builder_fee_amount * winner_share,
+                    None,
+                ),
+                (
+                    treasury_address,
+                    builder_fee_amount * treasury_share,
+                    None,
+                ),
+            ]
+        else:
+            # Legacy single-leg path (preserved for environments with no
+            # configured treasury address).
+            arc_tx_hash = await _record_builder_fee_on_chain(
+                market_id=fee_market_id,
+                fill_amount_usdc=builder_fee_amount,
+                translator_address=winner.agent_address,
+            )
+            legs = [
+                (winner.agent_address, builder_fee_amount, arc_tx_hash),
+            ]
+
+        fee_is_simulated = all(tx is None for (_, _, tx) in legs)
 
         with session_scope() as session:
-            session.add(
-                BuilderFeeEvent(
-                    market_id=fee_market_id,
-                    fill_amount=builder_fill_amount,
-                    fee_amount=builder_fee_amount,
-                    translator_address=winner.agent_address,
-                    arc_tx_hash=arc_tx_hash,
-                    is_simulated=fee_is_simulated,
+            for (recipient, amount, tx_hash) in legs:
+                session.add(
+                    BuilderFeeEvent(
+                        market_id=fee_market_id,
+                        # ``fill_amount`` reflects the per-leg notional credited
+                        # to this recipient (so the table sums to the full
+                        # 100 USDC fill across both rows).
+                        fill_amount=builder_fill_amount
+                        * (amount / max(builder_fee_amount, 1e-9)),
+                        fee_amount=amount,
+                        translator_address=recipient,
+                        arc_tx_hash=tx_hash,
+                        is_simulated=(tx_hash is None),
+                    )
                 )
-            )
-            # Atomic increment to avoid lost-update races when multiple
-            # lifecycles credit the same agent concurrently.
+            # Only the winner accrues against AgentReputation.cumulative_fees;
+            # the treasury cut is protocol revenue, not operator revenue.
             session.exec(
                 _sa_update(AgentReputation)
                 .where(AgentReputation.agent_address == winner.agent_address)
                 .values(
                     cumulative_fees=AgentReputation.cumulative_fees
-                    + builder_fee_amount,
+                    + (builder_fee_amount * winner_share),
                     last_updated=datetime.now(timezone.utc),
                 )
             )
@@ -1601,7 +1745,16 @@ async def _run_lifecycle_inner(
                 "event_id": event_id,
                 "market_id": fee_market_id,
                 "fee_amount": builder_fee_amount,
-                "arc_tx_hash": arc_tx_hash,
+                "winner_share": winner_share,
+                "treasury_share": treasury_share,
+                "legs": [
+                    {
+                        "recipient": recipient,
+                        "amount": amount,
+                        "arc_tx_hash": tx_hash,
+                    }
+                    for (recipient, amount, tx_hash) in legs
+                ],
                 "is_simulated": fee_is_simulated,
             },
         )

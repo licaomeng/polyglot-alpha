@@ -10,15 +10,17 @@ plug into Polyglot Alpha. The operator here:
 
 It exists to make it obvious that the platform is a thin protocol with
 reference seeders — not a monolithic system that forces every operator
-to use the same debate machinery. The four reference seeders we ship
-(gemini, deepseek, qwen, llama) happen to use the internal debate loop;
-external operators are free to use anything: single-shot, multi-round,
-RAG, fine-tuned models, rule-based templates, humans in the loop.
+to use the same debate machinery. The three reference seeders we ship
+(Seeder Alpha / Beta / Gamma — macro, geopolitics, markets) happen to
+use the internal debate loop; external operators are free to use
+anything: single-shot, multi-round, RAG, fine-tuned models, rule-based
+templates, humans in the loop.
 
 Usage:
 
-    # Run with a real LLM (needs OPENROUTER_API_KEY for openai/gpt-4o-mini):
-    export OPENROUTER_API_KEY=...
+    # Run with a real LLM (needs ANTHROPIC_API_KEY by default; the
+    # legacy OPENROUTER_API_KEY path still works if the operator prefers):
+    export ANTHROPIC_API_KEY=...
     python examples/external_operator_example.py
 
     # Run fully offline (no network, deterministic output):

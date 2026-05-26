@@ -171,9 +171,25 @@ def _parse_single(raw: str) -> dict[str, Any]:
 async def _call_default_backend(prompt: str, dimension: str) -> str:
     """Route to the per-dimension default provider.
 
-    DeepSeek for D2/D5/D7; OpenRouter Llama for D3/D6. Falls back to
-    Gemini when neither provider key is set.
+    Default (since the OpenRouter swap): Anthropic Claude Haiku 4.5 for
+    every dimension when ``ANTHROPIC_API_KEY`` is set. The legacy
+    DeepSeek / OpenRouter / Gemini routes are kept as fallbacks for
+    environments that explicitly prefer them.
     """
+
+    # New default: Anthropic Haiku 4.5. Single provider for the style
+    # panel keeps the panel cost predictable and avoids OpenRouter 402s.
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    if anthropic_key:
+        from polyglot_alpha.llm import AnthropicLLM, CLAUDE_HAIKU
+
+        llm = AnthropicLLM(model=CLAUDE_HAIKU, api_key=anthropic_key)
+        return await llm.complete(
+            system="Return ONLY a JSON object — no prose, no markdown fences.",
+            user=prompt,
+            max_tokens=1024,
+            temperature=0.0,
+        )
 
     provider = PROVIDER_FOR_DIMENSION.get(dimension, "")
     if provider.startswith("deepseek"):
@@ -229,8 +245,8 @@ async def _call_default_backend(prompt: str, dimension: str) -> str:
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not api_key:
         raise RuntimeError(
-            "No LLM backend reachable: set DEEPSEEK_API_KEY,"
-            " OPENROUTER_API_KEY, or GEMINI_API_KEY."
+            "No LLM backend reachable: set ANTHROPIC_API_KEY (preferred),"
+            " DEEPSEEK_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY."
         )
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-2.0-flash-exp")
@@ -262,10 +278,17 @@ async def run_dimension_llm(
     if cache_key in _CACHE:
         return _CACHE[cache_key]
 
-    provider = (
-        "injected" if llm_call is not None
-        else PROVIDER_FOR_DIMENSION.get(dimension, "fallback:gemini")
-    )
+    if llm_call is not None:
+        provider = "injected"
+    elif os.getenv("ANTHROPIC_API_KEY"):
+        # Post-OpenRouter-swap: every dimension is served by Anthropic
+        # Haiku 4.5 when the key is configured. The PROVIDER_FOR_DIMENSION
+        # mapping still drives the legacy fallback ordering inside
+        # ``_call_default_backend`` for environments without an
+        # Anthropic key.
+        provider = "anthropic:claude-haiku-4-5-20251001"
+    else:
+        provider = PROVIDER_FOR_DIMENSION.get(dimension, "fallback:gemini")
     prompt = _build_prompt(question, dimension)
 
     try:

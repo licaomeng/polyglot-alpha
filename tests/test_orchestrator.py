@@ -76,7 +76,18 @@ async def test_run_lifecycle_end_to_end(
         submission = s.exec(select(PolymarketSubmission)).one()
         assert submission.is_simulated is True
         fees = s.exec(select(BuilderFeeEvent)).all()
-        assert len(fees) == 1 and fees[0].is_simulated
+        # Path A 90/10 fee-split (see polyglot_alpha.chain.builder_fee_router.
+        # record_fill_with_split): one row credits the winner (0.9 USDC) and
+        # one row credits the platform treasury (0.1 USDC). In test env the
+        # winner has a non-standard address so on-chain TXs are skipped and
+        # both legs land with is_simulated=True.
+        assert len(fees) == 2
+        assert all(f.is_simulated for f in fees)
+        amounts = sorted(f.fee_amount for f in fees)
+        assert amounts[0] == pytest.approx(0.1)
+        assert amounts[1] == pytest.approx(0.9)
+        # Total fee preserved across the split.
+        assert sum(f.fee_amount for f in fees) == pytest.approx(1.0)
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,7 @@ from .routes import (
     builder_fees,
     events,
     leaderboard,
+    operators,
     polymarket,
     sse,
     trigger,
@@ -107,6 +108,8 @@ def create_app() -> FastAPI:
     app.include_router(sse.router)
     app.include_router(trigger.router)
     app.include_router(polymarket.router)
+    app.include_router(operators.router)
+    app.include_router(operators.bid_router)
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:

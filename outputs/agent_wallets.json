@@ -10,9 +10,5 @@
   "qwen": {
     "address": "0x5554a1Ce6C0085ca54A8b9f2E50b1D1548CDE7F6",
     "env_var": "QWEN_WALLET_PRIVATE_KEY"
-  },
-  "llama": {
-    "address": "0xC95DF8d7E21B3E8a3266e4E48D8cf7B2731F56F0",
-    "env_var": "LLAMA_WALLET_PRIVATE_KEY"
   }
 }

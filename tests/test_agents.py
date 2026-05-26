@@ -1,4 +1,4 @@
-"""Unit tests for the four translator agents.
+"""Unit tests for the three reference seeder agents.
 
 All tests stay offline:
 
@@ -24,8 +24,10 @@ from polyglot_alpha.agents import (
     BaseTranslatorAgent,
     DeepSeekAgent,
     GeminiAgent,
-    LlamaAgent,
     QwenAgent,
+    SeederAlpha,
+    SeederBeta,
+    SeederGamma,
 )
 from polyglot_alpha.agents.runner import bootstrap_wallets
 from polyglot_alpha.llm import MockLLM
@@ -55,6 +57,11 @@ def sample_event() -> Dict[str, Any]:
         "cutoff_ts": 1_900_000_000,
         "topic": "geopolitics",
         "source": "test",
+        # New post-rename shape: bid_strategy reads scoring.primary_category
+        # (slash-separated). Geopolitics here so Seeder Beta lands on its
+        # home turf, Seeder Alpha on a sibling, Seeder Gamma on away.
+        "scoring": {"primary_category": "geopolitics/trade_policy"},
+        "category": "geopolitics",
     }
 
 
@@ -115,10 +122,11 @@ def _make_agent(
 @pytest.mark.parametrize(
     "cls,expected_min,expected_max",
     [
-        (GeminiAgent, 0.30, 0.50),
-        (DeepSeekAgent, 0.60, 0.90),
-        (QwenAgent, 0.30, 1.20),
-        (LlamaAgent, 0.80, 1.20),
+        # Each seeder's BID_MIN/MAX defines its full bid window across
+        # specialty / sibling / away events.
+        (SeederAlpha, 0.30, 0.85),
+        (SeederBeta, 0.32, 0.80),
+        (SeederGamma, 0.28, 0.75),
     ],
 )
 def test_each_agent_bid_in_band(
@@ -135,7 +143,7 @@ def test_each_agent_bid_in_band(
 async def test_evaluate_event_returns_valid_result(
     fresh_pk, mock_llm_factory, mock_onchain, sample_event
 ):
-    agent = GeminiAgent(
+    agent = SeederAlpha(
         wallet_pk=fresh_pk, llm_factory=mock_llm_factory, onchain=mock_onchain
     )
     result = await agent.evaluate_event(sample_event)
@@ -143,7 +151,7 @@ async def test_evaluate_event_returns_valid_result(
     assert 0.0 <= result.confidence <= 1.0
     assert 0.0 <= result.estimated_quality <= 1.0
     assert result.expected_cost_usdc >= 0.0
-    assert GeminiAgent.BID_MIN_USDC <= result.bid_amount_usdc <= GeminiAgent.BID_MAX_USDC
+    assert SeederAlpha.BID_MIN_USDC <= result.bid_amount_usdc <= SeederAlpha.BID_MAX_USDC
 
 
 @pytest.mark.asyncio
@@ -165,7 +173,7 @@ async def test_pipeline_runs_end_to_end(
 async def test_submit_bid_serializes_correctly(
     fresh_pk, mock_llm_factory, mock_onchain, sample_event
 ):
-    agent = GeminiAgent(
+    agent = SeederAlpha(
         wallet_pk=fresh_pk, llm_factory=mock_llm_factory, onchain=mock_onchain
     )
     question = Question(
@@ -196,7 +204,7 @@ async def test_ensure_registered_skips_when_already_registered(
     fresh_pk, mock_llm_factory, mock_onchain
 ):
     mock_onchain.is_registered.return_value = True
-    agent = LlamaAgent(
+    agent = SeederGamma(
         wallet_pk=fresh_pk, llm_factory=mock_llm_factory, onchain=mock_onchain
     )
     result = await agent.ensure_registered()
@@ -210,7 +218,7 @@ async def test_ensure_registered_registers_when_not_yet(
     fresh_pk, mock_llm_factory, mock_onchain
 ):
     mock_onchain.is_registered.return_value = False
-    agent = LlamaAgent(
+    agent = SeederGamma(
         wallet_pk=fresh_pk, llm_factory=mock_llm_factory, onchain=mock_onchain
     )
     result = await agent.ensure_registered()
@@ -220,7 +228,7 @@ async def test_ensure_registered_registers_when_not_yet(
 
 
 def test_bid_strategies_are_distinct(fresh_pk, mock_llm_factory, mock_onchain, sample_event):
-    """Sanity check: each agent's bid for the same event is different."""
+    """Sanity check: each seeder's bid for the same event is different."""
 
     bids = {
         name: _make_agent(cls, fresh_pk, mock_llm_factory, mock_onchain).bid_strategy(
@@ -228,9 +236,11 @@ def test_bid_strategies_are_distinct(fresh_pk, mock_llm_factory, mock_onchain, s
         )
         for name, cls in AGENT_REGISTRY.items()
     }
-    # At least 3 of the 4 should be distinct values (Qwen's topic-conditional
-    # bid for "geopolitics" may coincide with Gemini's at the boundary).
-    assert len(set(bids.values())) >= 3, f"Bids not differentiated: {bids}"
+    # All three seeders should produce distinct bids for the same event
+    # (each specialty maps to a different bid policy).
+    assert len(set(bids.values())) == len(AGENT_REGISTRY), (
+        f"Bids not differentiated: {bids}"
+    )
 
 
 def test_bootstrap_wallets_writes_addresses_only(tmp_path):

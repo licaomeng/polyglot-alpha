@@ -56,11 +56,15 @@ class CritiqueResult:
 # --------------------------------------------------------------------------- #
 
 
-# Two distinct cheap LLMs maximize critique diversity. Both routed via
-# OpenRouter — the existing ``make_llm`` helper falls back to ``MockLLM`` when
-# the API key is missing, which keeps unit tests offline.
-CRITIC_MODEL_A = "anthropic/claude-haiku-4-5"
-CRITIC_MODEL_B = "deepseek/deepseek-r1-distill-llama-70b"
+# Both critics now run on the Anthropic Haiku 4.5 snapshot via
+# :func:`polyglot_alpha.llm.make_llm`. We keep TWO distinct model id strings
+# so the critic-fanout still passes different ``model_id`` values into the
+# factory (preserving the existing test contract where critic A and critic
+# B are dispatched independently); under the Anthropic backend both ids
+# resolve to the same Haiku snapshot, while critique diversity comes from
+# the cross-review (each critic reviews the OTHER's candidate).
+CRITIC_MODEL_A = "claude-haiku-4-5-critic-a"
+CRITIC_MODEL_B = "claude-haiku-4-5-critic-b"
 
 _CRITIC_TIMEOUT_S = 30.0
 

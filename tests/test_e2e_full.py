@@ -69,12 +69,11 @@ class _StubRawEvent:
 SAMPLE_PATH = Path(__file__).resolve().parents[1] / "outputs" / "sample_0.json"
 
 AGENT_BIDS: dict[str, float] = {
-    # Bid amounts span the per-agent windows defined in tests/test_agents.py.
-    # Thesis: lowest qualified bid wins -> 0xgemini_agent (0.40).
-    "0xgemini_agent": 0.40,   # lowest -> winner
-    "0xdeepseek_agent": 0.75,
-    "0xqwen_agent": 0.90,
-    "0xllama_agent": 1.10,
+    # Bid amounts span the per-seeder windows defined in tests/test_agents.py.
+    # Thesis: lowest qualified bid wins -> 0xgemini_agent (Seeder Alpha) at 0.30.
+    "0xgemini_agent": 0.30,   # lowest -> winner (Seeder Alpha, macro)
+    "0xdeepseek_agent": 0.60,  # Seeder Beta, geopolitics specialist
+    "0xqwen_agent": 0.75,      # Seeder Gamma, markets/sentiment
 }
 
 EXPECTED_WINNER: str = "0xgemini_agent"
@@ -503,23 +502,30 @@ async def test_e2e_full_lifecycle(
         assert submissions[0].is_simulated is True
 
         fee_events = s.exec(select(BuilderFeeEvent)).all()
-        # 1 orchestrator-synthetic + 5 mock-fill rows = 6
-        assert len(fee_events) == 6, (
-            f"expected 6 BuilderFeeEvent rows, got {len(fee_events)}"
+        # 2 orchestrator-synthetic (90/10 split — see WEB3_STORY.md §3) +
+        # 5 mock-fill rows = 7 total.
+        assert len(fee_events) == 7, (
+            f"expected 7 BuilderFeeEvent rows (2 split legs + 5 mock fills), "
+            f"got {len(fee_events)}"
         )
         assert all(f.is_simulated for f in fee_events)
-        assert all(f.translator_address == EXPECTED_WINNER for f in fee_events)
+        # The winner accrues from the 5 mock fills + the 0.9 winner leg of
+        # the orchestrator split. The treasury accrues from the 0.1 leg.
+        winner_rows = [f for f in fee_events if f.translator_address == EXPECTED_WINNER]
+        assert len(winner_rows) == 6  # 5 mocks + 1 winner-share row
         total_fees = sum(f.fee_amount for f in fee_events)
         assert total_fees > 0.0
 
         # Reputation: winner has 1 bid, 1 win, positive avg_quality, cumulative
-        # fees == sum of all simulated fee rows for this winner.
+        # fees == sum of winner-only fee rows (the treasury leg is protocol
+        # revenue, not operator revenue — see WEB3_STORY.md §3).
         rep = s.get(AgentReputation, EXPECTED_WINNER)
         assert rep is not None
         assert rep.total_bids == 1
         assert rep.total_wins == 1
         assert rep.avg_quality > 0.0
-        assert rep.cumulative_fees == pytest.approx(total_fees, abs=1e-6)
+        winner_total_fees = sum(f.fee_amount for f in winner_rows)
+        assert rep.cumulative_fees == pytest.approx(winner_total_fees, abs=1e-6)
 
         # Losers should have 1 bid, 0 wins.
         for loser_addr in set(AGENT_BIDS.keys()) - {EXPECTED_WINNER}:

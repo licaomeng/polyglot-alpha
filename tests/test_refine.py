@@ -249,8 +249,11 @@ def test_model_id_resolution_falls_back_when_meta_missing(
             llm=_llm_returning(dict(bare_candidate)),
         )
     )
-    # Default fallback documented in refine.py.
-    assert result.refine_model == "openai/gpt-4o-mini"
+    # Default fallback documented in refine.py — Anthropic Haiku 4.5
+    # after the OpenRouter swap.
+    from polyglot_alpha.llm import CLAUDE_HAIKU
+
+    assert result.refine_model == CLAUDE_HAIKU
 
 
 def test_default_timeout_constant() -> None:

@@ -235,7 +235,7 @@ def synthesize_trigger_event(market: MarketRecord) -> NewsEvent:
 
 
 # --------------------------------------------------------------------------- #
-# Mock auction: pick a winner from the four bid strategies.                   #
+# Mock auction: pick a winner from the three seeder bid strategies.          #
 # --------------------------------------------------------------------------- #
 
 
@@ -313,17 +313,22 @@ async def _run_agent_pipeline(
 
 
 def _model_for(agent_name: str) -> str:
-    """Map agent name -> LLM model id (same routing the live agents use)."""
+    """Map seeder slot -> LLM model id.
 
-    from ..llm import DEEPSEEK_V3, GEMINI_FLASH, LLAMA_33, QWEN_25
+    After the OpenRouter swap, every seeder runs on Anthropic Haiku 4.5;
+    the per-slot specialisation lives in the seeders' system prompts and
+    bid strategies, not the model id. ``CLAUDE_HAIKU`` is therefore
+    returned for every slot.
+    """
+
+    from ..llm import CLAUDE_HAIKU
 
     table = {
-        "gemini": GEMINI_FLASH,
-        "deepseek": DEEPSEEK_V3,
-        "qwen": QWEN_25,
-        "llama": LLAMA_33,
+        "gemini": CLAUDE_HAIKU,
+        "deepseek": CLAUDE_HAIKU,
+        "qwen": CLAUDE_HAIKU,
     }
-    return table.get(agent_name, GEMINI_FLASH)
+    return table.get(agent_name, CLAUDE_HAIKU)
 
 
 # --------------------------------------------------------------------------- #

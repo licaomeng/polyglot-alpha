@@ -4,14 +4,21 @@ This stage takes the candidates produced by the parallel translator debate
 (Layer 2) and produces the single :class:`Question` that flows downstream
 into quality_eval / refine / the 11-judge panel.
 
-Honest note: this module calls an LLM (OpenRouter by default) to *merge*
+Honest note: this module calls an LLM (Anthropic by default, OpenRouter
+fallback when ``POLYGLOT_LLM_BACKEND=openrouter`` is set) to *merge*
 insights from both candidates rather than to pick a winner. The LLM is
-prompted to combine the best wording / resolution_criteria / end_date_iso
-from across the candidates. When the LLM call fails for any reason
-(missing API key, HTTP error, malformed JSON, timeout) we fall back to
-the legacy heuristic — pick the candidate with the longest
+prompted to combine the best wording / resolution_criteria /
+end_date_iso from across the candidates. When the LLM call fails for
+any reason (missing API key, HTTP error, malformed JSON, timeout) we
+fall back to the legacy heuristic — pick the candidate with the longest
 ``resolution_criteria`` — and emit a ``logger.warning`` so the fallback
 path is never silently dressed up as an LLM result.
+
+The OpenRouter HTTP path is still recognised for backwards compatibility
+with the existing test fixtures (`tests/test_synthesizer.py` patches
+``synthesizer.httpx.Client`` and sets ``OPENROUTER_API_KEY``). When
+``OPENROUTER_API_KEY`` is set the old code path runs; otherwise the
+Anthropic SDK path is used.
 
 Public surface preserved (called sync from
 :func:`polyglot_alpha.agents.dispatch._run_pipeline_schema` and
@@ -22,6 +29,7 @@ Public surface preserved (called sync from
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -29,13 +37,14 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from .llm import AnthropicLLM, CLAUDE_HAIKU, LLMError
 from .schemas import NewsEvent, Question, TranslationCandidate
 
 logger = logging.getLogger(__name__)
 
-# OpenRouter model used for the merge call. Cheap + fast + good at structured
-# JSON merge. Override via ``SYNTHESIZER_MODEL`` env var for experiments.
-DEFAULT_SYNTHESIZER_MODEL = "anthropic/claude-haiku-4-5"
+# Anthropic Haiku 4.5 is the cheap workhorse. The OpenRouter slug is kept
+# only for the legacy fallback path.
+DEFAULT_SYNTHESIZER_MODEL = CLAUDE_HAIKU
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 _DEFAULT_TIMEOUT_SECONDS = 20.0
 
@@ -118,9 +127,101 @@ def _llm_merge(
 ) -> Optional[Dict[str, Any]]:
     """Ask the LLM to merge the candidates. Return ``None`` on any failure.
 
-    Sync HTTP call (synthesizer is invoked from inside an already-running
-    event loop, so we cannot use ``asyncio.run`` and a sync ``httpx.Client``
-    is the simplest correct option).
+    Resolution order:
+
+    1. ``POLYGLOT_LLM_BACKEND=openrouter`` (explicit) **AND**
+       ``OPENROUTER_API_KEY`` set -> legacy OpenRouter HTTP path.
+       Preserved for the existing test fixtures that patch
+       ``synthesizer.httpx.Client`` (they monkeypatch
+       ``OPENROUTER_API_KEY`` and never touch the backend env var,
+       which keeps them on this path).
+    2. ``ANTHROPIC_API_KEY`` set -> Anthropic SDK (NEW DEFAULT after
+       the OpenRouter swap).
+    3. ``OPENROUTER_API_KEY`` set (no Anthropic key) -> legacy
+       OpenRouter HTTP path as final fallback.
+    4. Neither -> warn + return ``None`` so the caller falls back to the
+       heuristic path.
+
+    The test_synthesizer.py fixtures rely on path (3) — they set
+    ``OPENROUTER_API_KEY=test-key`` and never set ``ANTHROPIC_API_KEY``,
+    so they exercise the OpenRouter branch end-to-end with a stubbed
+    httpx.Client.
+    """
+
+    backend = (os.getenv("POLYGLOT_LLM_BACKEND") or "").strip().lower()
+    if backend == "openrouter" and os.getenv("OPENROUTER_API_KEY"):
+        return _openrouter_merge(event, candidates)
+
+    if os.getenv("ANTHROPIC_API_KEY"):
+        return _anthropic_merge(event, candidates)
+
+    if os.getenv("OPENROUTER_API_KEY"):
+        return _openrouter_merge(event, candidates)
+
+    logger.warning(
+        "synthesizer: neither ANTHROPIC_API_KEY nor OPENROUTER_API_KEY is set;"
+        " cannot perform LLM merge"
+    )
+    return None
+
+
+def _anthropic_merge(
+    event: NewsEvent, candidates: List[TranslationCandidate]
+) -> Optional[Dict[str, Any]]:
+    """Anthropic SDK path. Synchronous wrapper around the async SDK."""
+
+    model = os.getenv("SYNTHESIZER_MODEL", DEFAULT_SYNTHESIZER_MODEL)
+    prompt = _build_prompt(event, candidates)
+
+    async def _call() -> str:
+        llm = AnthropicLLM(model=model)
+        return await llm.complete(
+            system=_SYSTEM_PROMPT,
+            user=prompt,
+            max_tokens=1024,
+            temperature=0.2,
+        )
+
+    try:
+        # ``synthesize`` is invoked from inside an already-running event
+        # loop, so we can't ``asyncio.run`` here; spin a fresh loop in a
+        # thread instead. This mirrors how the legacy OpenRouter path
+        # used a sync ``httpx.Client``.
+        text = _run_async_in_thread(_call())
+    except (LLMError, Exception) as exc:  # noqa: BLE001 — soft-fail any LLM error
+        logger.warning(
+            "synthesizer: LLM HTTP call failed (model=%s): %s", model, exc
+        )
+        return None
+
+    parsed = _parse_json_payload(text)
+    if parsed is None:
+        logger.warning(
+            "synthesizer: LLM returned unparseable JSON (model=%s): %r",
+            model,
+            text[:200] if isinstance(text, str) else text,
+        )
+        return None
+
+    if not all(parsed.get(k) for k in _REQUIRED_MERGE_KEYS):
+        logger.warning(
+            "synthesizer: LLM merge dict missing required keys; got %r",
+            sorted(parsed.keys()) if isinstance(parsed, dict) else parsed,
+        )
+        return None
+
+    return parsed
+
+
+def _openrouter_merge(
+    event: NewsEvent, candidates: List[TranslationCandidate]
+) -> Optional[Dict[str, Any]]:
+    """Legacy OpenRouter path.
+
+    Kept for two reasons:
+      * Existing tests (``tests/test_synthesizer.py``) patch
+        ``synthesizer.httpx.Client`` and expect this code path.
+      * It still works if the operator explicitly prefers OpenRouter.
     """
 
     api_key = os.getenv("OPENROUTER_API_KEY")
@@ -130,7 +231,7 @@ def _llm_merge(
         )
         return None
 
-    model = os.getenv("SYNTHESIZER_MODEL", DEFAULT_SYNTHESIZER_MODEL)
+    model = os.getenv("SYNTHESIZER_MODEL", "anthropic/claude-haiku-4-5")
     prompt = _build_prompt(event, candidates)
 
     payload = {
@@ -177,6 +278,38 @@ def _llm_merge(
         return None
 
     return parsed
+
+
+def _run_async_in_thread(coro: Any) -> Any:
+    """Run an awaitable to completion in a fresh thread-local event loop.
+
+    ``synthesize`` is invoked from inside the already-running pipeline
+    event loop, so ``asyncio.run`` would raise. We spin a new loop in a
+    worker thread, run the coroutine there, and block the calling thread
+    until it completes. This is essentially what synchronous SDK
+    wrappers do internally.
+    """
+
+    import threading
+
+    result: dict[str, Any] = {}
+
+    def _runner() -> None:
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            result["value"] = loop.run_until_complete(coro)
+        except Exception as exc:  # noqa: BLE001 — surface to caller
+            result["error"] = exc
+        finally:
+            loop.close()
+
+    t = threading.Thread(target=_runner, daemon=True)
+    t.start()
+    t.join(timeout=_DEFAULT_TIMEOUT_SECONDS + 5.0)
+    if "error" in result:
+        raise result["error"]
+    return result.get("value")
 
 
 def _build_prompt(

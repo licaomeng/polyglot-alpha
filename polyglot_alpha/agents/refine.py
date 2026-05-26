@@ -34,7 +34,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from ..llm import LLMCallable, make_llm
+from ..llm import CLAUDE_HAIKU, LLMCallable, make_llm
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,9 @@ EDITABLE_FIELDS: tuple[str, ...] = (
 DEFAULT_REFINE_TIMEOUT_S: float = 45.0
 
 # Fallback model when neither the candidate nor the caller specifies one.
-_FALLBACK_MODEL_ID: str = "openai/gpt-4o-mini"
+# Anthropic Haiku 4.5 is the cheapest current Claude snapshot, matching the
+# seeders' default backing model.
+_FALLBACK_MODEL_ID: str = CLAUDE_HAIKU
 
 # Heuristic markers that indicate the resolution_criteria gained precision.
 _PRECISION_MARKERS: tuple[str, ...] = (

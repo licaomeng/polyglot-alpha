@@ -82,6 +82,7 @@ def test_synthesizer_llm_merge_returns_combined_fields(
 ) -> None:
     """LLM merges: A's wording + B's stronger resolution_criteria."""
 
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
     merged_payload = {
@@ -126,6 +127,7 @@ def test_synthesizer_falls_back_to_heuristic_on_llm_failure(
 ) -> None:
     """HTTP error -> heuristic (longest resolution_criteria) + WARNING."""
 
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
     import httpx
@@ -165,9 +167,10 @@ def test_synthesizer_falls_back_when_api_key_missing(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """No OPENROUTER_API_KEY -> heuristic + WARNING (no HTTP call made)."""
+    """No backend keys -> heuristic + WARNING (no HTTP call made)."""
 
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
     with caplog.at_level(logging.WARNING, logger="polyglot_alpha.synthesizer"):
         # Patch Client so a runaway real HTTP call would explode the test.
@@ -181,7 +184,8 @@ def test_synthesizer_falls_back_when_api_key_missing(
         rec.message for rec in caplog.records if rec.levelno == logging.WARNING
     ]
     assert any(
-        "OPENROUTER_API_KEY not set" in m for m in warning_messages
+        "ANTHROPIC_API_KEY" in m or "OPENROUTER_API_KEY" in m
+        for m in warning_messages
     ), warning_messages
     assert any(
         "falling back to heuristic" in m for m in warning_messages
@@ -201,6 +205,7 @@ def test_synthesizer_preserves_required_fields_in_output(
 ) -> None:
     """The returned Question always carries event_id + 3 merge fields."""
 
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
     merged_payload = {
@@ -239,6 +244,7 @@ def test_synthesizer_falls_back_when_llm_returns_malformed_json(
 ) -> None:
     """Malformed JSON from the LLM -> heuristic + WARNING."""
 
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
     resp = MagicMock()
@@ -283,6 +289,7 @@ def test_synthesizer_single_candidate_short_circuits(
 ) -> None:
     """One candidate -> no LLM call (nothing to merge)."""
 
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
     with patch.object(synthesizer.httpx, "Client") as client_factory:

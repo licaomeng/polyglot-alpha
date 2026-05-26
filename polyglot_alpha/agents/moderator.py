@@ -23,7 +23,12 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from ..llm import LLMCallable, make_llm
+from ..llm import (
+    CLAUDE_SONNET,
+    LLMCallable,
+    MODERATOR_MAX_TOKENS,
+    make_llm,
+)
 from .critics import CritiqueResult
 
 logger = logging.getLogger(__name__)
@@ -51,11 +56,12 @@ class ModeratorVerdict:
 # --------------------------------------------------------------------------- #
 
 
-# Claude Sonnet 4.6 is the strongest moderator at reasonable cost. If the
-# OpenRouter alias is unavailable in a given environment, the LLM factory
-# falls back to MockLLM, which keeps tests deterministic.
-MODERATOR_MODEL = "anthropic/claude-sonnet-4-6"
-MODERATOR_MODEL_FALLBACK = "anthropic/claude-3.5-sonnet"
+# Claude Sonnet 4.5 is the strongest moderator at reasonable cost. Routed
+# through the Anthropic SDK by default via :func:`make_llm`; the factory
+# falls back to MockLLM when no API key is configured, which keeps tests
+# deterministic.
+MODERATOR_MODEL = CLAUDE_SONNET
+MODERATOR_MODEL_FALLBACK = "claude-haiku-4-5-20251001"
 
 _MODERATOR_TIMEOUT_S = 60.0
 
@@ -346,7 +352,7 @@ async def run_moderator(
         event: original event payload.
         llm_factory: optional override for the LLM constructor (tests).
         timeout: moderator-call timeout in seconds.
-        model_id: OpenRouter model id; defaults to Claude Sonnet 4.6.
+        model_id: Anthropic model snapshot; defaults to Claude Sonnet 4.5.
 
     Returns:
         A :class:`ModeratorVerdict`. On any LLM failure / timeout, returns a
@@ -358,7 +364,9 @@ async def run_moderator(
             f"run_moderator expects exactly 2 candidates, got {len(candidates)}"
         )
 
-    factory: LLMFactory = llm_factory or (lambda mid: make_llm(mid))
+    factory: LLMFactory = llm_factory or (
+        lambda mid: make_llm(mid, max_tokens=MODERATOR_MAX_TOKENS)
+    )
     llm = factory(model_id)
 
     prompt = _build_prompt(candidates, critiques, event)

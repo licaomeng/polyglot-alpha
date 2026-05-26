@@ -193,7 +193,7 @@ class TestAuction:
         import random as _random
 
         rng = _random.Random(0)
-        bids = {"gemini": 0.30, "deepseek": 0.75, "qwen": 0.40, "llama": 1.00}
+        bids = {"gemini": 0.30, "deepseek": 0.75, "qwen": 0.40}
         assert _pick_winner(bids, rng=rng) == "gemini"
 
     def test_pick_winner_handles_ties_deterministically(self) -> None:

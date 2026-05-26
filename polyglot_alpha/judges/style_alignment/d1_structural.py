@@ -193,7 +193,8 @@ async def _run_llm_fallback(
     backend = llm_call
     if backend is None:
         if not (
-            os.getenv("DEEPSEEK_API_KEY")
+            os.getenv("ANTHROPIC_API_KEY")
+            or os.getenv("DEEPSEEK_API_KEY")
             or os.getenv("OPENROUTER_API_KEY")
             or os.getenv("GEMINI_API_KEY")
             or os.getenv("GOOGLE_API_KEY")
