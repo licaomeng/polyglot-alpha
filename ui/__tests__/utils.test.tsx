@@ -1,4 +1,14 @@
-import { cn, shortAddr, formatUsd, formatNumber } from "@/lib/utils";
+import {
+  cn,
+  shortAddr,
+  formatUsd,
+  formatNumber,
+  isSimTxHash,
+  isSimPolymarketId,
+  arcscanTxUrl,
+  polymarketMarketUrl,
+  safePolymarketUrl,
+} from "@/lib/utils";
 
 describe("utils", () => {
   it("cn merges tailwind classes and de-duplicates conflicts", () => {
@@ -19,5 +29,57 @@ describe("utils", () => {
 
   it("formatNumber handles null gracefully", () => {
     expect(formatNumber(null)).toBe("—");
+  });
+
+  describe("sim-prefix gating (W7-B)", () => {
+    it("isSimTxHash detects 0xsim_ prefix (case-insensitive)", () => {
+      expect(isSimTxHash("0xsim_abcdef")).toBe(true);
+      expect(isSimTxHash("0xSIM_ABCDEF")).toBe(true);
+    });
+
+    it("isSimTxHash rejects real 0x… hashes and null", () => {
+      expect(isSimTxHash("0xabcdef0123456789")).toBe(false);
+      expect(isSimTxHash(null)).toBe(false);
+      expect(isSimTxHash(undefined)).toBe(false);
+      expect(isSimTxHash("")).toBe(false);
+    });
+
+    it("isSimPolymarketId detects sim- and dryrun- prefixes", () => {
+      expect(isSimPolymarketId("sim-ff89e42a7a8d")).toBe(true);
+      expect(isSimPolymarketId("dryrun-abcdef")).toBe(true);
+      expect(isSimPolymarketId("SIM-foo")).toBe(true);
+    });
+
+    it("isSimPolymarketId rejects real market ids and falsy values", () => {
+      expect(isSimPolymarketId("0x123abc")).toBe(false);
+      expect(isSimPolymarketId("real-market-42")).toBe(false);
+      expect(isSimPolymarketId(null)).toBe(false);
+      expect(isSimPolymarketId(undefined)).toBe(false);
+    });
+
+    it("arcscanTxUrl returns null for sim hashes and a URL for real hashes", () => {
+      expect(arcscanTxUrl("0xsim_abcdef")).toBeNull();
+      expect(arcscanTxUrl(null)).toBeNull();
+      expect(arcscanTxUrl("0xabcdef")).toBe("https://testnet.arcscan.app/tx/0xabcdef");
+    });
+
+    it("polymarketMarketUrl returns null for sim/dryrun ids and a URL for real ids", () => {
+      expect(polymarketMarketUrl("sim-ff89e42a7a8d")).toBeNull();
+      expect(polymarketMarketUrl("dryrun-abc")).toBeNull();
+      expect(polymarketMarketUrl(null)).toBeNull();
+      expect(polymarketMarketUrl("0xdeadbeef")).toBe(
+        "https://polymarket.com/market/0xdeadbeef",
+      );
+    });
+
+    it("safePolymarketUrl strips URLs whose market_id segment is sim-prefixed", () => {
+      expect(safePolymarketUrl("https://polymarket.com/market/sim-ff89e4")).toBeNull();
+      expect(safePolymarketUrl("https://polymarket.com/market/dryrun-abc")).toBeNull();
+      expect(safePolymarketUrl(null)).toBeNull();
+      expect(safePolymarketUrl("")).toBeNull();
+      expect(safePolymarketUrl("https://polymarket.com/market/0xdeadbeef")).toBe(
+        "https://polymarket.com/market/0xdeadbeef",
+      );
+    });
   });
 });

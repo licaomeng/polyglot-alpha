@@ -21,7 +21,11 @@ const MODES: { value: DemoMode; label: string }[] = [
  *     toggle never reflows the surrounding header.
  */
 export function DemoModeToggle({ className }: { className?: string }) {
-  const { mode, setMode } = useDemoMode();
+  const { mode, setMode, isHydrated } = useDemoMode();
+  // W7-E: render the SSR-safe "live" selection until the context resolves
+  // the real mode from URL / localStorage. Prevents the active segment from
+  // visibly flipping between live and mock on first paint.
+  const effectiveMode: DemoMode = isHydrated ? mode : "live";
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const handleKey = useCallback(
@@ -63,7 +67,7 @@ export function DemoModeToggle({ className }: { className?: string }) {
       )}
     >
       {MODES.map((m, idx) => {
-        const active = mode === m.value;
+        const active = effectiveMode === m.value;
         const isLive = m.value === "live";
         return (
           <button

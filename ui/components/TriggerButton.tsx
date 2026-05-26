@@ -34,7 +34,12 @@ const NAVIGATE_FALLBACK_MS = 120_000;
 
 export function TriggerButton() {
   const router = useRouter();
-  const { mode } = useDemoMode();
+  const { mode, isHydrated } = useDemoMode();
+  // W7-E: keep the label SSR-safe ("Trigger live demo") until the mode
+  // context has hydrated so the server-rendered button text matches the
+  // first client paint. After hydration the label switches to reflect the
+  // resolved mode without producing a React hydration mismatch warning.
+  const effectiveMode: typeof mode = isHydrated ? mode : "live";
   const [busy, setBusy] = useState(false);
   const [triggered, setTriggered] = useState(false);
   // Track the event id returned by POST so the SSE filter can be re-applied
@@ -113,10 +118,10 @@ export function TriggerButton() {
   const label = useMemo(() => {
     if (!busy) {
       if (triggered) return "Triggered";
-      return mode === "mock" ? "Trigger mock demo" : "Trigger live demo";
+      return effectiveMode === "mock" ? "Trigger mock demo" : "Trigger live demo";
     }
     return progressLabel ?? FALLBACK_INITIAL_LABEL;
-  }, [busy, triggered, progressLabel, mode]);
+  }, [busy, triggered, progressLabel, effectiveMode]);
 
   return (
     <div className="flex flex-col gap-2">

@@ -18,8 +18,12 @@ const NAV = [
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const { mode } = useDemoMode();
-  const isMock = mode === "mock";
+  const { mode, isHydrated } = useDemoMode();
+  // W7-E: mode-dependent visuals only flip *after* hydration. Before then we
+  // render the server-safe "live" shell so the SSR HTML matches the first
+  // client paint exactly — no hydration mismatch warning, no visible flash.
+  const effectiveMode: typeof mode = isHydrated ? mode : "live";
+  const isMock = effectiveMode === "mock";
   return (
     <header
       className={cn(
@@ -29,7 +33,7 @@ export function SiteHeader() {
           : "border-b border-primary/30",
       )}
       style={{ paddingTop: "env(safe-area-inset-top)" }}
-      data-mode={mode}
+      data-mode={effectiveMode}
     >
       <div className="container flex h-14 items-center gap-3 sm:gap-6">
         <Link

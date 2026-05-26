@@ -226,7 +226,8 @@ let storagePersistPass = false;
   // refresh
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
   await page.waitForSelector('[role="radiogroup"][aria-label="Demo mode"]');
-  await page.waitForTimeout(400);
+  await waitForMode("mock");
+  await page.waitForTimeout(800);
   const checked = await checkedLabel();
   const mode = await headerDataMode();
   const storage = await getStorage();
@@ -309,12 +310,17 @@ let liveEventId = null;
     );
   }
 
-  // Capture event id by listening to the POST /trigger/event response.
+  // Capture event id by listening to the POST /trigger/event response. The
+  // backend writes the row in ~10ms but Next dev mode can stall the first
+  // click for a few seconds while it compiles routes.
   const triggerRespP = page.waitForResponse(
     (r) => r.url().includes("/trigger/event") && r.request().method() === "POST",
-    { timeout: 20_000 },
+    { timeout: 60_000 },
   ).catch(() => null);
 
+  // Wait for the button to be enabled before clicking.
+  await page.waitForSelector('button[aria-label="Trigger a live demo event"]:not([disabled])');
+  await page.waitForTimeout(500);
   await page.locator('button[aria-label="Trigger a live demo event"]').click();
   const triggerResp = await triggerRespP;
   if (triggerResp) {
@@ -340,7 +346,7 @@ let liveEventId = null;
     // waiting for the SSE to drive a redirect.
     if (liveEventId) {
       try {
-        const resp = await fetch(`http://localhost:8000/events/${liveEventId}`);
+        const resp = await fetch(`http://127.0.0.1:8000/events/${liveEventId}`);
         if (resp.ok) {
           const ev = await resp.json();
           if (["SUBMITTED", "FAILED", "REJECTED"].includes(ev.status)) {
@@ -363,7 +369,7 @@ let liveEventId = null;
   let status = null, reason = null;
   if (liveEventId) {
     try {
-      const r = await fetch(`http://localhost:8000/events/${liveEventId}`);
+      const r = await fetch(`http://127.0.0.1:8000/events/${liveEventId}`);
       if (r.ok) {
         const ev = await r.json();
         status = ev.status;
@@ -411,19 +417,49 @@ let liveEventId = null;
       "Backend lifecycle stalled — seeder gas, RPC, or judge panel timeout"
     );
   } else if (liveResult === "FAILED-low-gas") {
-    // verify the amber panel actually rendered
-    const panel = page.locator("text=/all 3 reference seeders.*out of gas/i").first();
-    const visible = await panel.isVisible().catch(() => false);
-    if (!visible) {
-      record(
-        "MEDIUM",
-        "Backend reports all_seeders_low_gas but amber panel not rendered",
-        `${BASE}/events/${liveEventId} (step 5)`,
-        "amber 'All 3 reference seeders out of gas' panel visible on phase detail",
-        "panel not visible in DOM",
-        path,
-        "PhaseDetailsAccordion not matching reason key OR phase collapsed"
-      );
+    // Without user interaction, the explanation is hidden behind a
+    // collapsed accordion — that's a UX issue worth flagging.
+    const visibleByDefault = await page
+      .locator('[data-testid="auction-low-gas-panel"]')
+      .isVisible()
+      .catch(() => false);
+    if (!visibleByDefault) {
+      // Expand all phase accordions and re-check whether panel exists at all.
+      const togglesCount = await page.locator('[data-testid^="phase-details-"] button').count();
+      for (let i = 0; i < togglesCount; i++) {
+        await page
+          .locator(`[data-testid="phase-details-${i}"] button`)
+          .click()
+          .catch(() => {});
+        await page.waitForTimeout(150);
+      }
+      await page.waitForTimeout(500);
+      const expandedPath = await shotFull("step5-live-trigger-expanded");
+      const visibleAfterExpand = await page
+        .locator('[data-testid="auction-low-gas-panel"]')
+        .isVisible()
+        .catch(() => false);
+      if (visibleAfterExpand) {
+        record(
+          "MEDIUM",
+          "Low-gas explanation panel hidden behind collapsed accordion by default",
+          `${BASE}/events/${liveEventId} (step 5)`,
+          "amber 'All 3 reference seeders out of gas' panel visible on first load",
+          "panel only visible after user manually expands 'inputs · outputs · diagram' accordion",
+          `${path} | expanded: ${expandedPath}`,
+          "PhaseDetailsAccordion uses useState(false); failed phases should auto-expand the panel"
+        );
+      } else {
+        record(
+          "HIGH",
+          "Backend reports all_seeders_low_gas but amber panel not in DOM",
+          `${BASE}/events/${liveEventId} (step 5)`,
+          "amber 'All 3 reference seeders out of gas' panel rendered after expand",
+          "panel not visible even after expanding all accordions",
+          expandedPath,
+          "AuctionDetails not matching reason key OR phase index mis-mapped"
+        );
+      }
     }
   } else if (liveResult.startsWith("FAILED-other") || liveResult === "REJECTED") {
     record(
@@ -446,7 +482,7 @@ let liveEventId = null;
   let liveId = liveEventId;
   let mockId = null;
   try {
-    const r = await fetch("http://localhost:8000/events?limit=50");
+    const r = await fetch("http://127.0.0.1:8000/events?limit=50");
     const arr = await r.json();
     if (!liveId) {
       const x = arr.find((e) => e.mode === "live");
@@ -532,28 +568,40 @@ const pagesToTest = [
 // Add event detail if we have an id
 if (liveEventId) pagesToTest.push({ name: "event-detail", path: `/events/${liveEventId}` });
 const stickyFails = [];
-// Use a short viewport so every page can scroll; long content not needed.
+// Use a short viewport so every page can scroll (content height > viewport).
+// We deliberately do NOT inject a spacer — the previous version appended a
+// spacer to <body> which lives OUTSIDE the flex-col layout container,
+// creating false sticky-detachment because the sticky containing block
+// stayed only as tall as the original layout div.
 await page.setViewportSize({ width: 1280, height: 400 });
 for (const t of pagesToTest) {
-  await page.goto(`${BASE}${t.path}`, { waitUntil: "domcontentloaded" });
+  let lastErr = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await page.goto(`${BASE}${t.path}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+      lastErr = null;
+      break;
+    } catch (e) {
+      lastErr = e;
+      await page.waitForTimeout(800);
+    }
+  }
+  if (lastErr) {
+    record("MEDIUM", `Step 7 navigation failed: ${t.name}`, `${BASE}${t.path}`, "page loads", lastErr.message, "n/a", "transient nav abort");
+    continue;
+  }
   await page.waitForSelector("header");
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(700);
   const beforeBox = await page.locator("header").first().boundingBox();
-  // Inject a tall spacer so we can always scroll past the header.
-  await page.evaluate(() => {
-    const spacer = document.createElement("div");
-    spacer.style.height = "2000px";
-    spacer.id = "__w6p2_spacer";
-    document.body.appendChild(spacer);
-  });
-  await page.evaluate(() => window.scrollTo(0, 800));
+  // Scroll a meaningful amount but within the page's natural content height.
+  // 200 px is enough to detach the header from its initial position; sticky
+  // should keep it pinned at y≈0.
+  await page.evaluate(() => window.scrollTo(0, 200));
   await page.waitForTimeout(400);
   const box = await page.locator("header").first().boundingBox();
   const scrollY = await page.evaluate(() => window.scrollY);
-  // Clean up spacer
-  await page.evaluate(() => document.getElementById("__w6p2_spacer")?.remove());
-  const stuck = box && box.y >= 0 && box.y < 10 && scrollY > 50;
   const path = await shot(`step7-sticky-${t.name}`);
+  const stuck = box && box.y >= 0 && box.y < 10 && scrollY > 50;
   if (!stuck) {
     stickyFails.push(t.name);
     record(
@@ -584,24 +632,21 @@ let kbPass = false;
 
   // Focus the active radio
   await page.locator('[role="radio"][aria-checked="true"]').first().focus();
-  await page.waitForTimeout(150);
+  await page.waitForTimeout(200);
   // Press ArrowRight — should switch to MOCK
   await page.keyboard.press("ArrowRight");
-  await waitForMode("mock");
-  await page.waitForTimeout(200);
-  const after1 = await checkedLabel();
+  await page.waitForTimeout(600);
+  const after1 = await headerDataMode();
   // Press ArrowLeft — should switch back to LIVE
   await page.keyboard.press("ArrowLeft");
-  await waitForMode("live");
-  await page.waitForTimeout(200);
-  const after2 = await checkedLabel();
+  await page.waitForTimeout(600);
+  const after2 = await headerDataMode();
   // Press Space on MOCK
   await page.keyboard.press("ArrowRight");
-  await waitForMode("mock");
-  await page.waitForTimeout(150);
+  await page.waitForTimeout(400);
   await page.keyboard.press(" ");
-  await page.waitForTimeout(300);
-  const after3 = await checkedLabel();
+  await page.waitForTimeout(600);
+  const after3 = await headerDataMode();
   // verify aria-checked accurately tracks
   const mockChecked = await page
     .locator('[role="radio"]:has-text("MOCK")')
@@ -611,7 +656,7 @@ let kbPass = false;
     .getAttribute("aria-checked");
   const path = await shot("step8-keyboard-nav");
 
-  kbPass = after1 === "MOCK" && after2 === "LIVE" && after3 === "MOCK" && mockChecked === "true" && liveChecked === "false";
+  kbPass = after1 === "mock" && after2 === "live" && after3 === "mock" && mockChecked === "true" && liveChecked === "false";
   if (!kbPass) {
     record(
       "MEDIUM",

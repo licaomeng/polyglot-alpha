@@ -24,12 +24,20 @@ const launchTab = async (browser, label) => {
   // Track the POST so we know which event_id this tab triggered.
   const triggerInfo = { eventId: null, postReturnedAt: null };
   page.on("response", async (resp) => {
-    if (resp.url().includes("/trigger/event") && resp.request().method() === "POST") {
+    if (
+      resp.url().includes("/trigger/event") &&
+      resp.request().method() === "POST" &&
+      resp.status() === 200
+    ) {
       try {
         const body = await resp.json();
-        triggerInfo.eventId = String(body.event_id);
-        triggerInfo.postReturnedAt = Date.now();
-        log(`[${label}] POST returned event_id=${triggerInfo.eventId}`);
+        if (body && body.event_id !== undefined && body.event_id !== null) {
+          triggerInfo.eventId = String(body.event_id);
+          triggerInfo.postReturnedAt = Date.now();
+          log(`[${label}] POST returned event_id=${triggerInfo.eventId}`);
+        } else {
+          log(`[${label}] POST returned no event_id:`, JSON.stringify(body));
+        }
       } catch (e) {
         log(`[${label}] POST body parse error:`, e.message);
       }
@@ -43,10 +51,13 @@ const goAndClick = async (page, label) => {
     waitUntil: "domcontentloaded",
     timeout: 30000,
   });
-  await page.waitForLoadState("load", { timeout: 15000 }).catch(() => {});
-  // Wait for the trigger button to be ready.
-  const btn = page.locator('button:has-text("Trigger")').first();
-  await btn.waitFor({ state: "visible", timeout: 10000 });
+  await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
+  // Wait for the trigger button to be ready. The SSR initial render shows
+  // "Trigger live demo"; after client hydration applies mode=mock it flips
+  // to "Trigger mock demo". Either label works as a click target — we just
+  // need the button to exist and be visible.
+  const btn = page.locator('button[aria-label*="Trigger"]').first();
+  await btn.waitFor({ state: "visible", timeout: 30000 });
   log(`[${label}] page ready, clicking trigger`);
   const clickStart = Date.now();
   await btn.click();
@@ -92,13 +103,13 @@ await Promise.all([
   tabB.page.goto(`${BASE_UI}/?mode=mock`, { waitUntil: "domcontentloaded", timeout: 30000 }),
 ]);
 await Promise.all([
-  tabA.page.waitForLoadState("load", { timeout: 15000 }).catch(() => {}),
-  tabB.page.waitForLoadState("load", { timeout: 15000 }).catch(() => {}),
+  tabA.page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {}),
+  tabB.page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {}),
 ]);
-const btnA = tabA.page.locator('button:has-text("Trigger")').first();
-const btnB = tabB.page.locator('button:has-text("Trigger")').first();
-await btnA.waitFor({ state: "visible", timeout: 10000 });
-await btnB.waitFor({ state: "visible", timeout: 10000 });
+const btnA = tabA.page.locator('button[aria-label*="Trigger"]').first();
+const btnB = tabB.page.locator('button[aria-label*="Trigger"]').first();
+await btnA.waitFor({ state: "visible", timeout: 30000 });
+await btnB.waitFor({ state: "visible", timeout: 30000 });
 // Click both as close as possible to each other.
 const concurrentStart = Date.now();
 log("clicking both triggers concurrently");

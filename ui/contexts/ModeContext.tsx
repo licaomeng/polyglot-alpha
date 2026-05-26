@@ -28,11 +28,22 @@ function isDemoMode(value: unknown): value is DemoMode {
 interface ModeContextValue {
   mode: DemoMode;
   setMode: (next: DemoMode) => void;
+  /**
+   * `true` once the client has mounted and the context has finished reading
+   * URL params / localStorage. Server-rendered output and the very first
+   * client render both report `false`, which lets mode-dependent visuals
+   * fall back to a server-safe shell ("live") and avoid hydration mismatch.
+   *
+   * Consumers should typically render with the default "live" appearance
+   * while `isHydrated === false`, then switch to the real `mode` afterwards.
+   */
+  isHydrated: boolean;
 }
 
 const ModeContext = createContext<ModeContextValue>({
   mode: "live",
   setMode: () => {},
+  isHydrated: false,
 });
 
 /**
@@ -61,10 +72,26 @@ function readInitialMode(): DemoMode {
 }
 
 export function ModeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setModeState] = useState<DemoMode>(() => readInitialMode());
+  // Always seed with the safe default so the first client render matches the
+  // server-rendered HTML exactly (no hydration mismatch). The post-mount
+  // effect below reads the URL / localStorage and switches to the real mode.
+  const [mode, setModeState] = useState<DemoMode>("live");
+  const [isHydrated, setIsHydrated] = useState<boolean>(false);
   const [announcement, setAnnouncement] = useState<string>("");
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  // Apply the URL `?mode=` / localStorage preference exactly once after the
+  // first commit so the visual flip happens *after* hydration is complete —
+  // React will not warn because the initial DOM matches the server output.
+  useEffect(() => {
+    const initial = readInitialMode();
+    if (initial !== "live") {
+      setModeState(initial);
+    }
+    setIsHydrated(true);
+    // Empty deps: runs once after mount to graduate from the SSR-safe shell.
+  }, []);
 
   const setMode = useCallback((next: DemoMode) => {
     // Always persist to localStorage, even when the in-memory mode is
@@ -96,7 +123,10 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
     // Intentionally exhaustive deps: rerun whenever the route or query changes.
   }, [pathname, searchParams, setMode]);
 
-  const value = useMemo<ModeContextValue>(() => ({ mode, setMode }), [mode, setMode]);
+  const value = useMemo<ModeContextValue>(
+    () => ({ mode, setMode, isHydrated }),
+    [mode, setMode, isHydrated],
+  );
 
   return (
     <ModeContext.Provider value={value}>

@@ -34,7 +34,10 @@ export function PhaseDetailsAccordion({
   index,
   event,
 }: PhaseDetailsAccordionProps) {
-  const [open, setOpen] = useState(false);
+  // Auto-expand on failed phases so operator-actionable diagnostics
+  // (e.g. W3-FIX-AUCTION's "All 3 seeders out of gas" amber panel) are
+  // visible on first paint instead of hiding behind a collapsed accordion.
+  const [open, setOpen] = useState(phase.status === "failed");
   const toggle = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
       // The accordion lives inside the PhaseCard's clickable header region.

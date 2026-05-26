@@ -17,7 +17,7 @@ import { usePhaseState } from "@/hooks/usePhaseState";
 import { PhaseInfo } from "@/components/event/MetricExplainer";
 import { ProgressIndicator } from "@/components/event/ProgressIndicator";
 import { PhaseDetailsAccordion } from "@/components/event/PhaseDetailsAccordion";
-import { classifyIpfsRef } from "@/lib/utils";
+import { classifyIpfsRef, formatUsd, shortAddr } from "@/lib/utils";
 
 // Map the backend detail row for phase 4 (with verdict + overall_score) into
 // a synthetic 11-judge array when the top-level `judges` field is absent.
@@ -569,10 +569,18 @@ function renderPhaseBody(
       const chartStream = stream
         .filter((row): row is typeof row & { ts: string } => typeof row.ts === "string")
         .map((row) => ({ ts: row.ts, usd: row.usd }));
+      // Mock-mode per-leg breakdown: the backend emits a `revenueStream` with
+      // 2 simulated legs (90% winner / 10% treasury) but does NOT populate
+      // `recentFills`, so the BuilderFeeStream chart alone leaves the user
+      // without recipient / arc tx / total context. Surface those per-leg
+      // rows here for mock events; live mode is unaffected because the
+      // BuilderFeeStream's recentFills list already covers that surface.
+      const showMockLegs = event.mode === "mock" && stream.length > 0;
       return wrap(
         <>
           <Separator />
           <BuilderFeeStream stream={chartStream} recentFills={fills} />
+          {showMockLegs && <MockRevenueLegs stream={stream} />}
           {mockRepHint}
         </>,
       );
@@ -581,6 +589,89 @@ function renderPhaseBody(
     default:
       return wrap(null);
   }
+}
+
+/**
+ * Per-leg builder-fee disbursement breakdown rendered inside Phase 7 for
+ * mock-mode events. The backend's mock `revenueStream` populates exactly
+ * two synthetic legs (90% winner + 10% treasury) but does NOT emit the
+ * `recentFills` collection that the live BuilderFeeStream chart relies on
+ * for its bottom row — so without this panel a mock Phase 7 collapses to
+ * a near-zero sparkline with no recipient / arc tx context.
+ *
+ * Live mode is unaffected: this component is only rendered when
+ * `event.mode === "mock"` at the call site.
+ */
+function MockRevenueLegs({
+  stream,
+}: {
+  stream: NonNullable<EventDetail["polymarket"]>["revenueStream"];
+}) {
+  if (!stream || stream.length === 0) return null;
+  const total = stream.reduce((acc, row) => acc + (row.usd ?? 0), 0);
+  return (
+    <div
+      className="space-y-2 rounded-md border border-border/40 bg-card/40 p-3"
+      data-testid="revenue-mock-legs"
+    >
+      <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+        revenue stream · per-leg disbursement
+      </p>
+      <ul
+        className="divide-y divide-border/40 rounded-md border border-border/40 bg-background/40"
+        aria-label="Builder fee disbursement legs"
+      >
+        {stream.map((leg, i) => (
+          <li
+            key={`${leg.arcTxHash ?? leg.recipient ?? "leg"}-${i}`}
+            className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 text-xs"
+            data-testid="revenue-stream-row"
+          >
+            <span
+              className="font-mono text-foreground/85"
+              title={leg.recipient ?? undefined}
+            >
+              {shortAddr(leg.recipient ?? null)}
+            </span>
+            <span className="font-mono text-emerald-400">{formatUsd(leg.usd)}</span>
+            {leg.arcTxHash ? (
+              <span
+                className="font-mono text-[10px] text-muted-foreground"
+                title={`Arc tx (simulated): ${leg.arcTxHash}`}
+              >
+                {leg.arcTxHash.slice(0, 14)}…
+              </span>
+            ) : (
+              <span className="font-mono text-[10px] text-muted-foreground">—</span>
+            )}
+            {leg.isSimulated !== undefined && (
+              <span
+                className={
+                  leg.isSimulated
+                    ? "rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-amber-300"
+                    : "rounded-md border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-emerald-300"
+                }
+              >
+                {leg.isSimulated ? "sim" : "real"}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 pt-1">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          Entries: {stream.length}
+        </span>
+        <span className="font-mono text-foreground/90">
+          Total disbursed: {formatUsd(total)}
+        </span>
+      </div>
+      <p className="font-mono text-[10px] text-muted-foreground">
+        split · 90% winner · 10% treasury · Arc explorer links suppressed for
+        simulated tx
+      </p>
+    </div>
+  );
 }
 
 /**
