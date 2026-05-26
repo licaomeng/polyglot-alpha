@@ -1,0 +1,73 @@
+# =============================================================================
+# PolyglotAlpha — mock-only runtime requirements (W23 / Hugging Face Spaces)
+# =============================================================================
+# This file pins the runtime deps needed for the ``DISABLE_LIVE=true`` deploy
+# target. It deliberately OMITS the heavy ML stack (torch, unbabel-comet,
+# sentence-transformers, sacrebleu, faiss-cpu, pytorch-lightning) because:
+#
+#   * mock mode never invokes the 11-judge panel (`_evaluate_with_judges`
+#     catches ImportError + falls back to the deterministic mock verdict),
+#   * the HF Spaces builder caps a single layer at ~10 GB and torch alone is
+#     ~700 MB, which routinely OOMs the free-tier builder, and
+#   * cold-start would otherwise stall behind a 1.2 GB COMET checkpoint
+#     download on first event.
+#
+# If you need the full live stack, install ``-r requirements-full.txt`` (not
+# provided in-repo — see README §"Installing the heavy ML deps") instead of
+# this file. Versions here mirror what the maintainer's local venv has been
+# running in mock mode for the demo recording.
+# -----------------------------------------------------------------------------
+
+# Web framework
+fastapi==0.136.3
+uvicorn==0.48.0
+starlette==1.1.0
+sse-starlette==3.4.4
+slowapi==0.1.9
+limits==5.8.0
+
+# Validation
+pydantic==2.13.4
+pydantic_core==2.46.4
+typing_extensions==4.15.0
+typing-inspection==0.4.2
+
+# Persistence
+SQLAlchemy==2.0.50
+sqlmodel==0.0.38
+alembic==1.18.4
+
+# Async + HTTP
+anyio==4.13.0
+httpx==0.28.1
+aiohttp==3.13.5
+requests==2.34.2
+
+# Anthropic SDK — kept in mock build so log lines / config code paths import
+# cleanly. The mock fixtures never actually call the API.
+anthropic==0.104.1
+
+# Chain stack — eth-account / web3 are imported by chain/* modules even in
+# mock mode (they're a thin abstraction over sim_helpers).
+web3==7.16.0
+eth-account==0.13.7
+eth-hash==0.8.0
+eth-keys==0.7.0
+eth-keyfile==0.8.1
+eth-rlp==2.2.0
+eth-typing==6.0.0
+eth-utils==6.0.0
+
+# Ingestion (mock fixtures live alongside the live RSS path)
+feedparser==6.0.12
+
+# Stats + math (used by orchestrator's confidence calc / leaderboard)
+numpy==1.26.4
+scipy==1.17.1
+
+# Misc
+PyYAML==6.0.3
+python-dotenv==1.2.2
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+click==8.4.1

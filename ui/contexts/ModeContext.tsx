@@ -25,6 +25,21 @@ function isDemoMode(value: unknown): value is DemoMode {
   return typeof value === "string" && (VALID_MODES as readonly string[]).includes(value);
 }
 
+/**
+ * W23: deployments may lock the demo into mock-only mode (Hugging Face Spaces
+ * free tier — no API keys, no on-chain calls). The flag is read at module
+ * load from `NEXT_PUBLIC_DISABLE_LIVE`, which Next.js inlines into the client
+ * bundle at build time. When `true`:
+ *   - the initial mode is forced to `"mock"`
+ *   - the URL `?mode=live` and `localStorage` overrides are ignored
+ *   - the segmented toggle renders as a static badge (see DemoModeToggle)
+ *   - the backend additionally rewrites `mode=live` → `mock` server-side
+ *     and sets `X-Live-Disabled: true` on the trigger response
+ */
+const IS_LIVE_DISABLED: boolean =
+  typeof process !== "undefined" &&
+  process.env.NEXT_PUBLIC_DISABLE_LIVE === "true";
+
 interface ModeContextValue {
   mode: DemoMode;
   setMode: (next: DemoMode) => void;
@@ -38,12 +53,19 @@ interface ModeContextValue {
    * while `isHydrated === false`, then switch to the real `mode` afterwards.
    */
   isHydrated: boolean;
+  /**
+   * `true` when the deployment forbids live mode (W23: HF Spaces demo). UI
+   * components should hide the live/mock toggle and show a static "MOCK ·
+   * demo mode" badge instead.
+   */
+  isLiveDisabled: boolean;
 }
 
 const ModeContext = createContext<ModeContextValue>({
-  mode: "live",
+  mode: IS_LIVE_DISABLED ? "mock" : "live",
   setMode: () => {},
   isHydrated: false,
+  isLiveDisabled: IS_LIVE_DISABLED,
 });
 
 /**
@@ -57,6 +79,10 @@ const ModeContext = createContext<ModeContextValue>({
  *   3. `"live"` (safe default — never silently demo with synthetic data).
  */
 function readInitialMode(): DemoMode {
+  // W23: when live is disabled at build time, always start in mock mode
+  // regardless of URL / localStorage so the reviewer cannot land in a
+  // broken state where the UI tries to hit live endpoints that 503.
+  if (IS_LIVE_DISABLED) return "mock";
   if (typeof window === "undefined") return "live";
   try {
     const params = new URLSearchParams(window.location.search);
@@ -75,7 +101,11 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
   // Always seed with the safe default so the first client render matches the
   // server-rendered HTML exactly (no hydration mismatch). The post-mount
   // effect below reads the URL / localStorage and switches to the real mode.
-  const [mode, setModeState] = useState<DemoMode>("live");
+  // W23: when live is disabled at build time, seed with `"mock"` directly so
+  // SSR and the first client render both report mock — no flash of "live".
+  const [mode, setModeState] = useState<DemoMode>(
+    IS_LIVE_DISABLED ? "mock" : "live",
+  );
   const [isHydrated, setIsHydrated] = useState<boolean>(false);
   const [announcement, setAnnouncement] = useState<string>("");
   const pathname = usePathname();
@@ -85,6 +115,12 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
   // first commit so the visual flip happens *after* hydration is complete —
   // React will not warn because the initial DOM matches the server output.
   useEffect(() => {
+    if (IS_LIVE_DISABLED) {
+      // Hard-lock to mock — ignore URL params and localStorage entirely.
+      setModeState("mock");
+      setIsHydrated(true);
+      return;
+    }
     const initial = readInitialMode();
     if (initial !== "live") {
       setModeState(initial);
@@ -94,6 +130,13 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setMode = useCallback((next: DemoMode) => {
+    // W23: ignore mode change requests when live is disabled. The toggle
+    // should already be hidden by `DemoModeToggle`, but external callers
+    // (deep links, future automations) might still try; we silently swallow
+    // the change and keep mock locked in.
+    if (IS_LIVE_DISABLED && next !== "mock") {
+      return;
+    }
     // Always persist to localStorage, even when the in-memory mode is
     // unchanged. This makes URL-driven mode switches (?mode=mock) reliably
     // sticky on refresh, including the first time the user lands on a deep
@@ -116,6 +159,7 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
   // removed. We deliberately do NOT push URL changes when the toggle is
   // clicked — the toggle owns localStorage only, the URL stays clean.
   useEffect(() => {
+    if (IS_LIVE_DISABLED) return;
     const fromUrl = searchParams?.get("mode");
     if (!fromUrl) return;
     if (!isDemoMode(fromUrl)) return;
@@ -124,7 +168,7 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
   }, [pathname, searchParams, setMode]);
 
   const value = useMemo<ModeContextValue>(
-    () => ({ mode, setMode, isHydrated }),
+    () => ({ mode, setMode, isHydrated, isLiveDisabled: IS_LIVE_DISABLED }),
     [mode, setMode, isHydrated],
   );
 

@@ -21,7 +21,7 @@ const MODES: { value: DemoMode; label: string }[] = [
  *     toggle never reflows the surrounding header.
  */
 export function DemoModeToggle({ className }: { className?: string }) {
-  const { mode, setMode, isHydrated } = useDemoMode();
+  const { mode, setMode, isHydrated, isLiveDisabled } = useDemoMode();
   // W7-E: render the SSR-safe "live" selection until the context resolves
   // the real mode from URL / localStorage. Prevents the active segment from
   // visibly flipping between live and mock on first paint.
@@ -56,6 +56,30 @@ export function DemoModeToggle({ className }: { className?: string }) {
     },
     [setMode],
   );
+
+  // W23: when the deployment locks live mode off, the segmented control is
+  // replaced with a static, non-interactive badge. Reviewers can't click into
+  // a broken state, and the visual still communicates "this is a demo". The
+  // hooks above still run on every render so React's Rules of Hooks hold.
+  if (isLiveDisabled) {
+    return (
+      <div
+        className={cn(
+          "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/15 px-2.5 font-mono text-[11px] uppercase tracking-wider text-amber-300",
+          className,
+        )}
+        role="status"
+        aria-label="Demo mode locked to mock"
+        title="Live mode is disabled in this deployment"
+      >
+        <span
+          aria-hidden
+          className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400"
+        />
+        <span>MOCK · demo mode</span>
+      </div>
+    );
+  }
 
   return (
     <div

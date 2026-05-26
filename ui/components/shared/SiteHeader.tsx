@@ -18,11 +18,14 @@ const NAV = [
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const { mode, isHydrated } = useDemoMode();
+  const { mode, isHydrated, isLiveDisabled } = useDemoMode();
   // W7-E: mode-dependent visuals only flip *after* hydration. Before then we
   // render the server-safe "live" shell so the SSR HTML matches the first
   // client paint exactly — no hydration mismatch warning, no visible flash.
-  const effectiveMode: typeof mode = isHydrated ? mode : "live";
+  // W23: when live is disabled at build time, force the SSR-safe shell to
+  // mock as well so reviewers never see a "live" pill flash on first paint.
+  const ssrFallback: typeof mode = isLiveDisabled ? "mock" : "live";
+  const effectiveMode: typeof mode = isHydrated ? mode : ssrFallback;
   const isMock = effectiveMode === "mock";
   return (
     <header

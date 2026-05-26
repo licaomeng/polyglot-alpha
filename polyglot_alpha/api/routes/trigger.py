@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlmodel import select
 
@@ -133,6 +133,19 @@ _VALID_EVENT_SOURCES = ("user_payload", "hardcoded", "rss")
 _VALID_EVENT_MODES: tuple[str, ...] = ("live", "mock")
 _DEFAULT_EVENT_MODE_ENV: str = "DEFAULT_EVENT_MODE"
 _FALLBACK_DEFAULT_EVENT_MODE: str = "live"
+
+# W23: when ``DISABLE_LIVE=true`` the deployment is locked to mock-only mode
+# (Hugging Face Spaces free tier, no API keys). Incoming ``mode=live`` requests
+# are silently rewritten to ``"mock"`` and a header ``X-Live-Disabled: true``
+# is set on the response so the client can surface the override in the UI.
+_DISABLE_LIVE_ENV: str = "DISABLE_LIVE"
+
+
+def _is_live_disabled() -> bool:
+    """Return ``True`` when the deployment is locked to mock-only mode."""
+
+    raw = os.environ.get(_DISABLE_LIVE_ENV, "false")
+    return (raw or "false").strip().lower() in ("1", "true", "yes", "on")
 
 
 def _resolve_default_event_mode() -> str:
@@ -509,6 +522,7 @@ async def trigger_event(
     request: Request,
     payload: TriggerRequest,
     background_tasks: BackgroundTasks,
+    response: Response,
 ) -> dict[str, Any]:
     # --- Resolve the W5 lifecycle mode (live | mock) ---------------------
     # Validate explicitly here so we can return HTTP 400 (not 422) on
@@ -527,6 +541,21 @@ async def trigger_event(
                 ),
             )
         lifecycle_mode = candidate
+
+    # --- W23: DISABLE_LIVE deployment override ---------------------------
+    # When the deployment env locks live mode off (e.g. Hugging Face Spaces
+    # demo with no API keys), silently rewrite any ``live`` request to
+    # ``mock`` rather than 400-ing the client. The UI may still attempt to
+    # send ``live`` because the toggle is hidden / stale; the header tells
+    # it that we overrode the choice server-side.
+    if _is_live_disabled() and lifecycle_mode == "live":
+        logger.info(
+            "DISABLE_LIVE active: rewriting mode=live -> mock for event "
+            "title=%r",
+            (payload.title or "")[:80],
+        )
+        lifecycle_mode = "mock"
+        response.headers["X-Live-Disabled"] = "true"
 
     # --- W5-A3 mock short-circuit ----------------------------------------
     # In ``mode='mock'`` the lifecycle never touches the live RSS feed,

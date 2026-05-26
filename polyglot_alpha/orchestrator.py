@@ -1233,6 +1233,16 @@ async def _evaluate_with_judges(
             "orchestrator: judge panel evaluation failed (%s); using mock verdict",
             exc,
         )
+    except ImportError as exc:
+        # W23: minimal deployments (e.g. Hugging Face Spaces mock-only demo)
+        # omit heavy ML deps (torch / unbabel-comet / sentence-transformers)
+        # so ``from .judges import panel`` raises ImportError. Treat the same
+        # as any other panel failure — fall back to the deterministic mock
+        # verdict below so the lifecycle still terminates cleanly.
+        logger.warning(
+            "orchestrator: judge panel module unavailable (%s); using mock verdict",
+            exc,
+        )
 
     translation_scores = {f"judge_{i}": 0.85 for i in range(1, 9)}
     style_alignment_passes = {f"style_judge_{i}": True for i in range(1, 4)}

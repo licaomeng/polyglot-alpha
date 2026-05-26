@@ -1,0 +1,58 @@
+# W23 — keep the Docker build context lean. Without this file the COPY
+# instructions would pull in 173-package venvs, multi-GB log directories,
+# and the existing SQLite WAL files — none of which belong in the image.
+
+# Python
+.venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node — stage 1 reinstalls from the lockfile, so the host node_modules
+# would only slow the COPY down (and risk arch mismatch on Apple Silicon).
+ui/node_modules/
+ui/.next/
+ui/out/
+
+# Local dev / runtime artifacts
+.env
+.env.local
+.env.*.local
+logs/
+outputs/
+screenshots/
+submission/
+*.log
+
+# DB (we re-seed inside the build via init_db / ingest_few_shots)
+polyglot_alpha.db
+polyglot_alpha.db-shm
+polyglot_alpha.db-wal
+
+# Git / IDE
+.git/
+.github/
+.idea/
+.vscode/
+
+# Tests are not needed in the production image
+tests/
+
+# Build artifacts from Foundry that aren't shipped to runtime
+contracts/cache/
+contracts/lib/
+contracts/broadcast/
+
+# Top-level corpus dir (1.2 GB of polymarket dumps + faiss index) — the
+# mock-only deploy doesn't reach the RAG path, so omit the bulk.
+corpus/
+
+# Misc large-ish artifacts that shouldn't ship
+*.faiss
+*.parquet
+*.csv
+
