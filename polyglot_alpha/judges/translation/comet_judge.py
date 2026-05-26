@@ -109,10 +109,17 @@ def _score_sync(question: PanelQuestion) -> tuple[Optional[float], Optional[str]
     if model is None or model_id is None:
         return None, None
 
+    src_text = question.source_news or question.description or question.title
+    mt_text = question.title
+    # Include ``ref`` (echo of ``mt``) so the older ``wmt20-comet-qe-da``
+    # internal collator — which unpacks ``(src, mt, ref)`` triplets — does
+    # not raise ``not enough values to unpack (expected 3, got 2)``. The
+    # value is ignored by reference-free QE models.
     data = [
         {
-            "src": question.source_news or question.description or question.title,
-            "mt": question.title,
+            "src": src_text,
+            "mt": mt_text,
+            "ref": mt_text,
         }
     ]
     try:

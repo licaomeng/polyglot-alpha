@@ -48,6 +48,47 @@ export function formatNumber(value: number | null | undefined, fractionDigits = 
   }).format(value);
 }
 
+/**
+ * Determine whether a raw `anchor.ipfsCid` / pipeline_trace_ipfs / reasoning_ipfs
+ * value is a *real* IPFS content identifier we can route through a public gateway,
+ * vs. a synthetic/mock provenance path emitted by the backend (e.g.
+ * `ipfs://pipeline/qwen/59fac6348e57`). The latter must NOT render as a clickable
+ * gateway link because the gateway will 404.
+ *
+ * Real CIDs:
+ *   - v0:  `Qm` + 44 base58 chars
+ *   - v1:  `bafy` + 55 base32 chars (most common; other multibase prefixes exist
+ *          but in this codebase the live anchor flow emits `bafy…`)
+ *
+ * Anything else — including `ipfs://pipeline/...`, `ipfs://mock/...`,
+ * `ipfs://synthetic/...`, or a bare placeholder string — should be displayed as
+ * a muted, non-clickable provenance label.
+ *
+ * Returns `{ cid, isReal, gatewayUrl }` where:
+ *   - `cid`        is the input with any `ipfs://` scheme prefix stripped
+ *   - `isReal`     true if `cid` matches the v0/v1 CID shape above
+ *   - `gatewayUrl` populated only when `isReal` is true
+ */
+export function classifyIpfsRef(raw?: string | null): {
+  cid: string;
+  isReal: boolean;
+  gatewayUrl?: string;
+} | null {
+  if (!raw) return null;
+  const cid = raw.replace(/^ipfs:\/\//, "");
+  if (!cid) return null;
+  const v0 = /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/;
+  const v1 = /^bafy[a-zA-Z0-9]{55,}$/;
+  // A bare CID has no path separators. Synthetic refs like
+  // `pipeline/qwen/abc` contain slashes and must be rejected.
+  const isReal = !cid.includes("/") && (v0.test(cid) || v1.test(cid));
+  return {
+    cid,
+    isReal,
+    gatewayUrl: isReal ? `https://ipfs.io/ipfs/${cid}` : undefined,
+  };
+}
+
 export function relativeTime(iso?: string | null): string {
   if (!iso) return "—";
   const then = new Date(iso).getTime();

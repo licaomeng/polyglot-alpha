@@ -147,9 +147,9 @@ export function WorkflowOverview({ phases }: { phases?: PhaseState[] }) {
         nodeTypes={NODE_TYPES}
         onNodeClick={onNodeClick}
         fitView
-        fitViewOptions={{ padding: 0.25, minZoom: 0.7, maxZoom: 1.2 }}
+        fitViewOptions={{ padding: 0.25, minZoom: 0.7, maxZoom: 1.5 }}
         minZoom={0.4}
-        maxZoom={1.5}
+        maxZoom={1.6}
         panOnDrag
         zoomOnScroll={false}
         zoomOnPinch={false}

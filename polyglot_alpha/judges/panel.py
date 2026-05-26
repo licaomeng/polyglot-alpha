@@ -532,6 +532,33 @@ def _aggregate(results: Mapping[str, JudgeResult]) -> PanelVerdict:
     else:
         verdict = VERDICT_FAIL
 
+    # Per-judge dossier the API/UI surfaces under ``translation_scores._judges``.
+    # Stored inside the existing JSON column so persistence works without a
+    # schema migration; the underscore prefix marks it as serializer-only
+    # metadata so consumers that iterate translation_scores can skip it.
+    judge_dossier: list[dict[str, Any]] = []
+    pending_judge_names: list[str] = []
+    for jr in results.values():
+        evidence = jr.evidence or {}
+        budget_exceeded = bool(evidence.get("panel_budget_exceeded"))
+        soft_skip = bool(evidence.get("soft_skip"))
+        timed_out = bool(evidence.get("timeout"))
+        if budget_exceeded:
+            pending_judge_names.append(jr.name)
+        judge_dossier.append(
+            {
+                "name": jr.name,
+                "passed": bool(jr.passed),
+                "score": float(jr.score),
+                "reason": jr.reason,
+                "panelBudgetExceeded": budget_exceeded,
+                "softSkip": soft_skip,
+                "timeout": timed_out,
+                "panelPartial": budget_exceeded,
+            }
+        )
+    panel_partial_flag = any(j["panelBudgetExceeded"] for j in judge_dossier)
+
     return PanelVerdict(
         overall_pass=overall_pass,
         verdict=verdict,
@@ -545,6 +572,12 @@ def _aggregate(results: Mapping[str, JudgeResult]) -> PanelVerdict:
                 "minor_count": mqm.evidence.get("minor_count", 0),
                 "errors": mqm.evidence.get("errors", []),
             },
+            # Underscore-prefixed metadata smuggled through the JSON column so
+            # the API serializer can surface the 11-judge dossier without an
+            # orchestrator-side change.
+            "_judges": judge_dossier,
+            "_panelPartial": panel_partial_flag,
+            "_pendingJudgeNames": pending_judge_names,
         },
         style_alignment_passes=style_passes,
         judge_results=list(results.values()),

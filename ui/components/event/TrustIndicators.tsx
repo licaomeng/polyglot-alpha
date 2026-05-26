@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Link2, Package, ShieldCheck, ExternalLink } from "lucide-react";
 import { arcTxUrl, type EventDetail } from "@/lib/api";
+import { classifyIpfsRef } from "@/lib/utils";
 
 /**
  * Trust badges shown near the headline. Three signals at most:
@@ -24,9 +25,11 @@ export function TrustIndicators({ event }: { event: EventDetail }) {
   const anchorTx = event.anchor?.txHash;
   const anchorUrl = event.anchor?.explorerUrl ?? (anchorTx ? arcTxUrl(anchorTx) : undefined);
   const rawIpfsCid = event.anchor?.ipfsCid;
-  // Strip `ipfs://` URI scheme prefix so we don't produce malformed URLs like
-  // `https://ipfs.io/ipfs/ipfs://mock/abc`. The gateway expects a bare CID/path.
-  const ipfsCid = rawIpfsCid?.replace(/^ipfs:\/\//, "");
+  // Classify the ipfsCid: real v0/v1 CIDs route through ipfs.io; synthetic
+  // pipeline-trace paths (e.g. `ipfs://pipeline/qwen/...`) render as a muted
+  // provenance label instead of a 404-producing gateway link.
+  const ipfsRef = classifyIpfsRef(rawIpfsCid);
+  const ipfsCid = ipfsRef?.cid;
   const candidateHash = loose.candidate_hash ?? loose.content_hash;
   // Provenance: chain hash MUST equal SHA256(candidate). We can only check
   // equality when both fields are present; until then we mark it "claim" not
@@ -81,7 +84,7 @@ export function TrustIndicators({ event }: { event: EventDetail }) {
         </Tooltip>
       )}
 
-      {ipfsCid ? (
+      {ipfsRef?.isReal && ipfsRef.gatewayUrl ? (
         <Tooltip
           widthClassName="max-w-xs"
           content={
@@ -100,7 +103,7 @@ export function TrustIndicators({ event }: { event: EventDetail }) {
           }
         >
           <a
-            href={`https://ipfs.io/ipfs/${ipfsCid}`}
+            href={ipfsRef.gatewayUrl}
             target="_blank"
             rel="noreferrer noopener"
             aria-label="View pipeline trace on IPFS"
@@ -115,6 +118,32 @@ export function TrustIndicators({ event }: { event: EventDetail }) {
               <ExternalLink className="h-2.5 w-2.5" aria-hidden />
             </Badge>
           </a>
+        </Tooltip>
+      ) : ipfsCid ? (
+        <Tooltip
+          widthClassName="max-w-xs"
+          content={
+            <div className="space-y-1">
+              <p className="font-mono text-[11px] font-semibold text-foreground">
+                Synthetic provenance
+              </p>
+              <p className="text-foreground/85">
+                Pipeline-trace path emitted by the local backend. Not a real
+                IPFS CID — gateway lookup would 404. Shown for traceability.
+              </p>
+              <p className="font-mono text-[10px] text-muted-foreground break-all">
+                {ipfsCid}
+              </p>
+            </div>
+          }
+        >
+          <Badge
+            variant="secondary"
+            className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+          >
+            <Package className="h-3 w-3" aria-hidden />
+            synthetic provenance
+          </Badge>
         </Tooltip>
       ) : candidateHash ? (
         <Tooltip

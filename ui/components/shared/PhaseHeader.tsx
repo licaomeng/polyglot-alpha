@@ -9,14 +9,16 @@ const STATUS_LABEL: Record<PhaseStatus, string> = {
   failed: "Failed",
 };
 
+// Failed (system error: timeout, crash, infra) renders grey/muted — distinct
+// from "destructive" red which is reserved for quality verdicts (Rejected).
 const STATUS_VARIANT: Record<
   PhaseStatus,
-  "secondary" | "info" | "success" | "destructive"
+  "secondary" | "info" | "success" | "muted"
 > = {
   pending: "secondary",
   running: "info",
   completed: "success",
-  failed: "destructive",
+  failed: "muted",
 };
 
 export function PhaseHeader({

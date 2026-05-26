@@ -180,6 +180,34 @@ BUILDER_CODE: str = os.environ.get(
     "POLYMARKET_BUILDER_CODE", "POLYGLOT_ALPHA_BUILDER_V1"
 )
 
+# Minimum wei a seeder wallet must hold before we will attempt a
+# ``submit_bid``. Observed per-tx cost on Arc testnet is ~0.005 ETH, so
+# the default (0.0055 ETH) leaves one tx of headroom. Operators can lower
+# this for cheaper RPCs or raise it for safety. See README §6.
+MIN_SEEDER_GAS_WEI: int = int(
+    os.environ.get("MIN_SEEDER_GAS_WEI", str(5_500_000_000_000_000))
+)
+_WEI_PER_ETH: int = 10 ** 18
+
+
+# ---------------------------------------------------------------------------
+# Auction diagnostics side-channel
+# ---------------------------------------------------------------------------
+#
+# Process-local map of event_id -> auction diagnostic dict. Populated by
+# :func:`_drive_real_auction` whenever one or more seeder wallets are
+# below the gas threshold (or otherwise skipped) so the API layer can
+# surface ``partial_auction`` / ``all_seeders_low_gas`` to the UI without
+# a DB migration. Entries are best-effort and may be evicted on process
+# restart — that matches the lifecycle of a FAILED event.
+_AUCTION_DIAGNOSTICS: dict[int, dict[str, Any]] = {}
+
+
+def get_auction_diagnostics(event_id: int) -> dict[str, Any] | None:
+    """Return the auction diagnostic dict for ``event_id`` if any."""
+
+    return _AUCTION_DIAGNOSTICS.get(event_id)
+
 
 # ---------------------------------------------------------------------------
 # Adapter protocols (imported lazily; safe fallbacks built-in)
@@ -197,6 +225,21 @@ class BidRecord:
     # ``_settle_auction`` to gate qualified bidders (>= 0.7) and to
     # rank by ``bid_amount / max(reputation, 1.0)``.
     reputation: float = 1.0
+
+
+@dataclass
+class BidSkipped:
+    """Synthetic record returned when a seeder cannot bid (e.g. low gas).
+
+    Surfaced in the auction diagnostics side-channel so the UI can render
+    an actionable "refund this wallet" panel instead of a generic failure.
+    """
+
+    agent_name: str
+    agent_address: str
+    reason: str  # e.g. ``"low_gas"``
+    balance_wei: int = 0
+    balance_eth: float = 0.0
 
 
 # Minimum reputation required for a bid to be considered "qualified"
@@ -273,11 +316,14 @@ async def _drive_agent_bid(
     event_dict: dict[str, Any],
     event_id: int,
     agent_name: str,
-) -> BidRecord | None:
+) -> BidRecord | BidSkipped | None:
     """Drive one agent: load wallet, register if needed, evaluate, submit bid.
 
-    Returns ``None`` on any failure so the auction can still settle on
-    whichever agents did manage to bid. Errors are logged with context.
+    Returns ``None`` on infrastructure failures (wallet/import/RPC) so the
+    auction can still settle on whichever agents did manage to bid. Returns
+    :class:`BidSkipped` for *expected* operator-recoverable failures (e.g.
+    seeder wallet below the gas threshold) so the orchestrator can surface
+    a clear, actionable reason to the UI.
     """
 
     try:
@@ -303,6 +349,45 @@ async def _drive_agent_bid(
     except Exception as exc:  # pragma: no cover - construction depends on env
         logger.warning("agent=%s construction failed: %s", agent_name, exc)
         return None
+
+    # ------------------------------------------------------------------
+    # Pre-flight: gas balance check
+    # ------------------------------------------------------------------
+    # Reading balance is a cheap eth_call; skipping a doomed submit_bid
+    # avoids spending the next-tx gas on a tx that will revert with
+    # ``-32003 insufficient funds for gas * price + value``. Operators
+    # see the WARNING and refund the seeder wallet.
+    try:
+        loop = asyncio.get_running_loop()
+        balance_wei = await loop.run_in_executor(
+            None, agent.onchain.w3.eth.get_balance, wallet.address
+        )
+    except Exception as exc:  # pragma: no cover - RPC failure
+        logger.warning(
+            "agent=%s gas balance check failed (%s); proceeding to submit_bid",
+            agent_name,
+            exc,
+        )
+        balance_wei = None
+
+    if balance_wei is not None and balance_wei < MIN_SEEDER_GAS_WEI:
+        balance_eth = balance_wei / _WEI_PER_ETH
+        threshold_eth = MIN_SEEDER_GAS_WEI / _WEI_PER_ETH
+        logger.warning(
+            "orchestrator.bid_skipped: agent=%s address=%s "
+            "balance=%.6f ETH threshold=%.6f ETH reason=low_gas",
+            agent_name,
+            wallet.address,
+            balance_eth,
+            threshold_eth,
+        )
+        return BidSkipped(
+            agent_name=agent_name,
+            agent_address=wallet.address,
+            reason="low_gas",
+            balance_wei=balance_wei,
+            balance_eth=balance_eth,
+        )
 
     try:
         await agent.ensure_registered()
@@ -370,7 +455,12 @@ async def _drive_real_auction(
     event_id: int,
     window_seconds: float,
 ) -> list[BidRecord]:
-    """Spawn 3 reference seeders in parallel, each submits a real bid."""
+    """Spawn 3 reference seeders in parallel, each submits a real bid.
+
+    Side-effect: writes per-agent skip metadata to
+    :data:`_AUCTION_DIAGNOSTICS` so the API layer can surface
+    ``partial_auction`` / ``all_seeders_low_gas`` to the UI.
+    """
 
     agent_names = ("gemini", "deepseek", "qwen")
     bid_tasks = [
@@ -393,13 +483,35 @@ async def _drive_real_auction(
             if not t.done():
                 t.cancel()
     bids: list[BidRecord] = []
+    skips: list[BidSkipped] = []
     for r in results:
         if isinstance(r, BidRecord):
             bids.append(r)
+        elif isinstance(r, BidSkipped):
+            skips.append(r)
+    if skips:
+        # Persist diagnostics on the side-channel so ``_serialize_event_detail``
+        # can surface them on phase 2 of the workflow card.
+        skipped_bidders = [s.agent_name for s in skips]
+        skip_reasons = {s.agent_name: s.reason for s in skips}
+        balances_eth = {s.agent_name: round(s.balance_eth, 6) for s in skips}
+        all_low_gas = (
+            len(skips) == len(agent_names)
+            and all(s.reason == "low_gas" for s in skips)
+        )
+        _AUCTION_DIAGNOSTICS[event_id] = {
+            "partial_auction": bool(bids) and bool(skips),
+            "skipped_bidders": skipped_bidders,
+            "skip_reasons": skip_reasons,
+            "balances_eth": balances_eth,
+            "threshold_eth": MIN_SEEDER_GAS_WEI / _WEI_PER_ETH,
+            "all_seeders_low_gas": all_low_gas,
+        }
     logger.info(
-        "real-auction: %d/%d agents bid successfully",
+        "real-auction: %d/%d agents bid successfully (%d skipped)",
         len(bids),
         len(agent_names),
+        len(skips),
     )
     return bids
 
@@ -1253,19 +1365,27 @@ async def create_pending_event(
 
 
 # Module-level concurrency gate for lifecycle execution. Lazy-init so it
-# picks up the running event loop. Default of 1 keeps memory bounded —
-# each parallel lifecycle loads FAISS + a SentenceTransformer into RAM,
-# and running 2 concurrently on the dev machine triggers macOS OOM-kill
-# of the uvicorn process. Phase 2: cache FAISS + SBert at module level
-# so concurrency 2-3 becomes safe. Override via ``LIFECYCLE_MAX_CONCURRENCY``
-# env var (min 1).
+# picks up the running event loop. Default of 2 balances throughput against
+# memory pressure — each parallel lifecycle loads FAISS + a
+# SentenceTransformer into RAM. Wave 2 stress test confirms 2 concurrent
+# lifecycles stay under the dev-machine memory ceiling now that FAISS +
+# SBert are cached at module level. Increase via ``LIFECYCLE_MAX_CONCURRENCY``
+# env var (min 1); drop to 1 if OOM-kill recurs.
 _LIFECYCLE_SEMA: asyncio.Semaphore | None = None
+_DEFAULT_LIFECYCLE_CONCURRENCY: int = 2
 
 
 def _get_lifecycle_sema() -> asyncio.Semaphore:
     global _LIFECYCLE_SEMA
     if _LIFECYCLE_SEMA is None:
-        n = max(1, int(os.environ.get("LIFECYCLE_MAX_CONCURRENCY", "1")))
+        n = max(
+            1,
+            int(
+                os.environ.get(
+                    "LIFECYCLE_MAX_CONCURRENCY", str(_DEFAULT_LIFECYCLE_CONCURRENCY)
+                )
+            ),
+        )
         _LIFECYCLE_SEMA = asyncio.Semaphore(n)
     return _LIFECYCLE_SEMA
 
@@ -1472,13 +1592,42 @@ async def _run_lifecycle_inner(
         auction_mode=resolved_auction_mode,
     )
     if not bids:
+        # Distinguish "all 3 seeders out of gas" (operator-actionable) from
+        # generic ``no_bids`` (unknown failure) so the UI can render a
+        # specific refund-the-wallet panel.
+        diag = _AUCTION_DIAGNOSTICS.get(event_id) or {}
+        failure_reason = (
+            "all_seeders_low_gas"
+            if diag.get("all_seeders_low_gas")
+            else "no_bids"
+        )
+        failure_details: dict[str, Any] = {}
+        if diag:
+            failure_details = {
+                "skipped_bidders": diag.get("skipped_bidders", []),
+                "skip_reasons": diag.get("skip_reasons", {}),
+                "balances_eth": diag.get("balances_eth", {}),
+                "threshold_eth": diag.get("threshold_eth"),
+            }
         with session_scope() as session:
             _set_status(session, event_id, EventStatus.FAILED)
         await publish(
-            "auction.failed", {"event_id": event_id, "reason": "no_bids"}
+            "auction.failed",
+            {
+                "event_id": event_id,
+                "reason": failure_reason,
+                "details": failure_details,
+            },
         )
-        await _finalize(event_id, EventStatus.FAILED.value, reason="no_bids")
-        return {"event_id": event_id, "status": EventStatus.FAILED.value, "reason": "no_bids"}
+        await _finalize(
+            event_id, EventStatus.FAILED.value, reason=failure_reason
+        )
+        return {
+            "event_id": event_id,
+            "status": EventStatus.FAILED.value,
+            "reason": failure_reason,
+            "details": failure_details,
+        }
 
     with session_scope() as session:
         for b in bids:

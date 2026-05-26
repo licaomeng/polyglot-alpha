@@ -202,6 +202,14 @@ interface PhaseDetails {
   builder_code?: string;
   winner_address?: string;
   winning_bid?: number;
+  // Auction diagnostics (populated by the backend when one or more
+  // seeder wallets were skipped pre-flight due to low gas).
+  reason?: string;
+  partial_auction?: boolean;
+  skipped_bidders?: string[];
+  skip_reasons?: Record<string, string>;
+  balances_eth?: Record<string, number>;
+  threshold_eth?: number;
 }
 
 function detailsAt(phases: PhaseState[] | undefined, idx: number): PhaseDetails {
@@ -221,8 +229,79 @@ function AuctionDetails({
   const idx = (event.phases ?? []).indexOf(phase);
   const det = detailsAt(event.phases, idx >= 0 ? idx : 1);
   const winningBid = event.bids?.find((b) => b.winner);
+  const isAllLowGas =
+    phase.status === "failed" && det.reason === "all_seeders_low_gas";
+  const skippedNames = det.skipped_bidders ?? [];
+  const skipReasons = det.skip_reasons ?? {};
+  const balances = det.balances_eth ?? {};
+  const thresholdEth = det.threshold_eth;
+  const isPartial = Boolean(det.partial_auction) && skippedNames.length > 0;
+  const formatEth = (eth?: number) =>
+    typeof eth === "number" && Number.isFinite(eth)
+      ? `${eth.toFixed(4)} ETH`
+      : "—";
   return (
     <div className="space-y-3">
+      {isAllLowGas && (
+        <div
+          role="alert"
+          data-testid="auction-low-gas-panel"
+          className="rounded-md border border-amber-500/40 bg-amber-500/[0.06] p-3 text-amber-200/90"
+        >
+          <p className="font-mono text-[11px] uppercase tracking-wider text-amber-300">
+            All 3 reference seeders out of gas
+          </p>
+          <ul className="mt-2 space-y-1 text-xs">
+            {skippedNames.map((name) => {
+              const reason = skipReasons[name] ?? "low_gas";
+              const eth = balances[name];
+              return (
+                <li
+                  key={name}
+                  className="flex items-center justify-between gap-3 font-mono"
+                >
+                  <span>
+                    {name}
+                    {reason !== "low_gas" ? ` (${reason})` : ""}
+                  </span>
+                  <span className="text-amber-100/80">
+                    {formatEth(eth)}
+                    {typeof thresholdEth === "number"
+                      ? ` (needs ${thresholdEth.toFixed(4)})`
+                      : ""}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-2 text-[11px] text-amber-200/70">
+            Refund seeder wallets to restore the demo.
+          </p>
+        </div>
+      )}
+      {!isAllLowGas && isPartial && (
+        <div
+          data-testid="auction-partial-note"
+          className="rounded-md border border-amber-500/30 bg-amber-500/[0.04] p-2 text-xs text-amber-200/80"
+        >
+          <p className="font-mono text-[10px] uppercase tracking-wider text-amber-300/90">
+            Partial auction: {skippedNames.length}/3 seeders skipped (low gas)
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {skippedNames.map((name) => (
+              <li
+                key={name}
+                className="flex items-center justify-between font-mono"
+              >
+                <span>{name}</span>
+                <span className="text-amber-100/70">
+                  {formatEth(balances[name])}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <IOSection
         inputs={[
           { label: "event_id", value: <span className="font-mono">{event.id}</span> },
@@ -363,11 +442,62 @@ function PipelineDetails({ event }: { event: EventDetail }) {
 
 // ─── Judge details ────────────────────────────────────────────────────────
 
+interface DossierJudge {
+  name: string;
+  passed: boolean;
+  score: number;
+  reason: string;
+  panelBudgetExceeded?: boolean;
+  softSkip?: boolean;
+  timeout?: boolean;
+  panelPartial?: boolean;
+}
+
+function isDossierJudge(x: unknown): x is DossierJudge {
+  if (typeof x !== "object" || x === null) return false;
+  const j = x as Record<string, unknown>;
+  return typeof j.name === "string" && typeof j.passed === "boolean";
+}
+
 function JudgeDetails({ event }: { event: EventDetail }) {
-  const verdict = event.overallVerdict;
+  const verdict = event.overallVerdict ?? event.verdict;
   const reasoning = event.overallReasoning;
+  // ``event.judges`` may be the new dossier shape from the backend OR the
+  // legacy ``JudgeScore[]`` shape; only the dossier carries
+  // ``panelBudgetExceeded`` so we filter for that.
+  const rawJudges = (event.judges ?? []) as unknown[];
+  const dossier: DossierJudge[] = rawJudges.filter(isDossierJudge);
+  const panelPartial =
+    Boolean(event.panelPartial) || dossier.some((j) => j.panelBudgetExceeded);
+  const partialCount = dossier.filter((j) => j.panelBudgetExceeded).length;
+  const completedCount = dossier.length - partialCount;
+
   return (
     <div className="space-y-3">
+      {/* Panel-wide partial header */}
+      {panelPartial && dossier.length > 0 && (
+        <div
+          className="rounded-md border border-amber-500/40 bg-amber-500/[0.06] p-3 text-xs"
+          data-testid="judge-panel-partial-header"
+        >
+          <p className="font-mono text-[10px] uppercase tracking-wider text-amber-300">
+            partial · {completedCount}/{dossier.length} judges returned
+          </p>
+          <p className="mt-1 text-foreground/85">
+            {partialCount} judge(s) exceeded the panel budget and returned
+            <span className="font-mono"> INSUFFICIENT_DATA</span>. The verdict
+            was aggregated from the completed judges; pending judges are
+            highlighted below.
+          </p>
+          {Array.isArray(event.pendingJudgeNames) &&
+            event.pendingJudgeNames.length > 0 && (
+              <p className="mt-1 font-mono text-[10px] text-amber-300/80">
+                pending · {event.pendingJudgeNames.join(", ")}
+              </p>
+            )}
+        </div>
+      )}
+
       <div className="space-y-2">
         <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           aggregation logic
@@ -402,11 +532,73 @@ function JudgeDetails({ event }: { event: EventDetail }) {
           </Card>
         </div>
       </div>
+
+      {/* Per-judge dossier (name + score + pass/fail + reason). */}
+      {dossier.length > 0 && (
+        <div className="space-y-1.5" data-testid="judge-panel-dossier">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            per-judge verdicts · {dossier.length} total
+          </p>
+          <ul className="divide-y divide-border/40 rounded-md border border-border/40 bg-card/40">
+            {dossier.map((j) => {
+              const isPartial = Boolean(j.panelBudgetExceeded);
+              const isSoftSkip = Boolean(j.softSkip);
+              return (
+                <li
+                  key={j.name}
+                  className="flex flex-wrap items-start justify-between gap-2 px-3 py-2 text-xs"
+                >
+                  <div className="flex min-w-[120px] flex-col">
+                    <span className="font-mono text-[11px] font-semibold text-foreground/90">
+                      {j.name}
+                    </span>
+                    <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                      score · {j.score.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex flex-1 flex-col gap-1">
+                    <p
+                      className="text-foreground/80"
+                      data-testid={`judge-row-${j.name}-reason`}
+                    >
+                      {j.reason || "—"}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {isPartial ? (
+                        <Badge
+                          className="border-amber-500/40 bg-amber-500/10 font-mono text-[9px] uppercase tracking-wider text-amber-300"
+                          data-testid={`judge-row-${j.name}-partial`}
+                        >
+                          partial · INSUFFICIENT_DATA
+                        </Badge>
+                      ) : j.passed ? (
+                        <Badge className="border-emerald-500/40 bg-emerald-500/10 font-mono text-[9px] uppercase tracking-wider text-emerald-300">
+                          pass
+                        </Badge>
+                      ) : (
+                        <Badge className="border-destructive/40 bg-destructive/10 font-mono text-[9px] uppercase tracking-wider text-destructive">
+                          fail
+                        </Badge>
+                      )}
+                      {isSoftSkip && (
+                        <Badge className="border-cyan-500/40 bg-cyan-500/10 font-mono text-[9px] uppercase tracking-wider text-cyan-300">
+                          soft-skip
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       {verdict && (
         <div
           className={cn(
             "rounded-md border p-3 text-xs",
-            verdict === "FAIL"
+            verdict === "FAIL" || verdict === "REJECTED"
               ? "border-destructive/40 bg-destructive/[0.04] text-destructive"
               : "border-emerald-500/40 bg-emerald-500/[0.04] text-emerald-300",
           )}
@@ -455,7 +647,7 @@ function AnchorDetails({
           },
           {
             label: "builder_code",
-            value: <span className="font-mono">{event.builder_code ?? "polyglot_alpha"}</span>,
+            value: <span className="font-mono">{event.polymarket?.builderCode ?? "—"}</span>,
           },
         ]}
         outputs={[
@@ -542,13 +734,58 @@ function PolymarketDetails({
   event: EventDetail;
   phase: PhaseState;
 }) {
+  // When the event was rejected or hard-failed by the quality panel, no
+  // Polymarket submission was attempted — surface that explicitly instead of
+  // falling through to a card that contradicts itself (e.g. "MODE: real"
+  // alongside a "MOCK" badge because every input dereferences to a fallback).
+  const status = String(event.status ?? "").toUpperCase();
+  const submissionSkipped =
+    event.polymarket == null && (status === "REJECTED" || status === "FAILED");
+  if (submissionSkipped) {
+    const reason =
+      status === "REJECTED"
+        ? "REJECTED by the 11-judge panel"
+        : "FAILED during lifecycle execution";
+    return (
+      <Card
+        className="border-muted-foreground/30 bg-muted/[0.04]"
+        data-testid="polymarket-empty-rejected"
+      >
+        <CardContent className="space-y-1.5 p-3 text-xs">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            submission skipped
+          </p>
+          <p className="text-foreground/85">
+            No Polymarket market was created for this event — the quality
+            panel verdict was <span className="font-mono">{reason}</span>.
+          </p>
+          <p className="font-mono text-[10px] text-muted-foreground">
+            mode · {DASH} · market_id · {DASH} · builder_code · {DASH}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const idx = (event.phases ?? []).indexOf(phase);
   const det = detailsAt(event.phases, idx >= 0 ? idx : 5);
   const marketId = event.polymarket?.marketId ?? det.market_id ?? event.market_id;
   const marketUrl = event.polymarket?.marketUrl ?? det.market_url ?? event.market_url;
-  const isSimulated =
-    event.polymarket?.isSimulated ?? det.is_simulated ?? event.is_simulated ?? false;
-  const mode: string = event.polymarket?.mode ?? (isSimulated ? "dry_run" : "real");
+  // Only fall back to a derived simulated flag when *some* polymarket-ish
+  // signal exists; if the entire submission row is null we leave the mode as
+  // a dash rather than fabricating "real" / "MOCK badge".
+  const hasAnySubmission =
+    event.polymarket != null
+    || det.market_id != null
+    || event.market_id != null;
+  const isSimulated: boolean | null =
+    event.polymarket?.isSimulated
+      ?? (det.is_simulated as boolean | undefined)
+      ?? (event.is_simulated as boolean | undefined)
+      ?? (hasAnySubmission ? false : null);
+  const mode: string =
+    event.polymarket?.mode
+    ?? (isSimulated === true ? "dry_run" : isSimulated === false ? "real" : DASH);
   const builderCode = event.polymarket?.builderCode ?? DASH;
   const feesEstimate = event.polymarket?.feesEstimateUsdc;
   const payload = (event.polymarket?.payload ?? null) as PolymarketPayload | null;
@@ -785,6 +1022,35 @@ function PayloadJsonViewer({
 // ─── Revenue details ──────────────────────────────────────────────────────
 
 function RevenueDetails({ event }: { event: EventDetail }) {
+  // Streaming revenue only exists when the market was created. For REJECTED /
+  // FAILED events there is nothing to stream, so explain that rather than
+  // showing the misleading "Awaiting first fill" copy.
+  const status = String(event.status ?? "").toUpperCase();
+  const submissionSkipped =
+    event.polymarket == null && (status === "REJECTED" || status === "FAILED");
+  if (submissionSkipped) {
+    return (
+      <Card
+        className="border-muted-foreground/30 bg-muted/[0.04]"
+        data-testid="revenue-empty-rejected"
+      >
+        <CardContent className="space-y-1.5 p-3 text-xs">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            streaming skipped
+          </p>
+          <p className="text-foreground/85">
+            No streaming revenue — the Polymarket market was never created
+            because the event was{" "}
+            <span className="font-mono">{status}</span>.
+          </p>
+          <p className="font-mono text-[10px] text-muted-foreground">
+            cumulative fee · {DASH} · entries · {DASH} · last fill · {DASH}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const marketId = event.polymarket?.marketId ?? event.market_id;
   const stream = event.polymarket?.revenueStream ?? [];
   const total = stream.reduce((acc, row) => acc + (row.usd ?? 0), 0);

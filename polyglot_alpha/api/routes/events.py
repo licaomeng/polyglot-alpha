@@ -104,6 +104,7 @@ def _build_phases(
     question: Optional[Question],
     submission: Optional[PolymarketSubmission],
     has_fee_event: bool,
+    auction_diagnostics: Optional[dict[str, Any]] = None,
 ) -> list[dict[str, Any]]:
     """Synthesize 7 phase records reflecting on-chain progress for the UI."""
 
@@ -132,6 +133,8 @@ def _build_phases(
             "winner_address": getattr(auction, "winner_address", None),
             "winning_bid": getattr(auction, "winning_bid", None),
             "tx_hash": getattr(auction, "settlement_tx_hash", None),
+            # Auction diagnostics are merged below when available so the UI
+            # can render an actionable panel on low-gas / partial-auction.
         },
         {
             "translator_address": getattr(translation, "translator_address", None),
@@ -154,6 +157,31 @@ def _build_phases(
         },
         {"streaming": has_fee_event},
     ]
+
+    # Merge auction diagnostics (low-gas / partial-auction) onto phase 2.
+    # ``auction_diagnostics`` is populated by ``_drive_real_auction`` when
+    # one or more seeder wallets were skipped pre-flight.
+    if auction_diagnostics:
+        details[1].update(
+            {
+                "partial_auction": bool(
+                    auction_diagnostics.get("partial_auction")
+                ),
+                "skipped_bidders": list(
+                    auction_diagnostics.get("skipped_bidders", []) or []
+                ),
+                "skip_reasons": dict(
+                    auction_diagnostics.get("skip_reasons", {}) or {}
+                ),
+                "balances_eth": dict(
+                    auction_diagnostics.get("balances_eth", {}) or {}
+                ),
+                "threshold_eth": auction_diagnostics.get("threshold_eth"),
+            }
+        )
+        if auction_diagnostics.get("all_seeders_low_gas"):
+            details[1]["reason"] = "all_seeders_low_gas"
+
     timestamps: list[Optional[str]] = [
         _utc_iso(event.triggered_at),
         _utc_iso(auction.settled_at) if auction is not None else None,
@@ -186,10 +214,247 @@ def _build_phases(
     return phases
 
 
+# Judge weight + display metadata. Mirrors ``polyglot_alpha.judges.panel._WEIGHTS``
+# but kept duplicated here so the API never imports the closed-IP panel module
+# at request time. Score thresholds are conservative defaults used purely for
+# the backfill fallback when ``_judges`` is missing.
+_TRANSLATION_JUDGE_NAMES: tuple[str, ...] = ("bleu", "comet", "mqm_llm")
+_STYLE_JUDGE_NAMES: tuple[tuple[str, str], ...] = (
+    ("d1", "d1_structural"),
+    ("d2", "d2_stylistic"),
+    ("d3", "d3_framing"),
+    ("d4", "d4_granularity"),
+    ("d5", "d5_resolution_clarity"),
+    ("d6", "d6_source_reliability"),
+    ("d7", "d7_leading_check"),
+    ("d8", "d8_duplicate_detection"),
+)
+
+
+def _synthesize_mock_panel_dossier(
+    translation_scores: dict[str, Any],
+    style_alignment_passes: dict[str, Any],
+) -> tuple[list[dict[str, Any]], bool]:
+    """Build an 11-row dossier for the legacy mock-verdict shape.
+
+    The orchestrator's offline fallback writes ``judge_N`` translation scores
+    + ``style_judge_N`` style passes. We map them positionally onto the real
+    11 judge slot names so the UI shows a consistent breakdown.
+    """
+
+    dossier: list[dict[str, Any]] = []
+    translation_keys_in_order = sorted(
+        (k for k in translation_scores.keys() if k.startswith("judge_")),
+        key=lambda k: int(k.split("_")[-1]) if k.split("_")[-1].isdigit() else 0,
+    )
+    style_keys_in_order = sorted(
+        (k for k in style_alignment_passes.keys() if k.startswith("style_judge_")),
+        key=lambda k: int(k.split("_")[-1]) if k.split("_")[-1].isdigit() else 0,
+    )
+
+    # Map the first 3 ``judge_N`` slots to the canonical translation judges
+    # so the UI shows "bleu / comet / mqm_llm" instead of opaque ordinals.
+    for idx, slot in enumerate(_TRANSLATION_JUDGE_NAMES):
+        if idx < len(translation_keys_in_order):
+            raw = translation_scores.get(translation_keys_in_order[idx])
+            score = float(raw) if isinstance(raw, (int, float)) else 0.0
+            dossier.append(
+                {
+                    "name": slot,
+                    "passed": score >= 0.7,
+                    "score": score,
+                    "reason": (
+                        f"Mock panel · {translation_keys_in_order[idx]}={score:.2f}"
+                    ),
+                    "panelBudgetExceeded": False,
+                    "softSkip": False,
+                    "timeout": False,
+                    "panelPartial": False,
+                }
+            )
+        else:
+            dossier.append(
+                {
+                    "name": slot,
+                    "passed": True,
+                    "score": 0.85,
+                    "reason": "Mock panel · synthesized default",
+                    "panelBudgetExceeded": False,
+                    "softSkip": True,
+                    "timeout": False,
+                    "panelPartial": False,
+                }
+            )
+
+    # Remaining ``judge_N`` slots + ``style_judge_N`` map onto the 8 style
+    # judges (D1-D8). Use the style booleans where available, fall back to
+    # the mock 0.85 PASS sentinel otherwise.
+    for idx, (short, full) in enumerate(_STYLE_JUDGE_NAMES):
+        passed = True
+        score = 0.85
+        reason = "Mock panel · style PASS"
+        if idx < len(style_keys_in_order):
+            raw_pass = style_alignment_passes.get(style_keys_in_order[idx])
+            passed = bool(raw_pass)
+            score = 1.0 if passed else 0.0
+            reason = (
+                f"Mock panel · {style_keys_in_order[idx]}="
+                f"{'pass' if passed else 'fail'} (mapped to {short.upper()})"
+            )
+        dossier.append(
+            {
+                "name": full,
+                "passed": passed,
+                "score": score,
+                "reason": reason,
+                "panelBudgetExceeded": False,
+                "softSkip": False,
+                "timeout": False,
+                "panelPartial": False,
+            }
+        )
+
+    return dossier, False
+
+
+def _synthesize_judges_from_quality(
+    translation_scores: dict[str, Any],
+    style_alignment_passes: dict[str, Any],
+) -> tuple[list[dict[str, Any]], bool]:
+    """Reconstruct an 11-row judge dossier from the legacy quality columns.
+
+    Returns ``(dossier, derived_panel_partial)`` where ``derived_panel_partial``
+    is ``True`` when any judge looks like it carries an INSUFFICIENT_DATA
+    sentinel (``null`` translation score or missing style pass), so the UI
+    can still surface the "Partial" header for events evaluated before the
+    panel started emitting an explicit ``_panelPartial`` flag.
+    """
+
+    # The orchestrator's mock-verdict fallback stores ``judge_N`` and
+    # ``style_judge_N`` keys instead of the real-panel ``bleu/comet/mqm`` +
+    # ``d1..d8`` shape. Detect that and short-circuit with a synthetic
+    # "MOCK PANEL" dossier so the UI doesn't show 11 INSUFFICIENT_DATA rows
+    # for events that were actually evaluated successfully via the mock path.
+    is_mock_panel = (
+        any(k.startswith("judge_") for k in translation_scores.keys())
+        and not any(k in translation_scores for k in ("bleu", "comet", "mqm"))
+    )
+    if is_mock_panel:
+        return _synthesize_mock_panel_dossier(
+            translation_scores, style_alignment_passes
+        )
+
+    dossier: list[dict[str, Any]] = []
+    partial = False
+
+    # Translation judges.
+    bleu_raw = translation_scores.get("bleu")
+    comet_raw = translation_scores.get("comet")
+    mqm_raw = translation_scores.get("mqm")
+    for name in _TRANSLATION_JUDGE_NAMES:
+        if name == "bleu":
+            score = float(bleu_raw) if isinstance(bleu_raw, (int, float)) else None
+            passed = score is not None and score >= 25.0
+            reason = (
+                f"BLEU={score:.1f}" if score is not None
+                else "BLEU offline / reference unavailable"
+            )
+            budget_exceeded = score is None
+        elif name == "comet":
+            score = float(comet_raw) if isinstance(comet_raw, (int, float)) else None
+            passed = score is not None and score >= 0.6
+            reason = (
+                f"COMET={score:.3f}" if score is not None
+                else "COMET offline / model unavailable"
+            )
+            budget_exceeded = score is None
+        else:  # mqm_llm
+            score_val = None
+            major = 0
+            if isinstance(mqm_raw, dict):
+                if isinstance(mqm_raw.get("score"), (int, float)):
+                    score_val = float(mqm_raw["score"])
+                if isinstance(mqm_raw.get("major_count"), (int, float)):
+                    major = int(mqm_raw["major_count"])
+            passed = score_val is not None and score_val >= 80 and major == 0
+            reason = (
+                f"MQM score={score_val:.0f}, majors={major}"
+                if score_val is not None
+                else "MQM offline / LLM unavailable"
+            )
+            budget_exceeded = score_val is None
+            score = (score_val / 100.0) if score_val is not None else None
+
+        if budget_exceeded:
+            partial = True
+        dossier.append(
+            {
+                "name": name,
+                "passed": bool(passed),
+                "score": float(score) if isinstance(score, (int, float)) else 0.0,
+                "reason": reason,
+                "panelBudgetExceeded": budget_exceeded,
+                "softSkip": budget_exceeded and name in ("bleu", "comet"),
+                "timeout": False,
+                "panelPartial": budget_exceeded,
+            }
+        )
+
+    # Style judges (D1-D8).
+    for short, full in _STYLE_JUDGE_NAMES:
+        raw_pass = style_alignment_passes.get(short)
+        if raw_pass is None:
+            partial = True
+            dossier.append(
+                {
+                    "name": full,
+                    "passed": False,
+                    "score": 0.0,
+                    "reason": (
+                        f"INSUFFICIENT_DATA: {short} verdict missing from "
+                        "stored quality_scores row"
+                    ),
+                    "panelBudgetExceeded": True,
+                    "softSkip": short == "d8",
+                    "timeout": False,
+                    "panelPartial": True,
+                }
+            )
+        else:
+            passed = bool(raw_pass)
+            dossier.append(
+                {
+                    "name": full,
+                    "passed": passed,
+                    "score": 1.0 if passed else 0.0,
+                    "reason": (
+                        f"{short.upper()} {'passed' if passed else 'failed'} style gate"
+                    ),
+                    "panelBudgetExceeded": False,
+                    "softSkip": False,
+                    "timeout": False,
+                    "panelPartial": False,
+                }
+            )
+
+    return dossier, partial
+
+
 def _serialize_event_detail(
     session: Session, event: Event
 ) -> dict[str, Any]:
     """Build the rich event detail object expected by the UI."""
+
+    # Best-effort auction diagnostics (process-local; populated by the
+    # orchestrator when one or more seeders were skipped pre-flight).
+    auction_diagnostics: Optional[dict[str, Any]] = None
+    try:
+        from ...orchestrator import get_auction_diagnostics
+
+        if event.id is not None:
+            auction_diagnostics = get_auction_diagnostics(event.id)
+    except Exception:  # pragma: no cover - defensive: never break /events
+        auction_diagnostics = None
 
     auction = session.get(Auction, event.id)
     translation = session.get(Translation, event.id)
@@ -276,6 +541,59 @@ def _serialize_event_detail(
             ],
         }
 
+    # Extract the per-judge dossier the panel smuggles through the
+    # ``translation_scores`` JSON column under the ``_judges`` underscore-
+    # prefixed key. We surface it as top-level ``judges`` + ``panelPartial``
+    # so the UI can render the 11-judge breakdown without parsing the
+    # private side-channel.
+    translation_scores_raw: dict[str, Any] = (
+        dict(quality.translation_scores) if quality is not None else {}
+    )
+    judges_dossier: list[dict[str, Any]] = []
+    panel_partial: bool = False
+    pending_judge_names: list[str] = []
+    if isinstance(translation_scores_raw, dict):
+        raw_judges = translation_scores_raw.get("_judges")
+        if isinstance(raw_judges, list):
+            judges_dossier = [dict(j) for j in raw_judges if isinstance(j, dict)]
+        panel_partial = bool(translation_scores_raw.get("_panelPartial"))
+        raw_pending = translation_scores_raw.get("_pendingJudgeNames")
+        if isinstance(raw_pending, list):
+            pending_judge_names = [str(n) for n in raw_pending]
+    # Backfill: events evaluated before the panel started emitting ``_judges``
+    # have ``translation_scores`` + ``style_alignment_passes`` populated but no
+    # dossier. Synthesize an 11-row dossier from those existing columns so the
+    # UI can still render per-judge passes for historical events.
+    if (
+        quality is not None
+        and not judges_dossier
+        and isinstance(translation_scores_raw, dict)
+    ):
+        judges_dossier, derived_partial = _synthesize_judges_from_quality(
+            translation_scores_raw,
+            quality.style_alignment_passes
+            if isinstance(quality.style_alignment_passes, dict)
+            else {},
+        )
+        if derived_partial and not panel_partial:
+            panel_partial = True
+        if not pending_judge_names:
+            pending_judge_names = [
+                str(j["name"])
+                for j in judges_dossier
+                if j.get("panelBudgetExceeded")
+            ]
+    # Strip the underscore-prefixed metadata before returning so the public
+    # ``translation_scores`` payload stays the original {bleu, comet, mqm}
+    # shape consumers already depend on.
+    translation_scores_public: Optional[dict[str, Any]] = None
+    if quality is not None:
+        translation_scores_public = {
+            k: v
+            for k, v in translation_scores_raw.items()
+            if not (isinstance(k, str) and k.startswith("_"))
+        }
+
     detail: dict[str, Any] = _serialize_event_summary(event)
     detail.update(
         {
@@ -284,12 +602,13 @@ def _serialize_event_detail(
             "verdict": getattr(quality, "verdict", None),
             "overall_score": getattr(quality, "overall_score", None),
             "anchor": anchor,
-            "translation_scores": (
-                quality.translation_scores if quality is not None else None
-            ),
+            "translation_scores": translation_scores_public,
             "style_alignment_passes": (
                 quality.style_alignment_passes if quality is not None else None
             ),
+            "judges": judges_dossier,
+            "panelPartial": panel_partial,
+            "pendingJudgeNames": pending_judge_names,
             "question_id": getattr(question, "question_id_onchain", None),
             "builder_code": getattr(question, "builder_code", None),
             "market_id": getattr(submission, "market_id", None),
@@ -309,6 +628,7 @@ def _serialize_event_detail(
                 question,
                 submission,
                 has_fee_event,
+                auction_diagnostics,
             ),
             "bids": [
                 {
@@ -334,6 +654,23 @@ def _serialize_event_detail(
             ],
         }
     )
+
+    # Top-level failure surface for the UI. Only populate when we have
+    # diagnostics, so the happy path stays untouched.
+    if auction_diagnostics:
+        all_low = bool(auction_diagnostics.get("all_seeders_low_gas"))
+        detail["auction_diagnostics"] = auction_diagnostics
+        if event.status == EventStatus.FAILED.value and all_low:
+            detail["reason"] = "all_seeders_low_gas"
+            detail["failure_details"] = {
+                "skipped_bidders": auction_diagnostics.get(
+                    "skipped_bidders", []
+                ),
+                "skip_reasons": auction_diagnostics.get("skip_reasons", {}),
+                "balances_eth": auction_diagnostics.get("balances_eth", {}),
+                "threshold_eth": auction_diagnostics.get("threshold_eth"),
+            }
+
     return detail
 
 

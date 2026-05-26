@@ -300,6 +300,12 @@ def list_operators(
         lower = addr.lower()
         if lower.startswith("0xdead") or lower.startswith("0xagent"):
             return False
+        # Reject vanity test fixtures: 4+ consecutive identical leading
+        # nibbles after the ``0x`` prefix (e.g. ``0xbbbb…``, ``0xaaaa…``).
+        if len(lower) >= 6:
+            first_nibble = lower[2]
+            if all(lower[i] == first_nibble for i in range(2, 6)):
+                return False
         return True
 
     rows = [r for r in rows if _looks_like_real_address(r.agent_address)]

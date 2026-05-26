@@ -16,6 +16,14 @@ from ..rate_limit import limiter
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sse", tags=["sse"])
 
+# SSE endpoints are long-lived streaming connections (one connection per
+# subscriber, kept open for the duration of the lifecycle). Per-IP request
+# rate-limits punish the legitimate usage pattern: a single page refresh +
+# the EventSource auto-reconnect on transient close trip a "10/minute"
+# limit within seconds, returning 429 and breaking the demo. Both endpoints
+# below are exempted from the global slowapi default_limits via
+# ``@limiter.exempt`` — non-SSE routes keep their normal rate limits.
+
 HEARTBEAT_INTERVAL_SECONDS: float = 15.0
 
 
@@ -45,7 +53,7 @@ async def _event_iter(request: Request) -> AsyncIterator[dict[str, str]]:
 
 
 @router.get("/events", summary="Server-Sent Events stream of lifecycle events")
-@limiter.limit("10/minute")
+@limiter.exempt
 async def sse_events(request: Request) -> EventSourceResponse:
     return EventSourceResponse(_event_iter(request))
 
@@ -106,7 +114,7 @@ async def _auction_event_iter(request: Request) -> AsyncIterator[dict[str, str]]
     "/auctions",
     summary="Server-Sent Events stream of every open/settled auction",
 )
-@limiter.limit("10/minute")
+@limiter.exempt
 async def sse_auctions(request: Request) -> EventSourceResponse:
     """Wildcard auction stream for external operators.
 

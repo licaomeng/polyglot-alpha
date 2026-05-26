@@ -59,13 +59,13 @@ export default function HomePage() {
         <Badge variant="info" className="mb-4 inline-flex">
           v2 · cyber pricing engine
         </Badge>
-        <h1 className="max-w-3xl text-4xl font-bold leading-tight tracking-tight text-balance md:text-5xl">
+        <h1 className="max-w-3xl text-4xl font-bold leading-tight tracking-tight text-balance md:text-5xl 3xl:max-w-5xl 3xl:text-6xl 4xl:max-w-7xl 4xl:text-7xl">
           Decentralized{" "}
           <span className="text-primary">cross-language alpha</span>, from headline to on-chain
           anchor in under{" "}
           <span className="font-mono text-accent">60s</span>.
         </h1>
-        <p className="mt-4 max-w-2xl text-sm text-muted-foreground md:text-base">
+        <p className="mt-4 max-w-2xl text-sm text-muted-foreground md:text-base 3xl:max-w-4xl 3xl:text-lg 4xl:max-w-5xl 4xl:text-xl">
           Polyglot Alpha v2 is an end-to-end pipeline of 10+1 verifiable components that turns
           foreign-language news into priced contracts on Polymarket V2 — with auctioned execution,
           adversarial translation debate, and an 11-judge consensus.
@@ -87,7 +87,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-3 4xl:gap-6">
         {THESIS.map((t) => {
           const Icon = t.icon;
           return (

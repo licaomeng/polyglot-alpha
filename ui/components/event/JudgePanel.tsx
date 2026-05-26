@@ -108,10 +108,10 @@ function readTranslationCell(
 
 interface JudgePanelProps {
   event: EventDetail & {
-    translation_scores?: Record<string, unknown>;
-    style_alignment_passes?: Record<string, boolean>;
+    translation_scores?: Record<string, unknown> | null;
+    style_alignment_passes?: Record<string, boolean> | null;
     verdict?: string;
-    overall_score?: number;
+    overall_score?: number | null;
   };
 }
 

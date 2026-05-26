@@ -17,6 +17,7 @@ import { usePhaseState } from "@/hooks/usePhaseState";
 import { PhaseInfo } from "@/components/event/MetricExplainer";
 import { ProgressIndicator } from "@/components/event/ProgressIndicator";
 import { PhaseDetailsAccordion } from "@/components/event/PhaseDetailsAccordion";
+import { classifyIpfsRef } from "@/lib/utils";
 
 // Map the backend detail row for phase 4 (with verdict + overall_score) into
 // a synthetic 11-judge array when the top-level `judges` field is absent.
@@ -54,10 +55,33 @@ function coerceTranslationScore(
 }
 
 function deriveJudges(event: EventDetail): JudgeScore[] | undefined {
-  if (Array.isArray(event.judges) && event.judges.length > 0) return event.judges;
+  // ``event.judges`` may now be the new dossier shape (carries
+  // ``panelBudgetExceeded``) rather than the legacy ``JudgeScore[]``. The
+  // timeline only consumes ``judge``/``score``/``category``/``passed`` so
+  // when the dossier is present we re-shape it; when the array is the
+  // legacy shape we return it as-is.
+  const rawJudges = event.judges;
+  if (Array.isArray(rawJudges) && rawJudges.length > 0) {
+    const first = rawJudges[0] as unknown as Record<string, unknown>;
+    const isDossier =
+      typeof first.name === "string" && typeof first.passed === "boolean";
+    if (isDossier) {
+      return (rawJudges as unknown as Array<Record<string, unknown>>).map(
+        (j) => ({
+          judge: String(j.name ?? "").toUpperCase(),
+          score: typeof j.score === "number" ? j.score : 0,
+          passed: typeof j.passed === "boolean" ? j.passed : undefined,
+          category: String(j.name ?? "").toLowerCase().startsWith("d")
+            ? "style"
+            : "translation",
+        }),
+      );
+    }
+    return rawJudges as JudgeScore[];
+  }
   type Loose = EventDetail & {
-    translation_scores?: Record<string, unknown>;
-    style_alignment_passes?: Record<string, boolean>;
+    translation_scores?: Record<string, unknown> | null;
+    style_alignment_passes?: Record<string, boolean> | null;
   };
   const loose = event as Loose;
   const out: JudgeScore[] = [];
@@ -295,19 +319,33 @@ function renderPhaseBody(
             <div className="space-y-1 text-xs text-muted-foreground">
               <p>winner · <span className="font-mono">{translationDetails.winner_address ?? "—"}</span></p>
               {translationDetails.pipeline_trace_ipfs && (() => {
-                // Strip `ipfs://` URI scheme prefix so we don't produce malformed URLs like
-                // `https://ipfs.io/ipfs/ipfs://mock/abc`. The gateway expects a bare CID/path.
-                const cid = translationDetails.pipeline_trace_ipfs.replace(/^ipfs:\/\//, "");
+                // Real CIDs render as a gateway link; synthetic refs (e.g.
+                // `ipfs://pipeline/qwen/...`) render as muted text since the
+                // ipfs.io gateway would 404 on them.
+                const ref = classifyIpfsRef(
+                  String(translationDetails.pipeline_trace_ipfs),
+                );
+                if (!ref) return null;
+                if (ref.isReal && ref.gatewayUrl) {
+                  return (
+                    <a
+                      href={ref.gatewayUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+                    >
+                      ipfs · {ref.cid.slice(0, 14)}…
+                      <ExternalLink className="h-3 w-3" aria-hidden />
+                    </a>
+                  );
+                }
                 return (
-                  <a
-                    href={`https://ipfs.io/ipfs/${cid}`}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+                  <span
+                    className="inline-flex items-center gap-1 font-mono text-muted-foreground"
+                    title={`Synthetic provenance: ${ref.cid}`}
                   >
-                    ipfs · {cid.slice(0, 14)}…
-                    <ExternalLink className="h-3 w-3" aria-hidden />
-                  </a>
+                    synthetic · {ref.cid.slice(0, 24)}…
+                  </span>
                 );
               })()}
             </div>
@@ -368,20 +406,32 @@ function renderPhaseBody(
             </p>
           )}
           {(anchor?.ipfsCid ?? onchain.reasoning_ipfs) && (() => {
-            // Strip `ipfs://` URI scheme prefix so we don't produce malformed URLs like
-            // `https://ipfs.io/ipfs/ipfs://mock/abc`. The gateway expects a bare CID/path.
+            // Real v0/v1 CIDs render as a clickable gateway link; synthetic
+            // pipeline refs (`ipfs://pipeline/...`, `ipfs://mock/...`) render
+            // as a muted, non-clickable label so the user isn't sent to a 404.
             const rawCid = String(anchor?.ipfsCid ?? onchain.reasoning_ipfs);
-            const cid = rawCid.replace(/^ipfs:\/\//, "");
+            const ref = classifyIpfsRef(rawCid);
+            if (!ref) return null;
+            if (ref.isReal && ref.gatewayUrl) {
+              return (
+                <a
+                  href={ref.gatewayUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+                >
+                  reasoning · ipfs · {ref.cid.slice(0, 14)}…
+                  <ExternalLink className="h-3 w-3" aria-hidden />
+                </a>
+              );
+            }
             return (
-              <a
-                href={`https://ipfs.io/ipfs/${cid}`}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+              <span
+                className="inline-flex items-center gap-1 font-mono text-muted-foreground"
+                title={`Synthetic provenance: ${ref.cid}`}
               >
-                reasoning · ipfs · {cid.slice(0, 14)}…
-                <ExternalLink className="h-3 w-3" aria-hidden />
-              </a>
+                reasoning · synthetic · {ref.cid.slice(0, 24)}…
+              </span>
             );
           })()}
         </div>,

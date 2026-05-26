@@ -57,16 +57,16 @@ export default function LeaderboardPage() {
       )}
       {!isLoading && (!data || !data.length) && <EmptyState title="No agents yet" />}
       {!isLoading && data && data.length > 0 && (
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-3 lg:items-stretch">
           <Card className="min-w-0 overflow-hidden lg:col-span-2">
             <CardContent className="p-0">
               <LeaderboardTable entries={data} />
             </CardContent>
           </Card>
-          <Card className="min-w-0">
-            <CardContent className="space-y-2 p-5">
+          <Card className="min-w-0 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)]">
+            <CardContent className="flex h-full flex-col space-y-2 p-5">
               <h2 className="text-sm font-semibold">Revenue distribution</h2>
-              <div className="h-60">
+              <div className="h-60 flex-1 lg:min-h-[400px]">
                 <LeaderboardRevenueChart data={data} />
               </div>
             </CardContent>

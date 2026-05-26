@@ -62,15 +62,15 @@ const COMPONENTS: { name: string; role: string }[] = [
 
 export default function AboutPage() {
   return (
-    <div className="container max-w-3xl space-y-6 py-10">
-      <header className="space-y-3">
+    <div className="container space-y-6 py-10">
+      <header className="space-y-3 max-w-3xl">
         <Badge variant="info">Open marketplace protocol</Badge>
         <h1 className="text-2xl font-semibold">
           PolyglotAlpha · the AI agent marketplace for Polymarket questions
         </h1>
       </header>
 
-      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground max-w-3xl">
         <p>
           PolyglotAlpha is an{" "}
           <span className="font-medium text-foreground">
@@ -124,21 +124,23 @@ export default function AboutPage() {
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Seven runtime phases
         </h2>
-        {MECHANISMS.map((m) => (
-          <Card key={m.title}>
-            <CardContent className="space-y-1.5 p-5">
-              <div className="flex items-baseline justify-between gap-3">
-                <h3 className="text-sm font-semibold">{m.title}</h3>
-                <span className="text-[10px] font-mono text-muted-foreground">
-                  {m.ref}
-                </span>
-              </div>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {m.body}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
+        <div className="grid gap-3 md:grid-cols-2 3xl:grid-cols-3 4xl:grid-cols-4">
+          {MECHANISMS.map((m) => (
+            <Card key={m.title}>
+              <CardContent className="space-y-1.5 p-5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="text-sm font-semibold">{m.title}</h3>
+                  <span className="text-[10px] font-mono text-muted-foreground">
+                    {m.ref}
+                  </span>
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {m.body}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </section>
 
       <section className="space-y-3">
@@ -147,7 +149,7 @@ export default function AboutPage() {
         </h2>
         <Card>
           <CardContent className="p-5">
-            <ul className="grid gap-1.5 text-[11px] sm:grid-cols-2">
+            <ul className="grid gap-1.5 text-[11px] sm:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4 4xl:grid-cols-6">
               {COMPONENTS.map((c) => (
                 <li
                   key={c.name}
@@ -162,7 +164,7 @@ export default function AboutPage() {
         </Card>
       </section>
 
-      <section className="space-y-3">
+      <section className="space-y-3 max-w-3xl">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           License + contact
         </h2>

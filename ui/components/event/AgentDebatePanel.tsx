@@ -156,6 +156,10 @@ function debateStage(event: EventDetail): "pre-l3" | "l3" | "l4" | "l5" | "done"
   if (subPhases["L4 Moderator"] === "running") return "l4";
   if (subPhases["L3 Critics"] === "completed") return "l4";
   if (subPhases["L3 Critics"] === "running") return "l3";
+  // Fallback: if Translation Pipeline phase has completed but no granular
+  // subPhases were emitted, treat the debate as "done" so the panel renders
+  // candidates / moderator / refine instead of the pre-L2 placeholder.
+  if (phase2?.status === "completed") return "done";
   return "pre-l3";
 }
 

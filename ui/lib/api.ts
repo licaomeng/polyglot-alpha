@@ -127,6 +127,18 @@ export interface JudgeScore {
   threshold?: number;
 }
 
+/** Per-judge dossier surfaced by `/events/{id}.judges`. */
+export interface JudgeDossierEntry {
+  name: string;
+  passed: boolean;
+  score: number;
+  reason: string;
+  panelBudgetExceeded: boolean;
+  softSkip: boolean;
+  timeout: boolean;
+  panelPartial: boolean;
+}
+
 export interface EventDetail extends EventSummary {
   phases: PhaseState[];
   bids?: BidEntry[];
@@ -144,7 +156,15 @@ export interface EventDetail extends EventSummary {
       durationMs?: number;
     }[];
   };
-  judges?: JudgeScore[];
+  judges?: JudgeDossierEntry[] | JudgeScore[];
+  /** True when the panel returned partial verdicts (budget exceeded). */
+  panelPartial?: boolean;
+  /** Judges that hit the panel-budget timeout (INSUFFICIENT_DATA). */
+  pendingJudgeNames?: string[];
+  translation_scores?: Record<string, unknown> | null;
+  style_alignment_passes?: Record<string, boolean> | null;
+  verdict?: string;
+  overall_score?: number | null;
   overallVerdict?: "PASS" | "FAIL" | string;
   overallReasoning?: string;
   anchor?: {

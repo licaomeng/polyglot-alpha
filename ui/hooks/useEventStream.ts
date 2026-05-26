@@ -24,9 +24,19 @@ interface UseEventStreamReturn {
   latest: LatestSseEvent | null;
   /** All events received this session, newest-last. Capped at 200. */
   history: LatestSseEvent[];
+  /** User-facing connection error message; non-null when retries exhausted. */
+  connectionError: string | null;
 }
 
 const MAX_HISTORY = 200;
+
+/**
+ * Backoff schedule (milliseconds) used when the SSE connection drops with a
+ * suspected rate-limit (429). After exhausting these delays we surface a
+ * connection-error message and stop retrying — the user can refresh manually.
+ * Native EventSource auto-reconnect (~3s) handles non-429 transient errors.
+ */
+const RATE_LIMIT_BACKOFF_MS: readonly number[] = [5_000, 15_000, 60_000];
 
 function nextStatus(prev: PhaseStatus | undefined, incoming: PhaseStatus): PhaseStatus {
   // "completed" and "failed" are sticky against earlier "running"/"pending".
@@ -235,6 +245,7 @@ export function useEventStream(eventId?: string): UseEventStreamReturn {
   const [connected, setConnected] = useState(false);
   const [latest, setLatest] = useState<LatestSseEvent | null>(null);
   const [history, setHistory] = useState<LatestSseEvent[]>([]);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const filterEventId = useRef<string | undefined>(eventId);
   filterEventId.current = eventId;
 
@@ -244,18 +255,20 @@ export function useEventStream(eventId?: string): UseEventStreamReturn {
       ? `${API_BASE}/sse/events?event_id=${encodeURIComponent(eventId)}`
       : `${API_BASE}/sse/events`;
 
-    let source: EventSource | null = null;
-    try {
-      source = new EventSource(url);
-    } catch {
-      return;
-    }
-    const es = source;
+    let cancelled = false;
+    let currentSource: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let backoffIndex = 0;
+    // Track whether we've ever opened successfully since the last error —
+    // a clean open resets the backoff schedule.
+    let hadSuccessfulOpen = false;
+    let cleanup: (() => void) | null = null;
 
-    const onOpen = () => setConnected(true);
-    const onError = () => setConnected(false);
-    es.addEventListener("open", onOpen);
-    es.addEventListener("error", onError);
+    const allTypes: Array<AnySseEventType | "hello" | "heartbeat"> = [
+      ...SSE_EVENT_TYPES,
+      "hello",
+      "heartbeat",
+    ];
 
     const handle = (type: AnySseEventType | "hello" | "heartbeat", raw: string) => {
       let data: Record<string, unknown> = {};
@@ -283,58 +296,160 @@ export function useEventStream(eventId?: string): UseEventStreamReturn {
       }
     };
 
-    const allTypes: Array<AnySseEventType | "hello" | "heartbeat"> = [
-      ...SSE_EVENT_TYPES,
-      "hello",
-      "heartbeat",
-    ];
-    const namedListeners: Array<{
-      type: AnySseEventType | "hello" | "heartbeat";
-      fn: (ev: MessageEvent<string>) => void;
-    }> = allTypes.map((t) => ({
-      type: t,
-      fn: (ev: MessageEvent<string>) => handle(t, ev.data ?? ""),
-    }));
-    namedListeners.forEach(({ type, fn }) =>
-      es.addEventListener(type as string, fn as EventListener),
-    );
-
-    // Fallback for anonymous `message` events (legacy shape with {phase, phases}).
-    const onAnonymous = (ev: MessageEvent<string>) => {
+    /**
+     * Probe the SSE URL with a HEAD request to detect 429 Too Many Requests.
+     * EventSource doesn't expose the HTTP status code on error — without
+     * this probe the hook can't distinguish a transient drop from a rate
+     * limit. The probe is cheap (one HEAD request) and only fires after a
+     * suspected failure.
+     */
+    const isRateLimited = async (): Promise<boolean> => {
       try {
-        const data = JSON.parse(ev.data ?? "{}") as {
-          phase?: PhaseState;
-          phases?: PhaseState[];
-        };
-        if (data.phases) setPhases(data.phases);
-        else if (data.phase) {
-          setPhases((prev) => {
-            const list = prev ? [...prev] : [];
-            const idx = list.findIndex((p) => p.name === data.phase!.name);
-            if (idx >= 0) list[idx] = data.phase!;
-            else list.push(data.phase!);
-            return list;
-          });
-        }
+        const res = await fetch(url, {
+          method: "HEAD",
+          // Prevent the browser caching a previous 200 — we want the live status.
+          cache: "no-store",
+        });
+        return res.status === 429;
       } catch {
-        // ignore
+        return false;
       }
     };
-    es.addEventListener("message", onAnonymous as EventListener);
+
+    const scheduleReconnect = (delayMs: number) => {
+      if (cancelled) return;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(() => {
+        if (cancelled) return;
+        open();
+      }, delayMs);
+    };
+
+    const open = () => {
+      if (cancelled) return;
+      let source: EventSource | null = null;
+      try {
+        source = new EventSource(url);
+      } catch {
+        // Synchronous EventSource ctor failure — give up immediately.
+        setConnectionError("Unable to open event stream. Please refresh the page.");
+        return;
+      }
+      const es = source;
+      currentSource = es;
+
+      const onOpen = () => {
+        if (cancelled) return;
+        hadSuccessfulOpen = true;
+        backoffIndex = 0;
+        setConnected(true);
+        setConnectionError(null);
+      };
+
+      const onError = async () => {
+        if (cancelled) return;
+        setConnected(false);
+        // Native EventSource auto-reconnects (~3s) on transient errors when
+        // readyState becomes CONNECTING. If it transitions to CLOSED, the
+        // browser has given up — we must reconnect manually. A 429 from the
+        // backend also lands us here, so probe before scheduling backoff.
+        if (es.readyState !== EventSource.CLOSED) {
+          // Browser will auto-reconnect; nothing to do.
+          return;
+        }
+        // Tear down listeners on the closed source so we don't leak handlers.
+        teardownListeners();
+        currentSource = null;
+
+        const rateLimited = await isRateLimited();
+        if (cancelled) return;
+        if (rateLimited) {
+          if (backoffIndex >= RATE_LIMIT_BACKOFF_MS.length) {
+            setConnectionError(
+              "Connection lost — too many reconnect attempts. Please refresh the page.",
+            );
+            return;
+          }
+          const delay = RATE_LIMIT_BACKOFF_MS[backoffIndex];
+          backoffIndex += 1;
+          scheduleReconnect(delay);
+          return;
+        }
+        // Non-429 closed connection — reopen immediately if we had a
+        // successful open before; otherwise apply a small delay to avoid
+        // hammering the server on a hard outage.
+        scheduleReconnect(hadSuccessfulOpen ? 1_000 : 3_000);
+      };
+
+      es.addEventListener("open", onOpen);
+      es.addEventListener("error", onError);
+
+      const namedListeners: Array<{
+        type: AnySseEventType | "hello" | "heartbeat";
+        fn: (ev: MessageEvent<string>) => void;
+      }> = allTypes.map((t) => ({
+        type: t,
+        fn: (ev: MessageEvent<string>) => handle(t, ev.data ?? ""),
+      }));
+      namedListeners.forEach(({ type, fn }) =>
+        es.addEventListener(type as string, fn as EventListener),
+      );
+
+      // Fallback for anonymous `message` events (legacy shape with {phase, phases}).
+      const onAnonymous = (ev: MessageEvent<string>) => {
+        try {
+          const data = JSON.parse(ev.data ?? "{}") as {
+            phase?: PhaseState;
+            phases?: PhaseState[];
+          };
+          if (data.phases) setPhases(data.phases);
+          else if (data.phase) {
+            setPhases((prev) => {
+              const list = prev ? [...prev] : [];
+              const idx = list.findIndex((p) => p.name === data.phase!.name);
+              if (idx >= 0) list[idx] = data.phase!;
+              else list.push(data.phase!);
+              return list;
+            });
+          }
+        } catch {
+          // ignore
+        }
+      };
+      es.addEventListener("message", onAnonymous as EventListener);
+
+      const teardownListeners = () => {
+        namedListeners.forEach(({ type, fn }) =>
+          es.removeEventListener(type as string, fn as EventListener),
+        );
+        es.removeEventListener("message", onAnonymous as EventListener);
+        es.removeEventListener("open", onOpen);
+        es.removeEventListener("error", onError as EventListener);
+      };
+
+      cleanup = () => {
+        teardownListeners();
+        es.close();
+      };
+    };
+
+    open();
 
     return () => {
-      namedListeners.forEach(({ type, fn }) =>
-        es.removeEventListener(type as string, fn as EventListener),
-      );
-      es.removeEventListener("message", onAnonymous as EventListener);
-      es.removeEventListener("open", onOpen);
-      es.removeEventListener("error", onError);
-      es.close();
+      cancelled = true;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (cleanup) cleanup();
+      if (currentSource && currentSource.readyState !== EventSource.CLOSED) {
+        currentSource.close();
+      }
     };
   }, [eventId]);
 
   return useMemo(
-    () => ({ phases, connected, latest, history }),
-    [phases, connected, latest, history],
+    () => ({ phases, connected, latest, history, connectionError }),
+    [phases, connected, latest, history, connectionError],
   );
 }
