@@ -102,7 +102,12 @@ preseed_events() {
     done
     log "pre-seed complete"
 }
-preseed_events &
+# Run pre-seed in a `disown`-ed subshell so its natural exit (after 3
+# events ≈ 14s) does NOT trigger the `wait -n` teardown below. Only the
+# 3 critical processes (backend, frontend, nginx) should bring down
+# the container when they die.
+( preseed_events ) &
+disown $!
 
 # -----------------------------------------------------------------------------
 # 3. nginx — run in foreground as PID 1's last child so its exit takes down
@@ -125,9 +130,10 @@ shutdown() {
 }
 trap shutdown SIGTERM SIGINT
 
-# Wait on ALL children — if any of the three dies we abort the container.
-# This makes failures surface in HF Spaces logs immediately instead of
-# silently degrading (which is the worst possible demo state).
-wait -n
-log "a child process exited — tearing down the rest"
+# Wait on the 3 critical PIDs explicitly — `wait -n` without args
+# would catch ANY background job (including the pre-seed loop), so we
+# enumerate just the long-running services. If backend/frontend/nginx
+# dies, abort the container so failure surfaces in HF logs.
+wait -n "$BACKEND_PID" "$FRONTEND_PID" "$NGINX_PID"
+log "a critical child process exited — tearing down the rest"
 shutdown

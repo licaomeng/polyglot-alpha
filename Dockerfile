@@ -38,10 +38,16 @@ COPY ui/ ./
 # reviewer's own laptop, not the HF Space). Patch both to fall back to an
 # empty string so api.ts produces same-origin URLs (`/events`,
 # `/trigger/event`, ...) that nginx routes to uvicorn :8000.
-RUN sed -i 's|process\.env\.NEXT_PUBLIC_API_BASE || "http://localhost:8000"|process.env.NEXT_PUBLIC_API_BASE || ""|' next.config.mjs && \
-    sed -i 's|"http://localhost:8000"|""|' lib/api.ts
+# Use `,` as sed delimiter to avoid clashing with the JS `||` operator
+# (using `|` here causes sed to see four separator chars in one expression).
+RUN sed -i 's,http://localhost:8000,,g' next.config.mjs lib/api.ts
 
-ENV NEXT_PUBLIC_API_BASE=""
+# IMPORTANT: nginx routes `/api/*` to FastAPI (stripping the `/api` prefix);
+# everything else goes to Next.js. So all client-side fetches must be
+# prefixed `/api/...` to hit the backend instead of being captured by
+# the Next.js page router (which has its own `/events/[id]`, `/trigger`,
+# `/operators`, etc. routes that would otherwise collide with the API).
+ENV NEXT_PUBLIC_API_BASE=/api
 ENV NEXT_PUBLIC_DISABLE_LIVE=true
 ENV NODE_ENV=production
 RUN npm run build
@@ -91,7 +97,7 @@ RUN pip install --no-cache-dir --no-deps -e .
 # pull node_modules whole because `next start` needs the runtime deps to
 # resolve at request time (Next 15 + react-server bundling).
 COPY --from=ui-build /app/ui/.next ./ui/.next
-COPY --from=ui-build /app/ui/public ./ui/public
+# Skip /app/ui/public — repo doesn't have one; Next.js handles missing dir fine.
 COPY --from=ui-build /app/ui/package.json ./ui/package.json
 COPY --from=ui-build /app/ui/node_modules ./ui/node_modules
 COPY --from=ui-build /app/ui/next.config.mjs ./ui/next.config.mjs
@@ -112,6 +118,17 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 ENV DISABLE_LIVE=true
 ENV DEFAULT_EVENT_MODE=mock
 ENV LLM_BACKEND=mock
+# Dummy operator key so the judge_panel_client + chain modules pass their
+# module-level import-time validation. Mock mode short-circuits BEFORE any
+# real tx is sent, so this key is NEVER used to sign anything. We pick the
+# secp256k1 generator-point private key (literally "1") which is publicly
+# known — making it OBVIOUS to any auditor that this is a placeholder.
+ENV HACKATHON_WALLET_PRIVATE_KEY=0x0000000000000000000000000000000000000000000000000000000000000001
+ENV ARC_TESTNET_RPC=https://rpc.testnet.arc.network
+# Same fake-key idempotency for the seeder slot derivation
+ENV ALPHA_WALLET_PRIVATE_KEY=0x0000000000000000000000000000000000000000000000000000000000000002
+ENV BRAVO_WALLET_PRIVATE_KEY=0x0000000000000000000000000000000000000000000000000000000000000003
+ENV CHARLIE_WALLET_PRIVATE_KEY=0x0000000000000000000000000000000000000000000000000000000000000004
 ENV LIFECYCLE_MAX_CONCURRENCY=2
 ENV PYTHONUNBUFFERED=1
 ENV PORT=7860
