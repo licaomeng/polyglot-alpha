@@ -50,6 +50,15 @@ if ! git diff-index --quiet HEAD --; then
     die "working tree has uncommitted tracked changes; commit or stash first"
 fi
 
+# Contract ABIs (contracts/out/*.json) are not tracked on main (excluded by
+# contracts/.gitignore from Foundry), but the backend NEEDS them at runtime
+# to know the deployed contract interfaces. Build them now so the orphan
+# snapshot includes a freshly compiled set.
+command -v forge >/dev/null 2>&1 || die "forge not installed — install Foundry: https://book.getfoundry.sh/getting-started/installation"
+log "running forge build to refresh contracts/out/ (compiled ABIs)"
+( cd contracts && forge build --silent ) || die "forge build failed — fix contracts before deploying"
+[[ -d contracts/out ]] || die "forge build succeeded but contracts/out/ missing — something is very wrong"
+
 ORIGINAL_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 if [[ "$ORIGINAL_BRANCH" != "main" ]]; then
     warn "currently on '$ORIGINAL_BRANCH' (not main) — will checkout main"
@@ -61,16 +70,23 @@ TMP_BRANCH="hf-deploy-$(date +%Y%m%d-%H%M%S)"
 log "deploying main @ $MAIN_SHA_SHORT  →  hf:main  (via temp orphan '$TMP_BRANCH')"
 
 # ---- cleanup trap -----------------------------------------------------------
-# If anything below fails, restore the user to their starting branch and
-# delete the temp branch so they don't end up stuck on an orphan.
+# If anything below fails, restore the user to their starting branch, restore
+# contracts/.git if we moved it, and delete the temp orphan branch so they
+# don't end up stuck on a half-built orphan.
+CONTRACTS_GIT_MOVED=0
 cleanup() {
     local exit_code=$?
+    # Restore contracts/.git if we renamed it.
+    if [[ "$CONTRACTS_GIT_MOVED" -eq 1 && -d contracts/.git.deploy-tmp ]]; then
+        mv contracts/.git.deploy-tmp contracts/.git
+    fi
+    # Switch off temp branch and delete it.
+    local current
+    current="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)"
+    if [[ "$current" == "$TMP_BRANCH" || "$current" == "HEAD" ]]; then
+        git checkout --force "$ORIGINAL_BRANCH" 2>/dev/null || git checkout --force main 2>/dev/null || true
+    fi
     if [[ -n "${TMP_BRANCH:-}" ]] && git show-ref --verify --quiet "refs/heads/$TMP_BRANCH"; then
-        local current
-        current="$(git rev-parse --abbrev-ref HEAD)"
-        if [[ "$current" == "$TMP_BRANCH" ]]; then
-            git checkout "$ORIGINAL_BRANCH" 2>/dev/null || git checkout main
-        fi
         git branch -D "$TMP_BRANCH" > /dev/null 2>&1 || true
     fi
     if [[ $exit_code -ne 0 ]]; then
@@ -87,11 +103,29 @@ git checkout --orphan "$TMP_BRANCH"
 # want to start from a clean stage, then re-add everything filtered by
 # .gitignore — so a stray binary in working tree doesn't sneak through.
 git rm -rf --cached . > /dev/null 2>&1 || true
+
+# Foundry leaves a nested `.git` in `contracts/` (its own submodule lockfile
+# tracking). When the outer repo runs `git add -A`, it sees this as a
+# (broken) submodule and aborts with "does not have a commit checked out".
+# Temporarily rename it; the cleanup trap restores it on the way out.
+if [[ -d contracts/.git ]]; then
+    log "temporarily renaming contracts/.git (foundry nested) so git add -A can recurse"
+    mv contracts/.git contracts/.git.deploy-tmp
+    CONTRACTS_GIT_MOVED=1
+fi
+
 git add -A
 
 log "swapping README for HF-flavored version (deploy/hf-readme.md → README.md)"
 cp deploy/hf-readme.md README.md
 git add README.md
+
+# contracts/out (compiled ABI JSON) is in .gitignore on main, but HF Spaces
+# needs the ABIs at runtime — force-add the subdir into the orphan snapshot.
+if [[ -d contracts/out ]]; then
+    log "force-adding contracts/out/ (ABIs needed by backend, ignored on main)"
+    git add -f contracts/out/
+fi
 
 # Single commit — HF only ever sees this one.
 COMMIT_MSG="deploy: main@${MAIN_SHA_SHORT} → HF Spaces ($(date -u +%Y-%m-%dT%H:%MZ))"
