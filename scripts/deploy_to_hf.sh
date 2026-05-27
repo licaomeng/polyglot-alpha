@@ -127,6 +127,25 @@ if [[ -d contracts/out ]]; then
     git add -f contracts/out/
 fi
 
+# Drop dev-facing assets HF Spaces doesn't need and whose binaries trip
+# HF's pre-receive hook (e.g. submission/diagrams/*.png are GitHub hackathon
+# docs, never served by the Docker container). We `git rm --cached` them
+# from the orphan index — the working tree copies stay so main is untouched
+# when the cleanup trap checks us back out.
+HF_EXCLUDE_PATHS=(
+    submission              # hackathon write-up — GitHub-only
+    docs                    # design docs — GitHub-only
+    examples                # operator example scripts — GitHub-only
+    contracts/lib           # foundry submodules — only needed for forge build
+    contracts/cache         # foundry compile cache
+    contracts/broadcast     # foundry deploy logs
+)
+for path in "${HF_EXCLUDE_PATHS[@]}"; do
+    if git ls-files --cached "$path" 2>/dev/null | head -1 | grep -q .; then
+        git rm -r --cached --quiet "$path" > /dev/null 2>&1 || true
+    fi
+done
+
 # Single commit — HF only ever sees this one.
 COMMIT_MSG="deploy: main@${MAIN_SHA_SHORT} → HF Spaces ($(date -u +%Y-%m-%dT%H:%MZ))"
 git commit --quiet -m "$COMMIT_MSG"
