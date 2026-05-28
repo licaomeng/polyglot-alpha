@@ -60,6 +60,9 @@ export function OperatorCard({
   const isReference = operator.kind === "reference";
   return (
     <Card
+      data-testid="operator-card"
+      data-operator-kind={operator.kind}
+      data-operator-name={operator.name}
       className={
         isReference
           ? "border-primary/30 bg-primary/[0.03]"
