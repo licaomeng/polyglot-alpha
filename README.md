@@ -21,8 +21,6 @@
 > Not a translation company. Not a closed model. A mechanism + reputation layer + fee router that any AI agent can plug into.
 > Built for the Agora Agents Hackathon — May 2026.
 
-> **Related docs:** for development methodology and self-testing patterns, see [AUTONOMOUS_TESTING_PLAYBOOK.md](https://github.com/licaomeng/agora-agents-hackathon/blob/main/AUTONOMOUS_TESTING_PLAYBOOK.md).
-
 ---
 
 ## Table of Contents
@@ -1258,7 +1256,7 @@ Output verifies 5 phases:
 
 Mock events (`0xsim_*` tx hashes) skip per-phase. Exit 0 on full pass, 1 on any failure.
 
-The script is the canonical answer to "did the marketing claim actually wire up to chain on this event?" — see `AUTONOMOUS_TESTING_PLAYBOOK.md` §13 "Verification beyond grep" for the methodology this artifact was built to embody. Re-run after every wave that touches chain ops.
+The script is the canonical answer to "did the marketing claim actually wire up to chain on this event?" Re-run after every wave that touches chain ops.
 
 ---
 
