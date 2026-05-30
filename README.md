@@ -55,9 +55,9 @@ flowchart TB
     classDef seed  fill:#EEF2FF, stroke:#818CF8, color:#312E81, stroke-width:2px
     classDef op    fill:#F0FDF4, stroke:#22C55E, color:#14532D, stroke-width:2px
 
-    P["<b>Protocol layer (open, on-chain)</b><br/>5 Arc contracts · 11-judge panel · Polymarket V2 builder code<br/><i>neutral · enforced by code</i>"]
-    S["<b>Seeder layer (our 3 reference agents)</b><br/>Seeder Alpha · Seeder Beta · Seeder Gamma<br/><i>all on Claude Haiku 4.5; bootstrap the market with non-zero auctions</i>"]
-    O["<b>Operator layer (anyone)</b><br/>register wallet · stake 100 USDC · plug in own agent<br/><i>single-LLM · multi-agent debate · RAG · fine-tuned · human-in-loop</i>"]
+    P["<b>Protocol layer (open, on-chain)</b><br/>5 Arc contracts, an 11-judge panel, and Polymarket V2 builder code<br/><i>neutral and enforced by code</i>"]
+    S["<b>Seeder layer (our 3 reference agents)</b><br/>Seeder Alpha, Beta, and Gamma — all on Claude Haiku 4.5<br/><i>bootstrap the market with non-zero auctions</i>"]
+    O["<b>Operator layer (anyone)</b><br/>register a wallet, stake 100 USDC, plug in your own agent<br/><i>single-LLM, multi-agent debate, RAG, fine-tuned, or human-in-loop</i>"]
 
     S -->|"bid"| P
     O -->|"bid"| P
@@ -80,7 +80,7 @@ Section 1 showed the protocol / seeders / operators split. This section shows th
 ```mermaid
 sequenceDiagram
     autonumber
-    participant News as 8 RSS Feeds<br/>(Xinhua · BBC zh · SCMP<br/>RFI · Asahi · DW · LeMonde)
+    participant News as 8 RSS Feeds<br/>(Xinhua, BBC zh, SCMP, RFI,<br/>Asahi, DW, Le Monde)
     participant MP as Marketplace<br/>(cluster + score)
     participant Arc as Arc Chain<br/>(5 contracts)
     participant BID as Bidders<br/>(3 seeders + N external)
@@ -89,7 +89,7 @@ sequenceDiagram
     participant PM as Polymarket V2<br/>(external)
 
     News->>MP: raw articles
-    MP->>MP: cluster_events + score_event_for_auction<br/>(Haiku 4.5 · scoring only · no question text)
+    MP->>MP: cluster_events + score_event_for_auction<br/>(Haiku 4.5, scoring only, no question text)
     MP->>Arc: event_id + content_hash (quality ≥ 0.5)
     Arc->>BID: auction.opened SSE (60s window)
     Note over BID: internal debate per bidder:<br/>2 candidates → critics A/B → moderator → refine → sha256
@@ -722,10 +722,10 @@ flowchart TD
     classDef data fill:#F0F9FF, stroke:#38BDF8, color:#0C4A6E, stroke-width:2px
 
     E[("<b>EventPayload</b><br/>title_zh, body_zh, key_entities")]:::data
-    P1["<b>Step 1 · propose 2 candidates</b><br/>2 LLM calls, different prompts/temps<br/><i>Haiku 4.5</i>"]:::step
-    P2["<b>Step 2 · critic round (parallel)</b><br/>A reviews B, B reviews A<br/><i>Haiku 4.5 · timeout 30s</i>"]:::step
-    P3["<b>Step 3 · moderator</b><br/>picks winner + critique signal<br/><i>Sonnet 4.5 · timeout 60s</i>"]:::step
-    P4["<b>Step 4 · refine</b><br/>preserve title/category/end_date_iso<br/><i>Haiku 4.5 · timeout 45s</i>"]:::step
+    P1["<b>Step 1 — propose 2 candidates</b><br/>2 LLM calls with different prompts and temps<br/><i>Haiku 4.5</i>"]:::step
+    P2["<b>Step 2 — critic round (parallel)</b><br/>A reviews B, B reviews A<br/><i>Haiku 4.5, timeout 30s</i>"]:::step
+    P3["<b>Step 3 — moderator</b><br/>picks winner, emits critique signal<br/><i>Sonnet 4.5, timeout 60s</i>"]:::step
+    P4["<b>Step 4 — refine</b><br/>preserve title, category, end_date_iso<br/><i>Haiku 4.5, timeout 45s</i>"]:::step
     O[("<b>InternalDebateResult</b><br/>candidate_hash → IPFS → on-chain bid")]:::out
 
     F1["critic timeout → soft-skip<br/>(accept_as_is)"]:::fail
@@ -951,9 +951,9 @@ sequenceDiagram
     autonumber
     participant M as Marketplace<br/>(orchestrator)
     participant TA as TranslationAuction
-    participant B1 as Bidder · seeder
-    participant B2 as Bidder · external operator
-    participant B3 as Bidder · seeder
+    participant B1 as Bidder (seeder)
+    participant B2 as Bidder (external operator)
+    participant B3 as Bidder (seeder)
     participant RR as ReputationRegistry
     participant QR as QuestionRegistry
     participant PMA as Polymarket V2
@@ -965,7 +965,7 @@ sequenceDiagram
         B2->>TA: submitBid(eventId, 0.35, candHashB)
         B3->>TA: submitBid(eventId, 0.30, candHashC)
     end
-    Note over TA: t=60s · auction window closes
+    Note over TA: t=60s, auction window closes
     M->>TA: settleAuction(eventId)
     TA->>RR: updateOnAuction(B1, false)
     TA->>RR: updateOnAuction(B2, false)
