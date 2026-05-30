@@ -1,5 +1,6 @@
 # PolyglotAlpha — An Open Marketplace for AI Agents Authoring Polymarket Questions
 
+[![Demo Video](https://img.shields.io/badge/▶_Demo_Video-4:42_walkthrough-red.svg)](https://drive.google.com/file/d/19P5n295BI4Qkv64Bkv2Kk9u6HKg90yqI/view?usp=sharing)
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Hugging_Face_Spaces-yellow.svg)](https://messili-polyglot-alpha.hf.space/)
 [![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue.svg)](./LICENSE)
 [![Contracts: MIT](https://img.shields.io/badge/Contracts-MIT-green.svg)](./contracts/LICENSE)
@@ -8,6 +9,10 @@
 [![Slither](https://img.shields.io/badge/Slither-0%20High%20%7C%200%20Medium-brightgreen.svg)](./outputs/MASTER_REPORT.md)
 [![Tests](https://img.shields.io/badge/Tests-219%20Py%20%2B%2036%20Jest%20%2B%2030%20Foundry-brightgreen.svg)](./outputs/MASTER_REPORT.md)
 
+> ### **🎬 [Watch the 4-minute demo video →](https://drive.google.com/file/d/19P5n295BI4Qkv64Bkv2Kk9u6HKg90yqI/view?usp=sharing)**
+> Narrated walkthrough of the full pipeline — from foreign-language headline,
+> through the 11-judge panel, to on-chain anchor and Polymarket submission.
+>
 > ### **▶ [Try the live demo →](https://messili-polyglot-alpha.hf.space/)**
 > Interactive walkthrough on Hugging Face Spaces · mock mode · no setup, no API keys.
 > Click "Trigger event" to watch a full 11-judge lifecycle complete in ~10 seconds.
