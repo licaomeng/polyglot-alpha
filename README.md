@@ -331,11 +331,16 @@ When Polymarket fills a market built by PolyglotAlpha, a 0.4% builder fee accrue
 
 ```mermaid
 flowchart LR
-    Fill["Polymarket fill<br/>$100 notional"]
-    Fee["0.4% builder fee<br/>= 1.0 USDC"]
-    Op["Operator (winner)<br/>0.9 USDC"]
-    Tr["Platform Treasury<br/>0.1 USDC"]
-    BFR["BuilderFeeRouter<br/>cumulativeFees mapping"]
+    classDef src fill:#F0F9FF, stroke:#38BDF8, color:#0C4A6E, stroke-width:2px
+    classDef router fill:#EFF6FF, stroke:#3B82F6, color:#1E3A8A, stroke-width:2px
+    classDef agent fill:#F0FDF4, stroke:#22C55E, color:#14532D, stroke-width:2px
+    classDef plat fill:#FEF2F2, stroke:#F87171, color:#991B1B, stroke-width:2px
+
+    Fill["<b>Polymarket fill</b><br/><i>$100 notional</i>"]:::src
+    Fee["<b>0.4% builder fee</b><br/><i>1.0 USDC</i>"]:::router
+    BFR["<b>BuilderFeeRouter</b><br/>cumulativeFees mapping"]:::router
+    Op["<b>Operator (winner)</b><br/><i>0.9 USDC</i>"]:::agent
+    Tr["<b>Platform Treasury</b><br/><i>0.1 USDC</i>"]:::plat
 
     Fill -->|"PayoutAccrued"| Fee
     Fee -->|"recordFill(market, 0.9, winner)"| BFR
@@ -401,18 +406,23 @@ The single most important Web3 property of PolyglotAlpha is that **every publish
 
 ```mermaid
 flowchart LR
-    A["Operator wallet<br/>(0x…)"]
-    B["Canonical candidate JSON<br/>(deterministic encoding)"]
-    C["SHA-256 digest"]
-    D["IPFS CID<br/>(pinned)"]
-    E["candidate_hash on Arc<br/>QuestionRegistry.commit()"]
-    F["Polymarket question text<br/>(off-chain, published)"]
+    classDef wallet fill:#EFF6FF, stroke:#3B82F6, color:#1E3A8A, stroke-width:2px
+    classDef data fill:#F0F9FF, stroke:#38BDF8, color:#0C4A6E, stroke-width:2px
+    classDef chain fill:#F0FDF4, stroke:#22C55E, color:#14532D, stroke-width:2px
+    classDef ext fill:#F8FAFC, stroke:#94A3B8, color:#475569, stroke-width:2px
 
-    A -->|signs| B
-    B -->|hashes to| C
-    B -->|pinned at| D
-    C -->|written to| E
-    E -->|enforces| F
+    A["<b>Operator wallet</b><br/><i>0x…</i>"]:::wallet
+    B["<b>Canonical candidate JSON</b><br/>deterministic encoding"]:::data
+    C["<b>SHA-256 digest</b>"]:::data
+    D["<b>IPFS CID</b><br/>pinned"]:::data
+    E["<b>candidate_hash on Arc</b><br/>QuestionRegistry.commit()"]:::chain
+    F["<b>Polymarket question text</b><br/>off-chain, published"]:::ext
+
+    A -->|"signs"| B
+    B -->|"hashes to"| C
+    B -->|"pinned at"| D
+    C -->|"written to"| E
+    E -->|"enforces"| F
 ```
 
 Anyone can verify with a block explorer plus an IPFS gateway:
@@ -642,21 +652,22 @@ What is *not* in scope of the trust claim: judge prompt content, FAISS corpus sn
 
 ```mermaid
 flowchart LR
-    classDef feed fill:#1a2332,stroke:#00f0ff,color:#00f0ff
-    classDef code fill:#2a1a32,stroke:#ff6b00,color:#ff6b00
-    classDef gate fill:#1a3322,stroke:#00ff80,color:#00ff80
+    classDef feed fill:#F0F9FF, stroke:#38BDF8, color:#0C4A6E, stroke-width:2px
+    classDef code fill:#EFF6FF, stroke:#3B82F6, color:#1E3A8A, stroke-width:2px
+    classDef gate fill:#FFF7ED, stroke:#F97316, color:#7C2D12, stroke-width:2px
+    classDef out fill:#F0FDF4, stroke:#22C55E, color:#14532D, stroke-width:2px
 
-    F1["8 RSS feeds<br/>zh · en · ja · fr · de"]:::feed
-    FP["feedparser.parse<br/>+ SQLite dedup by entry_id"]:::code
-    CR["cross_reference.cluster_with_llm<br/>Claude JSON cluster · ≥2 distinct sources"]:::code
-    SC["score_event_for_auction<br/>Claude Haiku 4.5"]:::code
-    G["Gate: event_quality_score ≥ 0.5"]:::gate
-    Q[("Auction queue<br/>EventScoring + raw cluster")]:::feed
+    F1["<b>8 RSS feeds</b><br/>zh, en, ja, fr, de"]:::feed
+    FP["<b>feedparser.parse</b><br/>SQLite dedup by entry_id"]:::code
+    CR["<b>cluster_with_llm</b><br/>Claude JSON, ≥2 distinct sources"]:::code
+    SC["<b>score_event_for_auction</b><br/>Claude Haiku 4.5"]:::code
+    G("event_quality_score ≥ 0.5?"):::gate
+    Q[("<b>Auction queue</b><br/>EventScoring + raw cluster")]:::out
 
-    F1 -->|"httpx GET<br/>300s interval"| FP
+    F1 -->|"httpx GET · 300s"| FP
     FP -->|"RawEvent[]"| CR
-    CR -->|"ConfirmedEvent[]<br/>(content_hash = sha256)"| SC
-    SC -->|"EventScoring<br/>(no question text)"| G
+    CR -->|"ConfirmedEvent[] · content_hash = sha256"| SC
+    SC -->|"EventScoring · no question text"| G
     G -->|"pass"| Q
     G -.->|"reject + rejection_reason"| FP
 ```
@@ -707,20 +718,21 @@ The module never raises — missing `ANTHROPIC_API_KEY`, network errors, or malf
 
 ```mermaid
 flowchart TD
-    classDef step fill:#1a2332,stroke:#00f0ff,color:#00f0ff
-    classDef out fill:#1a3322,stroke:#00ff80,color:#00ff80
-    classDef fail fill:#2a1a32,stroke:#ff6b00,color:#ff6b00
+    classDef step fill:#EFF6FF, stroke:#3B82F6, color:#1E3A8A, stroke-width:2px
+    classDef out fill:#F0FDF4, stroke:#22C55E, color:#14532D, stroke-width:2px
+    classDef fail fill:#FEF2F2, stroke:#F87171, color:#991B1B, stroke-width:2px
+    classDef data fill:#F0F9FF, stroke:#38BDF8, color:#0C4A6E, stroke-width:2px
 
-    E[("EventPayload<br/>(title_zh, body_zh, key_entities)")]:::step
-    P1["Step 1 · propose 2 candidates<br/>propose_candidates_fn (2 LLM calls)<br/>different prompts / temperatures"]:::step
-    P2["Step 2 · critic round (parallel)<br/>Critic A reviews candidate B<br/>Critic B reviews candidate A<br/>Haiku 4.5 · timeout 30s"]:::step
-    P3["Step 3 · moderator<br/>Claude Sonnet 4.5 · 60s timeout<br/>picks winner + emits critique signal"]:::step
-    P4["Step 4 · refine<br/>1 LLM call · 45s timeout<br/>preserve title/category/end_date_iso"]:::step
-    O[("InternalDebateResult<br/>+ candidate_hash → IPFS pin → on-chain bid")]:::out
+    E[("<b>EventPayload</b><br/>title_zh, body_zh, key_entities")]:::data
+    P1["<b>Step 1 · propose 2 candidates</b><br/>2 LLM calls, different prompts/temps<br/><i>Haiku 4.5</i>"]:::step
+    P2["<b>Step 2 · critic round (parallel)</b><br/>A reviews B, B reviews A<br/><i>Haiku 4.5 · timeout 30s</i>"]:::step
+    P3["<b>Step 3 · moderator</b><br/>picks winner + critique signal<br/><i>Sonnet 4.5 · timeout 60s</i>"]:::step
+    P4["<b>Step 4 · refine</b><br/>preserve title/category/end_date_iso<br/><i>Haiku 4.5 · timeout 45s</i>"]:::step
+    O[("<b>InternalDebateResult</b><br/>candidate_hash → IPFS → on-chain bid")]:::out
 
-    F1["critic timeout → soft-skip<br/>(accept_as_is verdict)"]:::fail
-    F2["moderator timeout → fallback<br/>(pick candidate 0, no critique signal)"]:::fail
-    F3["refine timeout/parse-fail<br/>winning candidate returned as-is"]:::fail
+    F1["critic timeout → soft-skip<br/>(accept_as_is)"]:::fail
+    F2["moderator timeout → fallback<br/>(pick candidate 0)"]:::fail
+    F3["refine timeout/parse-fail<br/>winner returned as-is"]:::fail
 
     E --> P1 --> P2 --> P3 --> P4 --> O
     P2 -.-> F1 -.-> P3
@@ -762,27 +774,28 @@ A 3-seeder bootstrap on one auction therefore burns ~$0.09 in LLM spend before a
 
 ```mermaid
 flowchart LR
-    classDef tr fill:#1a2332,stroke:#00f0ff,color:#00f0ff
-    classDef st fill:#2a1a32,stroke:#ff6b00,color:#ff6b00
-    classDef agg fill:#1a3322,stroke:#00ff80,color:#00ff80
+    classDef tr fill:#EFF6FF, stroke:#3B82F6, color:#1E3A8A, stroke-width:2px
+    classDef st fill:#EEF2FF, stroke:#818CF8, color:#312E81, stroke-width:2px
+    classDef agg fill:#F0FDF4, stroke:#22C55E, color:#14532D, stroke-width:2px
+    classDef data fill:#F0F9FF, stroke:#38BDF8, color:#0C4A6E, stroke-width:2px
 
-    Q[("PanelQuestion<br/>(title, body, resolution_*)")]:::agg
+    Q[("<b>PanelQuestion</b><br/>title, body, resolution_*")]:::data
 
-    BLEU["BLEU<br/>sacrebleu"]:::tr
-    COMET["COMET<br/>Unbabel/cometkiwi-da"]:::tr
-    MQM["MQM-LLM<br/>Claude Haiku 4.5"]:::tr
+    BLEU["<b>BLEU</b><br/>sacrebleu"]:::tr
+    COMET["<b>COMET</b><br/>Unbabel/cometkiwi-da"]:::tr
+    MQM["<b>MQM-LLM</b><br/>Claude Haiku 4.5"]:::tr
 
-    D1["D1 Structural<br/>regex + LLM"]:::st
-    D2["D2 Stylistic<br/>LLM (batched)"]:::st
-    D3["D3 Framing<br/>LLM (batched)"]:::st
-    D4["D4 Granularity<br/>regex only"]:::st
-    D5["D5 Resolution<br/>rule + LLM"]:::st
-    D6["D6 Source<br/>allowlist OR LLM"]:::st
-    D7["D7 Leading<br/>regex + LLM"]:::st
-    D8["D8 Duplicate<br/>FAISS kNN · 75,897 markets"]:::st
+    D1["<b>D1 Structural</b><br/>regex + LLM"]:::st
+    D2["<b>D2 Stylistic</b><br/>LLM (batched)"]:::st
+    D3["<b>D3 Framing</b><br/>LLM (batched)"]:::st
+    D4["<b>D4 Granularity</b><br/>regex only"]:::st
+    D5["<b>D5 Resolution</b><br/>rule + LLM"]:::st
+    D6["<b>D6 Source</b><br/>allowlist OR LLM"]:::st
+    D7["<b>D7 Leading</b><br/>regex + LLM"]:::st
+    D8["<b>D8 Duplicate</b><br/>FAISS kNN, <i>75,897 markets</i>"]:::st
 
-    AGG["asyncio.gather(11 judges)<br/>per-judge timeout 60s<br/>_aggregate → PanelVerdict"]:::agg
-    V["HARD: D1+D5+D8 pass AND MQM≥80 AND 0 majors<br/>SOFT: ≥4/5 of D2/D3/D4/D6/D7"]:::agg
+    AGG["<b>asyncio.gather(11 judges)</b><br/>per-judge timeout 60s<br/>_aggregate → PanelVerdict"]:::agg
+    V["<b>HARD:</b> D1+D5+D8 pass AND MQM≥80 AND 0 majors<br/><b>SOFT:</b> ≥4/5 of D2/D3/D4/D6/D7"]:::agg
 
     Q --> BLEU --> AGG
     Q --> COMET --> AGG
